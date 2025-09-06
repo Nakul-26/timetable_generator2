@@ -6,8 +6,13 @@ require("dotenv").config();
 // Assuming your routes are set up to use Mongoose models
 const API = require('./models/routes/api');
 
+const corsOptions = {
+  origin: 'https://timetable-generator-3tvm.vercel.app',
+  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // --- Corrected Database Connection ---
