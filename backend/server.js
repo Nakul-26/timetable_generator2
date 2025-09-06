@@ -7,7 +7,7 @@ require("dotenv").config();
 const API = require('./models/routes/api');
 
 const corsOptions = {
-  origin: 'https://timetable-generator-3tvm.vercel.app',
+  origin: 'frontend_URL' in process.env ? process.env.frontend_URL : 'http://localhost:3000',
   optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 
