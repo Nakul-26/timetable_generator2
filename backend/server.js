@@ -11,8 +11,15 @@ const corsOptions = {
   optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 
+const options = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'None',
+  path: '/' 
+};
+
 const app = express();
-app.use(cors(corsOptions));
+app.use(cors(corsOptions, options));
 app.use(express.json());
 
 // --- Corrected Database Connection ---
