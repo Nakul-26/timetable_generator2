@@ -1,0 +1,12 @@
+{
+  "name": "timetable",
+  "version": "1.0.0",
+  "description": "to generate timetables",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon server.js"
+  },
+  "author": "nakul",
+  "license": "ISC"
+}
