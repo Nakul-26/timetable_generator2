@@ -8,5 +8,8 @@
     "dev": "nodemon server.js"
   },
   "author": "nakul",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@vercel/node": "^5.3.21"
+  }
 }
