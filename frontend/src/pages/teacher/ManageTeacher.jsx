@@ -98,7 +98,7 @@ const ManageTeacher = () => {
             </tr>
           </thead>
           <tbody>
-            {teachers.map((teacher) => (
+            { Array.isArray(teachers) && teachers.map((teacher) => (
               <tr key={teacher._id}>
                 <td>
                   {editId === teacher._id ? (

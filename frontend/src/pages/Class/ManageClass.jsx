@@ -95,7 +95,7 @@ function ManageClass() {
             </tr>
           </thead>
           <tbody>
-            {classes.map((classItem) => (
+            { Array.isArray(classes) && classes.map((classItem) => (
               <tr key={classItem.id}>
                 <td>
                   {editId === classItem._id ? (

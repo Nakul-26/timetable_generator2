@@ -143,7 +143,7 @@ const ManageClassCombo = () => {
             </tr>
           </thead>
           <tbody>
-            {classCombos.map((combo) => (
+            { Array.isArray(classCombos) && classCombos.map((combo) => (
               <tr key={combo._id}>
                 <td>
                   {editId === combo._id ? (

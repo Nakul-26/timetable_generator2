@@ -148,7 +148,7 @@ function ManageSubject() {
             </tr>
           </thead>
           <tbody>
-            {subjects.map((subject) => (
+            { Array.isArray(subjects) && subjects.map((subject) => (
               <tr key={subject._id}>
                 <td>
                   {editId === subject._id ? (
