@@ -22,16 +22,47 @@ app.use(express.json());
 // --- Corrected Database Connection ---
 const uri = process.env.MONGO_URI;
 
-mongoose.connect(uri, {
-  dbName: 'test2',
-  serverSelectionTimeoutMS: 20000 // Increase timeout for stability
-})
-.then(() => {
-  console.log("✅ Connected to MongoDB via Mongoose");
-})
-.catch((err) => {
-  console.error("❌ Mongoose connection error:", err);
-});
+// mongoose.connect(uri, {
+//   dbName: 'test2',
+//   useNewUrlParser: true,
+//   useUnifiedTopology: true,
+//   serverSelectionTimeoutMS: 20000 // Increase timeout for stability
+// })
+// .then(() => {
+//   console.log("✅ Connected to MongoDB via Mongoose");
+// })
+// .catch((err) => {
+//   console.error("❌ Mongoose connection error:", err);
+// });
+let isConnected = false;
+
+export async function connectDB() {
+  if (isConnected) return;
+
+  try {
+    await mongoose.connect(uri, {
+      dbName: 'test2',
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 50000
+    });
+    isConnected = true;
+    console.log("✅ Connected to MongoDB via Mongoose");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err);
+    throw err;
+  }
+}
+
+
+
+
+
+
+
+
+
+
 
 
 // Log all incoming requests
