@@ -7,19 +7,12 @@ require("dotenv").config();
 const API = require('./models/routes/api');
 
 const corsOptions = {
-  origin: 'frontend_URL' in process.env ? process.env.frontend_URL : 'http://localhost:3000',
+  origin: process.env.frontend_URL,
   optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
 
-const options = {
-  httpOnly: true,
-  secure: true,
-  sameSite: 'None',
-  path: '/' 
-};
-
 const app = express();
-app.use(cors(corsOptions, options));
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // --- Corrected Database Connection ---
@@ -34,6 +27,23 @@ mongoose.connect(uri, {
 })
 .catch((err) => {
   console.error("❌ Mongoose connection error:", err);
+});
+
+
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`📥 Incoming request: ${req.method} ${req.url}`);
+  console.log("👉 Headers:", req.headers.origin);
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log("👉 Body:", req.body);
+  }
+  console.log("👉 Query:", req.query);
+  console.log("👉 Params:", req.params);
+  console.log("👉 IP:", req.ip);
+  console.log("👉 Time:", new Date().toISOString());
+  console.log("response:",res);
+  console.log("--------------------------------------------------");
+  next();
 });
 
 // --- Routes ---

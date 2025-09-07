@@ -1,10 +1,7 @@
 import React, { useState } from "react";
 import axios from "../../api/axios";
-// import "./AddTeacher.css"; // Assuming you have some CSS for styling
 
 const AddTeacher = () => {
-  // const [form, setForm] = useState({ name: "", facultyId: "" });
-  const [previousHour, setPreviousHour] = useState(0);
   const [name, setName] = useState("");
   const [facultyId, setFacultyId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -13,6 +10,7 @@ const AddTeacher = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    console.log(`[handleChange] Field: ${name}, Value: ${value}`);
     if (name === "name") setName(value);
     if (name === "facultyId") setFacultyId(value);
   };
@@ -25,33 +23,49 @@ const AddTeacher = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log("[handleSubmit] Form submitted with:", { name, facultyId });
+
     setError("");
     setSuccess("");
     const validationError = validate();
     if (validationError) {
+      console.warn("[validate] Validation failed:", validationError);
       setError(validationError);
       return;
     }
+
     setLoading(true);
     try {
+      console.log("[axios] Sending POST request to /faculties with:", {
+        name,
+        id: facultyId,
+      });
       const res = await axios.post(`/faculties`, {
         name: name,
-        id: facultyId
+        id: facultyId,
       });
-      console.log("response is",res);
+      console.log("[axios response]", res);
+
       setSuccess("Teacher added successfully!");
       setName("");
       setFacultyId("");
     } catch (err) {
-      console.log("error: ", err);
-      setError("Failed to add teacher.", err);
+      console.error("[axios error]", err);
+      if (err.response) {
+        console.error("[axios error response]", err.response);
+      } else if (err.request) {
+        console.error("[axios error request - no response]", err.request);
+      } else {
+        console.error("[axios error message]", err.message);
+      }
+      setError("Failed to add teacher.");
     }
     setLoading(false);
   };
 
   return (
     <div className="form-container">
-      <h2>Add Teacher 333</h2>
+      <h2>Add Teacher</h2>
       <form onSubmit={handleSubmit} className="styled-form">
         <div className="form-group">
           <label>Name</label>
