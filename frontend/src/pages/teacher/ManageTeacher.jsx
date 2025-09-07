@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "../../api/axios";
+import API from "../../api/axios";
 
 // Assuming you have some CSS for styling
 // import "../../styles/ManageTeacher.css"; 
@@ -25,8 +25,9 @@ const ManageTeacher = () => {
     const fetchTeachers = async () => {
       setLoading(true);
       try {
-        const res = await axios.get("/faculties");
+        const res = await API.get("/faculties");
         // Assuming the response data has '_id' for MongoDB and 'name'
+        console.log("Fetched teachers:", res);
         setTeachers(res.data);
       } catch (err) {
         setError("Failed to fetch teachers.");
@@ -41,7 +42,7 @@ const ManageTeacher = () => {
     if (!window.confirm("Are you sure you want to delete this teacher?")) return;
     try {
       // Use the correct endpoint, likely by ID from the MongoDB document
-      await axios.delete(`/faculties/${id}`);
+      await API.delete(`/faculties/${id}`);
       setTeachers(teachers.filter((t) => t._id !== id));
     } catch (err) {
       setError("Failed to delete teacher.");
@@ -62,7 +63,7 @@ const ManageTeacher = () => {
       const updatedTeacher = { name: editName, id: editFacultyId };
       console.log("Updating teacher:", updatedTeacher);
       // Use the correct endpoint for updating, and ensure you are sending the correct ID
-      await axios.put(`/faculties/${editId}`, updatedTeacher);
+      await API.put(`/faculties/${editId}`, updatedTeacher);
       
       // Update the teachers array in state
       setTeachers(
