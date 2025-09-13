@@ -10,7 +10,6 @@ const AddTeacher = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    console.log(`[handleChange] Field: ${name}, Value: ${value}`);
     if (name === "name") setName(value);
     if (name === "facultyId") setFacultyId(value);
   };
@@ -23,40 +22,32 @@ const AddTeacher = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("[handleSubmit] Form submitted with:", { name, facultyId });
 
     setError("");
     setSuccess("");
     const validationError = validate();
     if (validationError) {
-      console.warn("[validate] Validation failed:", validationError);
       setError(validationError);
       return;
     }
 
     setLoading(true);
     try {
-      console.log("[axios] Sending POST request to /faculties with:", {
-        name,
-        id: facultyId,
-      });
       const res = await axios.post(`/faculties`, {
         name: name,
         id: facultyId,
       });
-      console.log("[axios response]", res);
 
       setSuccess("Teacher added successfully!");
       setName("");
       setFacultyId("");
     } catch (err) {
-      console.error("[axios error]", err);
       if (err.response) {
-        console.error("[axios error response]", err.response);
+        // console.error("[axios error response]", err.response);
       } else if (err.request) {
-        console.error("[axios error request - no response]", err.request);
+        // console.error("[axios error request - no response]", err.request);
       } else {
-        console.error("[axios error message]", err.message);
+        // console.error("[axios error message]", err.message);
       }
       setError("Failed to add teacher.");
     }

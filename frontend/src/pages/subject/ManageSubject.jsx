@@ -7,47 +7,33 @@ function ManageSubject() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editId, setEditId] = useState(null);
-  // const [editTeachers, setEditTeachers] = useState([]);
 
-  // Individual state variables for the subject being edited
+  // Edit states
   const [editName, setEditName] = useState("");
   const [editCode, setEditCode] = useState("");
   const [editSem, setEditSem] = useState("");
   const [editCredits, setEditCredits] = useState("");
-  // const [teachers, setTeachers] = useState([]);
-  
+
+  // 🔍 Filter states
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterName, setFilterName] = useState("");
+  const [filterCode, setFilterCode] = useState("");
+  const [filterSem, setFilterSem] = useState("");
+
   const navigate = useNavigate();
 
   const handleAddSubject = () => {
-    navigate('/subject/add');
+    navigate("/subject/add");
   };
-
-  // useEffect(() => {
-  //   const fetchTeachers = async () => {
-  //     setLoading(true);
-  //     try {
-  //       const res = await axios.get("/faculties");
-  //       console.log("response for get all teachers is", res.data);
-  //       setTeachers(res.data);
-  //     } catch (err) {
-  //       setError("Failed to fetch teachers.");
-  //       console.error("Fetch error:", err);
-  //     }
-  //     setLoading(false);
-  //   };
-  //   fetchTeachers();
-  // }, []);
 
   useEffect(() => {
     const fetchSubjects = async () => {
       setLoading(true);
       try {
         const res = await axios.get("/subjects");
-        console.log("response for get all subjects is", res);
         setSubjects(res.data);
       } catch (err) {
         setError("Failed to fetch subjects.");
-        console.error("Fetch error:", err);
       }
       setLoading(false);
     };
@@ -55,39 +41,22 @@ function ManageSubject() {
   }, []);
 
   const handleDelete = async (id) => {
-    // Replaced window.confirm to avoid browser dialogs in the immersive
     if (!window.confirm("Are you sure you want to delete this subject?")) return;
     try {
       await axios.delete(`/subjects/${id}`);
       setSubjects(subjects.filter((s) => s._id !== id));
     } catch (err) {
       setError("Failed to delete subject.");
-      console.error("Delete error:", err);
     }
   };
 
   const handleEdit = (subject) => {
-    // Set the ID for the item being edited using the MongoDB '_id'
     setEditId(subject._id);
-    
-    // Set the individual state variables with the subject's current data
     setEditName(subject.name);
     setEditCode(subject.id);
     setEditSem(subject.sem);
-    setEditCredits(subject.no_of_hours_per_week); // Assuming this corresponds to credits
-    // setEditType(subject.type);
+    setEditCredits(subject.no_of_hours_per_week);
   };
-
-  // const handleEditTeachers = (e) => {
-  //   const { options } = e.target;
-  //   const values = [];
-  //   for (let i = 0; i < options.length; i++) {
-  //     if (options[i].selected) {
-  //       values.push(options[i].value);
-  //     }
-  //   }
-  //   setEditTeachers(values);
-  // };
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
@@ -97,39 +66,71 @@ function ManageSubject() {
         id: editCode,
         sem: editSem,
         no_of_hours_per_week: editCredits,
-        // faculty: editTeachers
       };
-      
-      // Send a PUT request with the updated data
       await axios.put(`/subjects/${editId}`, updatedSubject);
-      
-      // Update the state with the new data from the form
       setSubjects(
         subjects.map((s) =>
           s._id === editId ? { ...s, ...updatedSubject } : s
         )
       );
-      
-      // Reset the edit state
       setEditId(null);
       setEditName("");
       setEditCode("");
       setEditSem("");
       setEditCredits("");
-      // setEditTeachers([]);
-      // setEditType("");
     } catch (err) {
       setError("Failed to update subject.");
-      console.error("Update error:", err);
     }
   };
+
+  // 🔎 Filtered data
+  const filteredSubjects = subjects.filter((s) => {
+    return (
+      (!filterName || s.name.toLowerCase().includes(filterName.toLowerCase())) &&
+      (!filterCode || s.id.toLowerCase().includes(filterCode.toLowerCase())) &&
+      (!filterSem || String(s.sem) === filterSem)
+    );
+  });
 
   return (
     <div className="manage-container">
       <h2>Manage Subjects</h2>
-      <button onClick={handleAddSubject}>
-        Add Subject
-      </button>
+      <div className="actions-bar">
+        <button onClick={handleAddSubject}>Add Subject</button>
+        <button onClick={() => setShowFilters(!showFilters)}>
+          {showFilters ? "Hide Search" : "Show Search"}
+        </button>
+      </div>
+
+      {/* 🔽 Filters */}
+      {showFilters && (
+        <div className="filters-container">
+          <input
+            type="text"
+            placeholder="Search by Name"
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Search by Code"
+            value={filterCode}
+            onChange={(e) => setFilterCode(e.target.value)}
+          />
+          <select
+            value={filterSem}
+            onChange={(e) => setFilterSem(e.target.value)}
+          >
+            <option value="">All Semesters</option>
+            {[...new Set(subjects.map((s) => s.sem))].map((sem) => (
+              <option key={sem} value={sem}>
+                Semester {sem}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <div>Loading...</div>
       ) : error ? (
@@ -142,128 +143,92 @@ function ManageSubject() {
               <th>Code</th>
               <th>Semester</th>
               <th>Credits</th>
-              {/* <th>Teachers</th> */}
-              {/* <th>Type</th> */}
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            { Array.isArray(subjects) && subjects.map((subject) => (
-              <tr key={subject._id}>
-                <td>
-                  {editId === subject._id ? (
-                    <input
-                      type="text"
-                      name="name"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                    />
-                  ) : (
-                    subject.name
-                  )}
-                </td>
-                <td>
-                  {editId === subject._id ? (
-                    <input
-                      type="text"
-                      name="code"
-                      value={editCode}
-                      onChange={(e) => setEditCode(e.target.value)}
-                    />
-                  ) : (
-                    subject.id
-                  )}
-                </td>
-                <td>
-                  {editId === subject._id ? (
-                    <input
-                      type="text"
-                      name="sem"
-                      value={editSem}
-                      onChange={(e) => setEditSem(e.target.value)}
-                    />
-                  ) : (
-                    subject.sem
-                  )}
-                </td>
-                <td>
-                  {editId === subject._id ? (
-                    <input
-                      type="number"
-                      name="credits"
-                      value={editCredits}
-                      onChange={(e) => setEditCredits(e.target.value)}
-                    />
-                  ) : (
-                    subject.no_of_hours_per_week
-                  )}
-                </td>
-                {/* <td>
-                  {editId === subject._id ? (
-                    <select
-                      multiple
-                      value={editTeachers}
-                      onChange={handleEditTeachers}
-                    >
-                      {teachers.map((teacher) => (
-                        <option key={teacher._id} value={teacher._id}>
-                          {teacher.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    subject.faculty?.map(fid =>
-                      teachers.find(t => t._id === fid)?.name
-                    ).join(", ")
-                  )}
-                </td> */}
-
-                {/* <td>
-                  {editId === subject._id ? (
-                    <select
-                      name="type"
-                      value={editType}
-                      onChange={(e) => setEditType(e.target.value)}
-                    >
-                      <option value="theory">Theory</option>
-                      <option value="lab">Lab</option>
-                    </select>
-                  ) : (
-                    subject.type
-                  )}
-                </td> */}
-                <td>
-                  {editId === subject._id ? (
-                    <>
-                      <button onClick={handleEditSubmit} className="primary-btn">
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditId(null)}
-                        className="secondary-btn"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => handleEdit(subject)}
-                        className="primary-btn"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(subject._id)}
-                        className="danger-btn"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {Array.isArray(filteredSubjects) &&
+              filteredSubjects.map((subject) => (
+                <tr key={subject._id}>
+                  <td>
+                    {editId === subject._id ? (
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                      />
+                    ) : (
+                      subject.name
+                    )}
+                  </td>
+                  <td>
+                    {editId === subject._id ? (
+                      <input
+                        type="text"
+                        value={editCode}
+                        onChange={(e) => setEditCode(e.target.value)}
+                      />
+                    ) : (
+                      subject.id
+                    )}
+                  </td>
+                  <td>
+                    {editId === subject._id ? (
+                      <input
+                        type="text"
+                        value={editSem}
+                        onChange={(e) => setEditSem(e.target.value)}
+                      />
+                    ) : (
+                      subject.sem
+                    )}
+                  </td>
+                  <td>
+                    {editId === subject._id ? (
+                      <input
+                        type="number"
+                        value={editCredits}
+                        onChange={(e) => setEditCredits(e.target.value)}
+                      />
+                    ) : (
+                      subject.no_of_hours_per_week
+                    )}
+                  </td>
+                  <td>
+                    {editId === subject._id ? (
+                      <>
+                        <button
+                          onClick={handleEditSubmit}
+                          className="primary-btn"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditId(null)}
+                          className="secondary-btn"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEdit(subject)}
+                          className="primary-btn"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(subject._id)}
+                          className="danger-btn"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       )}

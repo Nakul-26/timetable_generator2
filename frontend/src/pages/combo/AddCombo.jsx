@@ -55,21 +55,7 @@ const AddCombo = () => {
     setLoading(true);
 
     try {
-      console.log("payload:", {
-        combo_name: comboName,
-        faculty_id: facultyId,
-        subject_id: subjectId,
-        class_id: classId,
-      });
-      
       await axios.post("/add-and-assign-combo", {
-        combo_name: comboName,
-        faculty_id: facultyId,
-        subject_id: subjectId,
-        class_id: classId,
-      });
-
-      console.log("payload:", {
         combo_name: comboName,
         faculty_id: facultyId,
         subject_id: subjectId,

@@ -1,45 +1,46 @@
 /* Modern Navbar Styles */
 .navbar {
-  background: #ff8c42; /* Orange navbar */
+  background: linear-gradient(90deg, #ff8c42, #ff6b6b);
   color: #fff;
-  padding: 16px 32px;
-  margin-right: 20px;
+  padding: 14px 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  border-radius: 15px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
 .navbar-logo {
-  font-size: 1.6rem;
-  font-weight: bold;
+  font-size: 1.5rem;
+  font-weight: 700;
   letter-spacing: 1px;
 }
 
 .navbar-links {
-  list-style: none;
   display: flex;
-  gap: 32px;
-  margin: 0;
-  padding: 0;
+  gap: 24px;
 }
 
-.navbar-links a {
-  color: #fff;
+.nav-item {
   text-decoration: none;
-  font-size: 1.1rem;
-  padding: 8px 16px;
-  border-radius: 6px;
-  transition: background 0.2s;
-  background: #ff8c42; /* Orange links */
+  color: #fff;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  position: relative;
 }
 
-.navbar-links a:hover {
-  background: #e67300; /* Darker orange on hover */
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
-.navbar-links .active {
+.nav-item.active {
   background: #fff;
-  color: #ff9900;
+  color: #ff6b6b;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
 }

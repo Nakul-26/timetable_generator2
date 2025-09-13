@@ -273,7 +273,7 @@ router.put('/create-and-assign-combos/:id', async (req, res) => {
     // Validate subject & class semester match
     if (subject_id && class_id) {
       const [subject, classData] = await Promise.all([
-        SubjectModel.findById(subject_id).lean(),
+        Subject.findById(subject_id).lean(),
         ClassModel.findById(class_id).lean()
       ]);
 

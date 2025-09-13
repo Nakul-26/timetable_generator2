@@ -3,17 +3,25 @@ import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
 
 const ManageClassCombo = () => {
-  const [classCombos, setClassCombos] = useState([]); // flattened data
+  const [classCombos, setClassCombos] = useState([]);
   const [classes, setClasses] = useState([]);
   const [faculties, setFaculties] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  // Edit states
   const [editId, setEditId] = useState(null);
   const [editComboName, setEditComboName] = useState("");
   const [editClassId, setEditClassId] = useState("");
   const [editFacultyId, setEditFacultyId] = useState("");
   const [editSubjectId, setEditSubjectId] = useState("");
+
+  // Filter states
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterClass, setFilterClass] = useState("");
+  const [filterFaculty, setFilterFaculty] = useState("");
+  const [filterSubject, setFilterSubject] = useState("");
 
   const navigate = useNavigate();
 
@@ -26,33 +34,11 @@ const ManageClassCombo = () => {
         axios.get("/faculties"),
         axios.get("/subjects"),
       ]);
-      console.log("comboRes:", comboRes.data);
-      console.log("classRes:", classRes.data);
-      console.log("facRes:", facRes.data);
-      console.log("subRes:", subRes.data);
-
-      // Flatten: merge classAssignments with assignedCombos
-      // const flattened = [];
-      // comboRes.data.classAssignments.forEach((cls) => {
-      //   (cls.assignedCombos || []).forEach((combo) => {
-      //     flattened.push({
-      //       _id: combo._id,
-      //       combo_name: combo.combo_name,
-      //       class_id: cls.classId,
-      //       class_name: cls.className,
-      //       faculty_id: combo.faculty_id,
-      //       subject_id: combo.subject_id,
-      //     });
-      //   });
-      // });
-      console.log("classCombos:", comboRes.data);
       setClassCombos(comboRes.data);
-
       setClasses(classRes.data);
       setFaculties(facRes.data);
       setSubjects(subRes.data);
     } catch (err) {
-      console.error(err);
       setError("Failed to fetch data.");
     }
     setLoading(false);
@@ -100,65 +86,86 @@ const ManageClassCombo = () => {
         )
       );
       setEditId(null);
-      setEditComboName("");
-      setEditClassId("");
-      setEditFacultyId("");
-      setEditSubjectId("");
     } catch (err) {
       setError("Failed to update class-combo.");
     }
   };
 
-  // const getClassName = (id) => {
-  //   const cls = classes.find((c) => String(c._id) === String(id));
-  //   return cls ? `${cls.name} (${cls.id}) (${cls.section})` : id;
-  // };
-
-  // const getFacultyName = (id) => {
-  //   const fac = faculties.find((f) => String(f._id) === String(id));
-  //   return fac ? `${fac.name} (${fac.id})` : id;
-  // };
-
-  // const getSubjectName = (id) => {
-  //   const sub = subjects.find((s) => String(s._id) === String(id));
-  //   return sub ? `${sub.name} (${sub.id})` : id;
-  // };
-
-  const getClassName = (classData) => {
-    if (!classData) return "No Class";
-    if (typeof classData === "object") {
-      return `${classData.name} (${classData.id})`;
-    }
-    const cls = classes.find((c) => String(c._id) === String(classData));
-
-    console.log("cls:", cls, "classData:", classData, "classes:", classes);
-    console.log(`cls name : ${cls ? cls.name : 'not found'} , cls id : ${cls ? cls.id : 'not found'}`);
-    return cls ? `${cls.name} (${cls.id}) (${cls.section})` : classData;
+  // Helpers to display names
+  const getClassName = (id) => {
+    const cls = classes.find((c) => String(c._id) === String(id));
+    return cls ? `${cls.name} (${cls.id}) (${cls.section})` : id;
+  };
+  const getFacultyName = (id) => {
+    const fac = faculties.find((f) => String(f._id) === String(id));
+    return fac ? `${fac.name} (${fac.id})` : id;
+  };
+  const getSubjectName = (id) => {
+    const sub = subjects.find((s) => String(s._id) === String(id));
+    return sub ? `${sub.name} (${sub.id})` : id;
   };
 
-  const getFacultyName = (facultyData) => {
-    if (!facultyData) return "No Faculty";
-    if (typeof facultyData === "object") {
-      return `${facultyData.name} (${facultyData.id})`;
-    }
-    const fac = faculties.find((f) => String(f._id) === String(facultyData));
-    return fac ? `${fac.name} (${fac.id})` : facultyData;
-  };
-
-  const getSubjectName = (subjectData) => {
-    if (!subjectData) return "No Subject";
-    if (typeof subjectData === "object") {
-      return `${subjectData.name} (${subjectData.id})`;
-    }
-    const sub = subjects.find((s) => String(s._id) === String(subjectData));
-    return sub ? `${sub.name} (${sub.id})` : subjectData;
-  };
-
+  // 🔍 Apply filters
+  const filteredCombos = classCombos.filter((combo) => {
+    return (
+      (!filterClass || String(combo.class_id) === filterClass) &&
+      (!filterFaculty || String(combo.faculty_id) === filterFaculty) &&
+      (!filterSubject || String(combo.subject_id) === filterSubject)
+    );
+  });
 
   return (
     <div className="manage-container">
       <h2>Manage Class Combos</h2>
-      <button onClick={handleAddCombo}>Add Class Combo</button>
+      
+      <div className="actions-bar">
+        <button onClick={handleAddCombo}>Add Class Combo</button>
+        <button onClick={() => setShowFilters(!showFilters)}>
+          {showFilters ? "Hide Filters" : "Show Filters"}
+        </button>
+      </div>
+
+      {/* 🔽 Filters */}
+      {showFilters && (
+        <div className="filters-container">
+          <select
+            value={filterClass}
+            onChange={(e) => setFilterClass(e.target.value)}
+          >
+            <option value="">All Classes</option>
+            {classes.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name} ({c.id})
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterFaculty}
+            onChange={(e) => setFilterFaculty(e.target.value)}
+          >
+            <option value="">All Faculties</option>
+            {faculties.map((f) => (
+              <option key={f._id} value={f._id}>
+                {f.name} ({f.id})
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={filterSubject}
+            onChange={(e) => setFilterSubject(e.target.value)}
+          >
+            <option value="">All Subjects</option>
+            {subjects.map((s) => (
+              <option key={s._id} value={s._id}>
+                {s.name} ({s.id})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {loading ? (
         <div>Loading...</div>
       ) : error ? (
@@ -175,7 +182,7 @@ const ManageClassCombo = () => {
             </tr>
           </thead>
           <tbody>
-            { Array.isArray(classCombos) && classCombos.map((combo) => (
+            {filteredCombos.map((combo) => (
               <tr key={combo._id}>
                 <td>
                   {editId === combo._id ? (

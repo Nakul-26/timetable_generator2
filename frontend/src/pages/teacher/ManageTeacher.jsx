@@ -2,23 +2,25 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../../api/axios";
 
-// Assuming you have some CSS for styling
-// import "../../styles/ManageTeacher.css"; 
-
 const ManageTeacher = () => {
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editId, setEditId] = useState(null);
-  
-  // Using individual state variables for the edit form
+
+  // Edit form states
   const [editName, setEditName] = useState("");
   const [editFacultyId, setEditFacultyId] = useState("");
-  
+
+  // 🔍 Filter states
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterName, setFilterName] = useState("");
+  const [filterFacultyId, setFilterFacultyId] = useState("");
+
   const navigate = useNavigate();
 
   const handleAddTeacher = () => {
-    navigate('/teacher/add');
+    navigate("/teacher/add");
   };
 
   useEffect(() => {
@@ -26,12 +28,9 @@ const ManageTeacher = () => {
       setLoading(true);
       try {
         const res = await API.get("/faculties");
-        // Assuming the response data has '_id' for MongoDB and 'name'
-        console.log("Fetched teachers:", res);
         setTeachers(res.data);
       } catch (err) {
         setError("Failed to fetch teachers.");
-        console.error("Fetch error:", err);
       }
       setLoading(false);
     };
@@ -41,18 +40,15 @@ const ManageTeacher = () => {
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this teacher?")) return;
     try {
-      // Use the correct endpoint, likely by ID from the MongoDB document
       await API.delete(`/faculties/${id}`);
       setTeachers(teachers.filter((t) => t._id !== id));
     } catch (err) {
       setError("Failed to delete teacher.");
-      console.error("Delete error:", err);
     }
   };
 
   const handleEdit = (teacher) => {
     setEditId(teacher._id);
-    // Set the individual state variables for editing
     setEditName(teacher.name);
     setEditFacultyId(teacher.id);
   };
@@ -61,29 +57,66 @@ const ManageTeacher = () => {
     e.preventDefault();
     try {
       const updatedTeacher = { name: editName, id: editFacultyId };
-      console.log("Updating teacher:", updatedTeacher);
-      // Use the correct endpoint for updating, and ensure you are sending the correct ID
       await API.put(`/faculties/${editId}`, updatedTeacher);
-      
-      // Update the teachers array in state
+
       setTeachers(
         teachers.map((t) =>
-          t._id === editId ? { ...t, name: editName, id: editFacultyId } : t
+          t._id === editId ? { ...t, ...updatedTeacher } : t
         )
       );
-      setEditId(null); // Exit edit mode
+
+      setEditId(null);
       setEditName("");
       setEditFacultyId("");
     } catch (err) {
       setError("Failed to update teacher.");
-      console.error("Update error:", err);
     }
+  };
+
+  // 🔎 Apply filters
+  const filteredTeachers = teachers.filter((t) => {
+    return (
+      (!filterName || t.name.toLowerCase().includes(filterName.toLowerCase())) &&
+      (!filterFacultyId ||
+        t.id.toLowerCase().includes(filterFacultyId.toLowerCase()))
+    );
+  });
+
+  const resetFilters = () => {
+    setFilterName("");
+    setFilterFacultyId("");
   };
 
   return (
     <div className="manage-container">
       <h2>Manage Teachers</h2>
-      <button onClick={handleAddTeacher}>Add Teacher</button>
+      <div className="actions-bar">
+        <button onClick={handleAddTeacher}>Add Teacher</button>
+        <button onClick={() => setShowFilters(!showFilters)}>
+          {showFilters ? "Hide Search" : "Show Search"}
+        </button>
+      </div>
+
+      {/* 🔽 Filters */}
+      {showFilters && (
+        <div className="filters-container">
+          <input
+            type="text"
+            placeholder="Search by Name"
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Search by Faculty ID"
+            value={filterFacultyId}
+            onChange={(e) => setFilterFacultyId(e.target.value)}
+          />
+          <button onClick={resetFilters} className="secondary-btn">
+            Reset
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div>Loading...</div>
@@ -99,64 +132,66 @@ const ManageTeacher = () => {
             </tr>
           </thead>
           <tbody>
-            { Array.isArray(teachers) && teachers.map((teacher) => (
-              <tr key={teacher._id}>
-                <td>
-                  {editId === teacher._id ? (
-                    <input
-                      type="text"
-                      name="name"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                    />
-                  ) : (
-                    teacher.name
-                  )}
-                </td>
-                <td>
-                  {editId === teacher._id ? (
-                    <input
-                      type="text"
-                      name="facultyId"
-                      value={editFacultyId}
-                      onChange={(e) => setEditFacultyId(e.target.value)}
-                    />
-                  ) : (
-                    teacher.id
-                  )}
-                </td>
-                <td>
-                  {editId === teacher._id ? (
-                    <>
-                      <button onClick={handleEditSubmit} className="primary-btn">
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditId(null)}
-                        className="secondary-btn"
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        onClick={() => handleEdit(teacher)}
-                        className="primary-btn"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(teacher._id)}
-                        className="danger-btn"
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {Array.isArray(filteredTeachers) &&
+              filteredTeachers.map((teacher) => (
+                <tr key={teacher._id}>
+                  <td>
+                    {editId === teacher._id ? (
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                      />
+                    ) : (
+                      teacher.name
+                    )}
+                  </td>
+                  <td>
+                    {editId === teacher._id ? (
+                      <input
+                        type="text"
+                        value={editFacultyId}
+                        onChange={(e) => setEditFacultyId(e.target.value)}
+                      />
+                    ) : (
+                      teacher.id
+                    )}
+                  </td>
+                  <td>
+                    {editId === teacher._id ? (
+                      <>
+                        <button
+                          onClick={handleEditSubmit}
+                          className="primary-btn"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditId(null)}
+                          className="secondary-btn"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleEdit(teacher)}
+                          className="primary-btn"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(teacher._id)}
+                          className="danger-btn"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       )}

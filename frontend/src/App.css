@@ -1,0 +1,371 @@
+/* Add Pages Styles */
+/* Container */
+.form-container {
+  max-width: 550px;
+  margin: 40px auto;
+  background: #fff;
+  padding: 32px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.form-container h2 {
+  text-align: center;
+  margin-bottom: 24px;
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Form */
+.styled-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Groups */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #444;
+  font-size: 0.95rem;
+}
+
+/* Inputs & Selects */
+.form-group input,
+.form-group select {
+  padding: 12px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: #fff;
+  transition: border 0.3s, box-shadow 0.3s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  border-color: #ff8c42;
+  box-shadow: 0 0 0 3px rgba(255, 140, 66, 0.2);
+  outline: none;
+}
+
+/* Dropdown look improvement */
+.form-group select {
+  cursor: pointer;
+  appearance: none; /* remove default arrow */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='gray'%3E%3Cpath d='M5 7l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 16px;
+  padding-right: 36px;
+}
+
+/* Button */
+.primary-btn {
+  padding: 12px 18px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #ff8c42, #ff6b6b);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.3s ease;
+}
+
+.primary-btn:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(90deg, #ff6b6b, #ff8c42);
+}
+
+.primary-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Messages */
+.error-message {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #ffe6e6;
+  color: #d9534f;
+  font-weight: 500;
+  text-align: center;
+}
+
+.success-message {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #e6ffe6;
+  color: #28a745;
+  font-weight: 500;
+  text-align: center;
+}
+
+
+/* Manage Pages Styles */
+
+/* Container */
+.manage-container {
+  max-width: 1600px;
+  margin: 40px auto;
+  background: #fff;
+  padding: 28px 32px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.manage-container h2 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: #333;
+}
+
+/* Top Button */
+.manage-container > button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #ff8c42, #ff6b6b);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: transform 0.2s ease, background 0.3s ease;
+}
+
+.manage-container > button:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(90deg, #ff6b6b, #ff8c42);
+}
+
+/* Table */
+.styled-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.styled-table thead {
+  background: #ff8c42;
+  color: #fff;
+  text-align: left;
+}
+
+.styled-table th,
+.styled-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.styled-table tbody tr:hover {
+  background: #f9f9f9;
+}
+
+/* Inputs inside table */
+.styled-table input,
+.styled-table select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  width: 100%;
+  transition: border 0.3s, box-shadow 0.3s;
+}
+
+.styled-table input:focus,
+.styled-table select:focus {
+  border-color: #ff8c42;
+  box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+  outline: none;
+}
+
+/* Buttons inside table */
+.primary-btn,
+.secondary-btn,
+.danger-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+/* Save/Edit */
+.primary-btn {
+  background: #ff8c42;
+  color: #fff;
+}
+
+.primary-btn:hover {
+  background: #ff6b6b;
+  transform: translateY(-1px);
+}
+
+/* Cancel */
+.secondary-btn {
+  background: #ddd;
+  color: #333;
+}
+
+.secondary-btn:hover {
+  background: #bbb;
+  transform: translateY(-1px);
+}
+
+/* Delete */
+.danger-btn {
+  background: #e74c3c;
+  color: #fff;
+}
+
+.danger-btn:hover {
+  background: #c0392b;
+  transform: translateY(-1px);
+}
+
+/* Messages */
+.error-message {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #ffe6e6;
+  color: #d9534f;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* filters styles */
+
+.actions-bar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 12px;
+}
+
+.filters-container {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.filters-container select {
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border 0.3s, box-shadow 0.3s;
+}
+
+.filters-container select:focus {
+  border-color: #ff8c42;
+  box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+  outline: none;
+}
+
+.actions-bar > button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #ff8c42, #ff6b6b);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: transform 0.2s ease, background 0.3s ease;
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin-bottom: 20px;
+  color: #ff6b6b !important;
+}
+
+.filters-container input,
+.filters-container select {
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border 0.3s, box-shadow 0.3s;
+}
+
+.filters-container input:focus,
+.filters-container select:focus {
+  border-color: #ff8c42;
+  box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+  outline: none;
+}
+
+.filters-container > button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #ff8c42, #ff6b6b);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  /* margin-bottom: 20px; */
+  transition: transform 0.2s ease, background 0.3s ease;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #f8f9fa; /* light neutral background */
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Home Container */
+.home-container {
+  max-width: 800px;
+  background: #fff;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+  text-align: center;
+  animation: fadeIn 0.3s ease-in-out;
+  margin: auto;
+  margin-top: 40px
+}
+
+.home-container h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #ff6b6b;
+  margin-bottom: 20px;
+}
+
+.home-container p {
+  font-size: 1.1rem;
+  color: #444;
+  line-height: 1.6;
+}
+
+/* Subtle fade-in effect */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
