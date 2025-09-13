@@ -10,6 +10,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "type": "module",
   "description": "",
   "dependencies": {
     "bcryptjs": "^3.0.2",

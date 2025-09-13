@@ -22,22 +22,9 @@ function Timetable() {
         axios.get("/faculties"),
         axios.get("/subjects"),
       ]);
+      console.log("Fetched combos:", comboRes.data);
 
-      const flattened = [];
-      comboRes.data.classAssignments.forEach((cls) => {
-        (cls.assignedCombos || []).forEach((combo) => {
-          flattened.push({
-            _id: combo._id,
-            combo_name: combo.combo_name,
-            class_id: cls.classId,
-            class_name: cls.className,
-            faculty_id: combo.faculty_id,
-            subject_id: combo.subject_id,
-          });
-        });
-      });
-
-      setClassCombos(flattened);
+      setClassCombos(comboRes.data);
       setClasses(classRes.data);
       setFaculties(facRes.data);
       setSubjects(subRes.data);
@@ -109,9 +96,9 @@ function Timetable() {
           <thead>
             <tr>
               <th style={{ border: "1px solid #ddd", padding: 8 }}>Day / Period</th>
-              {Array.from({ length: 8 }).map((_, p) => (
+              {Array.from({ length: 9 }).map((_, p) => (
                 <th key={p} style={{ border: "1px solid #ddd", padding: 8 }}>
-                  P{p + 1}
+                  P{p + 1}{p === 2 ? " ( Tea Break )" : ""}{p === 5 ? " ( Lunch Break)" : ""}
                 </th>
               ))}
             </tr>

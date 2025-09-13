@@ -32,21 +32,22 @@ const ManageClassCombo = () => {
       console.log("subRes:", subRes.data);
 
       // Flatten: merge classAssignments with assignedCombos
-      const flattened = [];
-      comboRes.data.classAssignments.forEach((cls) => {
-        (cls.assignedCombos || []).forEach((combo) => {
-          flattened.push({
-            _id: combo._id,
-            combo_name: combo.combo_name,
-            class_id: cls.classId,
-            class_name: cls.className,
-            faculty_id: combo.faculty_id,
-            subject_id: combo.subject_id,
-          });
-        });
-      });
+      // const flattened = [];
+      // comboRes.data.classAssignments.forEach((cls) => {
+      //   (cls.assignedCombos || []).forEach((combo) => {
+      //     flattened.push({
+      //       _id: combo._id,
+      //       combo_name: combo.combo_name,
+      //       class_id: cls.classId,
+      //       class_name: cls.className,
+      //       faculty_id: combo.faculty_id,
+      //       subject_id: combo.subject_id,
+      //     });
+      //   });
+      // });
+      console.log("classCombos:", comboRes.data);
+      setClassCombos(comboRes.data);
 
-      setClassCombos(flattened);
       setClasses(classRes.data);
       setFaculties(facRes.data);
       setSubjects(subRes.data);
@@ -108,20 +109,51 @@ const ManageClassCombo = () => {
     }
   };
 
-  const getClassName = (id) => {
-    const cls = classes.find((c) => String(c._id) === String(id));
-    return cls ? `${cls.name} (${cls.id})` : id;
+  // const getClassName = (id) => {
+  //   const cls = classes.find((c) => String(c._id) === String(id));
+  //   return cls ? `${cls.name} (${cls.id}) (${cls.section})` : id;
+  // };
+
+  // const getFacultyName = (id) => {
+  //   const fac = faculties.find((f) => String(f._id) === String(id));
+  //   return fac ? `${fac.name} (${fac.id})` : id;
+  // };
+
+  // const getSubjectName = (id) => {
+  //   const sub = subjects.find((s) => String(s._id) === String(id));
+  //   return sub ? `${sub.name} (${sub.id})` : id;
+  // };
+
+  const getClassName = (classData) => {
+    if (!classData) return "No Class";
+    if (typeof classData === "object") {
+      return `${classData.name} (${classData.id})`;
+    }
+    const cls = classes.find((c) => String(c._id) === String(classData));
+
+    console.log("cls:", cls, "classData:", classData, "classes:", classes);
+    console.log(`cls name : ${cls ? cls.name : 'not found'} , cls id : ${cls ? cls.id : 'not found'}`);
+    return cls ? `${cls.name} (${cls.id}) (${cls.section})` : classData;
   };
 
-  const getFacultyName = (id) => {
-    const fac = faculties.find((f) => String(f._id) === String(id));
-    return fac ? `${fac.name} (${fac.id})` : id;
+  const getFacultyName = (facultyData) => {
+    if (!facultyData) return "No Faculty";
+    if (typeof facultyData === "object") {
+      return `${facultyData.name} (${facultyData.id})`;
+    }
+    const fac = faculties.find((f) => String(f._id) === String(facultyData));
+    return fac ? `${fac.name} (${fac.id})` : facultyData;
   };
 
-  const getSubjectName = (id) => {
-    const sub = subjects.find((s) => String(s._id) === String(id));
-    return sub ? `${sub.name} (${sub.id})` : id;
+  const getSubjectName = (subjectData) => {
+    if (!subjectData) return "No Subject";
+    if (typeof subjectData === "object") {
+      return `${subjectData.name} (${subjectData.id})`;
+    }
+    const sub = subjects.find((s) => String(s._id) === String(subjectData));
+    return sub ? `${sub.name} (${sub.id})` : subjectData;
   };
+
 
   return (
     <div className="manage-container">

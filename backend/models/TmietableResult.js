@@ -1,8 +1,8 @@
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+import mongoose from "mongoose";
+const { Schema } = mongoose;
 const ResultSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
   class_timetables: Object,   // { classId: [[slot,...], ...], ... }
   faculty_timetables: Object,  // { facultyId: [[...], ...], ... }
 });
-module.exports = mongoose.model('TimetableResult', ResultSchema);
+export default mongoose.model('TimetableResult', ResultSchema);

@@ -1,5 +1,6 @@
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+
+import mongoose from "mongoose";
+const { Schema } = mongoose;
 const SubjectSchema = new Schema({
   id: { type: String, unique: true },
   name: String,
@@ -7,4 +8,4 @@ const SubjectSchema = new Schema({
   sem: Number,
   faculty: [{ type: Schema.Types.ObjectId, ref: 'Faculty' }]
 });
-module.exports = mongoose.model('Subject', SubjectSchema);
+export default mongoose.model('Subject', SubjectSchema);

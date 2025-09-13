@@ -1,13 +1,16 @@
-const express = require('express');
-const router = express.Router();
-const Faculty = require('../Faculty');
-const Subject = require('../Subject');
-const ClassModel = require('../Class');
-const Combo = require('../Combo');
-const TimetableResult = require('../TmietableResult');
-const generator = require('../lib/generator');
+import { Router } from 'express';
+import Faculty from '../Faculty.js';
+import Subject from '../Subject.js';
+import ClassModel from '../Class.js';
+import Combo from '../Combo.js';
+import TimetableResult from '../TmietableResult.js';
+import generator from '../lib/generator.js';
+import mongoose from "mongoose";
+
+const router = Router();
 
 // --- Faculties CRUD ---
+//add faculties
 router.post('/faculties', async (req, res) => {
   console.log("[POST /faculties] Body:", req.body);
   try {
@@ -23,6 +26,7 @@ router.post('/faculties', async (req, res) => {
   }
 });
 
+//get all faculties
 router.get('/faculties', async (req, res) => {
   console.log("[GET /faculties] Fetching all faculties");
   try {
@@ -77,6 +81,7 @@ router.delete('/faculties/:id', async (req, res) => {
 });
 
 // --- Subjects CRUD ---
+//add subjects
 router.post('/subjects', async (req, res) => {
   console.log("[POST /subjects] Body:", req.body);
   try {
@@ -90,6 +95,7 @@ router.post('/subjects', async (req, res) => {
   }
 });
 
+//get all subjects
 router.get('/subjects', async (req, res) => {
   console.log("[GET /subjects] Fetching all subjects");
   try {
@@ -102,7 +108,43 @@ router.get('/subjects', async (req, res) => {
   }
 });
 
+// Edit a subject
+router.put('/subjects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, code, ...rest } = req.body;
+    const updatedSubject = await Subject.findOneAndUpdate(
+      { _id: id },
+      { name, code, ...rest },
+      { new: true, runValidators: true }
+    );
+    if (!updatedSubject) {
+      return res.status(404).json({ error: 'Subject not found.' });
+    }
+    res.json(updatedSubject);
+  } catch (e) {
+    console.error("[PUT /subjects/:id] Error:", e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Delete a subject
+router.delete('/subjects/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedSubject = await Subject.findByIdAndDelete(id);
+    if (!deletedSubject) {
+      return res.status(404).json({ error: 'Subject not found.' });
+    }
+    res.json({ message: 'Subject deleted successfully.' });
+  } catch (e) {
+    console.error("[DELETE /subjects/:id] Error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Classes CRUD ---
+//add classes
 router.post('/classes', async (req, res) => {
   console.log("[POST /classes] Body:", req.body);
   try {
@@ -120,6 +162,7 @@ router.post('/classes', async (req, res) => {
   }
 });
 
+//get all classes
 router.get('/classes', async (req, res) => {
   console.log("[GET /classes] Fetching all classes");
   try {
@@ -132,35 +175,182 @@ router.get('/classes', async (req, res) => {
   }
 });
 
+// Edit a class
+router.put('/classes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    const updatedClass = await ClassModel.findOneAndUpdate(
+      { _id: id },
+      updateData,
+      { new: true, runValidators: true }
+    );
+    if (!updatedClass) {
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+    res.json(updatedClass);
+  } catch (e) {
+    console.error("[PUT /classes/:id] Error:", e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Delete a class
+router.delete('/classes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedClass = await ClassModel.findByIdAndDelete(id);
+    if (!deletedClass) {
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+    res.json({ message: 'Class deleted successfully.' });
+  } catch (e) {
+    console.error("[DELETE /classes/:id] Error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Combos ---
-router.post('/add-and-assign-combo', async (req, res) => {
+
+router.post("/add-and-assign-combo", async (req, res) => {
   console.log("[POST /add-and-assign-combo] Body:", req.body);
+
   try {
     const { faculty_id, subject_id, combo_name, class_id } = req.body;
-    if (!faculty_id || !subject_id || !combo_name) {
+
+    // Validate required fields
+    if (!faculty_id || !subject_id || !combo_name || !class_id) {
       console.warn("[POST /add-and-assign-combo] Missing required fields");
-      return res.status(400).json({ error: 'faculty_id, subject_id, and combo_name are required.' });
+      return res.status(400).json({
+        error: "faculty_id, subject_id, combo_name, and class_id are required."
+      });
     }
 
-    let lastCombo = await Combo.findOne().sort({ id: -1 }).exec();
-    let nextId = lastCombo ? lastCombo.id + 1 : 1;
-    console.log("[POST /add-and-assign-combo] Next combo id:", nextId);
-
-    const combo = new Combo({ id: nextId, faculty_id, subject_id, combo_name });
+    // Create combo with class_id
+    const combo = new Combo({ faculty_id, subject_id, combo_name, class_id });
     await combo.save();
     console.log("[POST /add-and-assign-combo] Saved combo:", combo);
 
-    if (Array.isArray(class_id) && class_id.length > 0) {
-      console.log("[POST /add-and-assign-combo] Assigning combo to classes:", class_id);
-      await ClassModel.updateMany(
-        { _id: { $in: class_id } },
-        { $addToSet: { assigned_teacher_subject_combos: combo.id } }
+    // Assign combo to the class
+    await ClassModel.updateOne(
+      { _id: class_id },
+      { $addToSet: { assigned_teacher_subject_combos: combo._id } }
+    );
+
+    // Fetch updated class for response
+    const updatedClass = await ClassModel.findById(class_id).lean();
+
+    res.json({ combo, assignedTo: updatedClass });
+  } catch (e) {
+    console.error("[POST /add-and-assign-combo] Error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get all combos with assigned class
+router.get('/create-and-assign-combos', async (req, res) => {
+  try {
+    const combos = await Combo.find().lean();
+    res.json(combos);
+  } catch (e) {
+    console.error("[GET /create-and-assign-combos] Error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+//update a combo and reassign it to a different class if needed
+router.put('/create-and-assign-combos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { faculty_id, subject_id, combo_name, class_id } = req.body;
+
+    // Find existing combo
+    const existingCombo = await Combo.findById(id);
+    if (!existingCombo) {
+      return res.status(404).json({ error: 'Combo not found.' });
+    }
+
+    // Validate subject & class semester match
+    if (subject_id && class_id) {
+      const [subject, classData] = await Promise.all([
+        SubjectModel.findById(subject_id).lean(),
+        ClassModel.findById(class_id).lean()
+      ]);
+
+      if (!subject) {
+        return res.status(404).json({ error: 'Subject not found.' });
+      }
+      if (!classData) {
+        return res.status(404).json({ error: 'Class not found.' });
+      }
+
+      if (subject.sem !== classData.sem) {
+        return res.status(400).json({ 
+          error: `Subject semester (${subject.sem}) does not match Class semester (${classData.sem}).` 
+        });
+      }
+    }
+
+    // Unassign from old class if class_id changed
+    if (existingCombo.class_id && existingCombo.class_id.toString() !== class_id) {
+      await ClassModel.updateOne(
+        { _id: existingCombo.class_id },
+        { $pull: { assigned_teacher_subject_combos: existingCombo._id } }
       );
     }
 
-    res.json({ combo, assignedTo: class_id || [] });
+    // Update combo
+    existingCombo.faculty_id = faculty_id;
+    existingCombo.subject_id = subject_id;
+    existingCombo.combo_name = combo_name;
+    existingCombo.class_id = class_id;
+    await existingCombo.save();
+
+    // Assign to the new class
+    if (class_id) {
+      await ClassModel.updateOne(
+        { _id: class_id },
+        { $addToSet: { assigned_teacher_subject_combos: existingCombo._id } }
+      );
+    }
+
+    // Populate updated combo for response
+    const updatedCombo = await Combo.findById(id)
+      .populate('faculty_id')
+      .populate('subject_id')
+      .populate('class_id')
+      .lean();
+
+    res.json(updatedCombo);
   } catch (e) {
-    console.error("[POST /add-and-assign-combo] Error:", e.message);
+    console.error("[PUT /create-and-assign-combos/:id] Error:", e.message);
+    res.status(400).json({ error: e.message });
+  }
+});
+
+
+
+// Delete a combo and unassign it from its class
+router.delete('/create-and-assign-combos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedCombo = await Combo.findByIdAndDelete(id);
+    if (!deletedCombo) {
+      return res.status(404).json({ error: 'Combo not found.' });
+    }
+
+    // Unassign from the class
+    if (deletedCombo.class_id) {
+      await ClassModel.updateOne(
+        { _id: deletedCombo.class_id },
+        { $pull: { assigned_teacher_subject_combos: deletedCombo._id } }
+      );
+    }
+
+    res.json({ message: 'Combo deleted and unassigned from class successfully.' });
+  } catch (e) {
+    console.error("[DELETE /create-and-assign-combos/:id] Error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -183,7 +373,7 @@ router.post('/generate', async (req, res) => {
 
     const result = generator.generate({
       faculties, subjects, classes, combos,
-      DAYS_PER_WEEK: 5, HOURS_PER_DAY: 8
+      DAYS_PER_WEEK: 5, HOURS_PER_DAY: 9
     });
 
     if (!result.ok) {
@@ -216,4 +406,5 @@ router.get('/result/latest', async (req, res) => {
   }
 });
 
-module.exports = router;
+
+export default router;
