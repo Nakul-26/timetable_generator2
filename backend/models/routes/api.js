@@ -475,5 +475,20 @@ router.post("/result/regenerate", async (req, res) => {
   }
 });
 
+router.delete("/timetables", async (req, res) => {
+  try {
+    // Delete all timetables
+    const result = await TimetableResult.deleteMany({});
+
+    res.status(200).json({
+      ok: true,
+      deletedCount: result.deletedCount, // tells how many docs were removed
+      message: "All timetables deleted successfully"
+    });
+  } catch (err) {
+    console.error("❌ Error deleting timetables:", err);
+    res.status(500).json({ ok: false, error: "Failed to delete timetables" });
+  }
+});
 
 export default router;

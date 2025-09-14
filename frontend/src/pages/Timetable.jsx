@@ -159,6 +159,23 @@ function Timetable() {
     );
   };
 
+  const deleteAllTimetables = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.delete("/timetables");
+      console.log("response to regenerate:",res);
+      if (res) {
+        setError("");
+      } else {
+        setError("Failed to regenerate timetable");
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || "Failed to regenerate timetable");
+    }
+    setLoading(false);
+  }
+
   const filteredTimetable = () => {
     if (!timetable) return null;
 
@@ -193,6 +210,9 @@ function Timetable() {
         </button>
         <button className="secondary-btn" onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Filters" : "Show Filters"}
+        </button>
+        <button className="secondart-btn" onClick={deleteAllTimetables} disabled={loading}>
+          Delete All Timetables
         </button>
       </div>
 
