@@ -9,6 +9,7 @@ function AddSubject() {
   const [code, setCode] = useState("");
   const [sem, setSem] = useState("");
   const [credits, setCredits] = useState("");
+  const [type, setType] = useState("theory");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -16,6 +17,7 @@ function AddSubject() {
     if (name === "code") setCode(value);
     if (name === "sem") setSem(value);
     if (name === "credits") setCredits(value);
+    if (name === "type") setType(value);
   };
 
   const validate = () => {
@@ -23,6 +25,7 @@ function AddSubject() {
     if (!code.trim()) return "Subject code is required.";
     if (!sem.trim()) return "Semester is required.";
     if (!credits.trim()) return "Credits are required.";
+    if (!type.trim()) return "subject type are required";
     return "";
   };
 
@@ -42,12 +45,15 @@ function AddSubject() {
         id: code,
         sem,
         no_of_hours_per_week: credits,
+        type: type,
       });
+      // console.log("res:",res);
       setSuccess("Subject added successfully!");
       setName("");
       setCode("");
       setSem("");
       setCredits("");
+      setType("");
     } catch (err) {
       setError("Failed to add subject.");
     }
@@ -102,6 +108,18 @@ function AddSubject() {
             required
           />
         </div>
+       <div className="form-group">
+        <label>Subject Type</label>
+        <select
+          name="type"
+          onChange={handleChange}
+          required
+          defaultValue="theory"
+        >
+          <option value="theory">Theory</option>
+          <option value="lab">Lab</option>
+        </select>
+      </div>
         <button type="submit" disabled={loading} className="primary-btn">
           {loading ? "Adding..." : "Add Subject"}
         </button>

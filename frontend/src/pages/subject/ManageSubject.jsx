@@ -13,6 +13,7 @@ function ManageSubject() {
   const [editCode, setEditCode] = useState("");
   const [editSem, setEditSem] = useState("");
   const [editCredits, setEditCredits] = useState("");
+  const [editType, setEditType] = useState("");
 
   // 🔍 Filter states
   const [showFilters, setShowFilters] = useState(false);
@@ -56,6 +57,7 @@ function ManageSubject() {
     setEditCode(subject.id);
     setEditSem(subject.sem);
     setEditCredits(subject.no_of_hours_per_week);
+    setEditType(subject.type);
   };
 
   const handleEditSubmit = async (e) => {
@@ -66,6 +68,7 @@ function ManageSubject() {
         id: editCode,
         sem: editSem,
         no_of_hours_per_week: editCredits,
+        type: editType,
       };
       await axios.put(`/subjects/${editId}`, updatedSubject);
       setSubjects(
@@ -78,6 +81,7 @@ function ManageSubject() {
       setEditCode("");
       setEditSem("");
       setEditCredits("");
+      setEditType("theory");
     } catch (err) {
       setError("Failed to update subject.");
     }
@@ -143,6 +147,7 @@ function ManageSubject() {
               <th>Code</th>
               <th>Semester</th>
               <th>Credits</th>
+              <th>Subject Type</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -192,6 +197,20 @@ function ManageSubject() {
                       />
                     ) : (
                       subject.no_of_hours_per_week
+                    )}
+                  </td>
+                  <td>
+                    {editId === subject._id ? (
+                      <select
+                        value={editType}
+                        onChange={(e) => setEditType(e.target.value)}
+                        required
+                      >
+                        <option value="theory">Theory</option>
+                        <option value="lab">Lab</option>
+                      </select>
+                    ) : (
+                      subject.type
                     )}
                   </td>
                   <td>

@@ -6,6 +6,10 @@ const SubjectSchema = new Schema({
   name: String,
   no_of_hours_per_week: Number,
   sem: Number,
-  faculty: [{ type: Schema.Types.ObjectId, ref: 'Faculty' }]
+  type: { 
+    type: String, 
+    enum: ["theory", "lab"], 
+    required: true 
+  }
 });
 export default mongoose.model('Subject', SubjectSchema);

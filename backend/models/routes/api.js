@@ -5,6 +5,7 @@ import ClassModel from '../Class.js';
 import Combo from '../Combo.js';
 import TimetableResult from '../TmietableResult.js';
 import generator from '../lib/generator.js';
+import runGenerate from '../lib/runGenerator.js';
 import mongoose from "mongoose";
 
 const router = Router();
@@ -72,6 +73,12 @@ router.delete('/faculties/:id', async (req, res) => {
       console.warn("[DELETE /faculties/:id] Faculty not found:", id);
       return res.status(404).json({ error: 'Faculty not found.' });
     }
+
+    const deletedCombos = await Combo.deleteMany({ faculty_id: id });
+    console.log(
+      `[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos linked to faculty ${id}`
+    );
+
     console.log("[DELETE /faculties/:id] Deleted faculty:", deletedFaculty);
     res.json({ message: 'Faculty deleted successfully.' });
   } catch (e) {
@@ -81,11 +88,18 @@ router.delete('/faculties/:id', async (req, res) => {
 });
 
 // --- Subjects CRUD ---
-//add subjects
+// Add a subject
 router.post('/subjects', async (req, res) => {
   console.log("[POST /subjects] Body:", req.body);
   try {
-    const s = new Subject(req.body);
+    const s = new Subject({
+      id: req.body.id,
+      name: req.body.name,
+      no_of_hours_per_week: req.body.no_of_hours_per_week,
+      sem: req.body.sem,
+      type: req.body.type // ✅ new property
+    });
+
     await s.save();
     console.log("[POST /subjects] Saved subject:", s);
     res.json(s);
@@ -95,7 +109,7 @@ router.post('/subjects', async (req, res) => {
   }
 });
 
-//get all subjects
+// Get all subjects
 router.get('/subjects', async (req, res) => {
   console.log("[GET /subjects] Fetching all subjects");
   try {
@@ -112,14 +126,16 @@ router.get('/subjects', async (req, res) => {
 router.put('/subjects/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, code, ...rest } = req.body;
+    const { name, no_of_hours_per_week, sem, type } = req.body;
+
     const updatedSubject = await Subject.findOneAndUpdate(
       { _id: id },
-      { name, code, ...rest },
+      { name, no_of_hours_per_week, sem, type }, // ✅ include type
       { new: true, runValidators: true }
     );
+
     if (!updatedSubject) {
-      return res.status(404).json({ error: 'Subject not found.' });
+      return res.status(404).json({ error: "Subject not found." });
     }
     res.json(updatedSubject);
   } catch (e) {
@@ -134,14 +150,21 @@ router.delete('/subjects/:id', async (req, res) => {
     const { id } = req.params;
     const deletedSubject = await Subject.findByIdAndDelete(id);
     if (!deletedSubject) {
-      return res.status(404).json({ error: 'Subject not found.' });
+      return res.status(404).json({ error: "Subject not found." });
     }
-    res.json({ message: 'Subject deleted successfully.' });
+
+    const deletedCombos = await Combo.deleteMany({ subject_id: id });
+    console.log(
+      `[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos linked to subject ${id}`
+    );
+
+    res.json({ message: "Subject deleted successfully." });
   } catch (e) {
     console.error("[DELETE /subjects/:id] Error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
+  
 
 // --- Classes CRUD ---
 //add classes
@@ -203,6 +226,12 @@ router.delete('/classes/:id', async (req, res) => {
     if (!deletedClass) {
       return res.status(404).json({ error: 'Class not found.' });
     }
+
+    const deletedCombos = await Combo.deleteMany({ class_id: id });
+    console.log(
+      `[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos linked to class ${id}`
+    );
+
     res.json({ message: 'Class deleted successfully.' });
   } catch (e) {
     console.error("[DELETE /classes/:id] Error:", e.message);
@@ -403,6 +432,46 @@ router.get('/result/latest', async (req, res) => {
   } catch (e) {
     console.error("[GET /result/latest] Error:", e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/result/regenerate", async (req, res) => {
+  try {
+    const faculties = await Faculty.find().lean();
+    const subjects = await Subject.find().lean();
+    const classes = await ClassModel.find().lean();
+    const combos = await Combo.find().lean();
+
+    const { bestClassTimetables, bestFacultyTimetables, bestScore } = runGenerate({
+      faculties,
+      subjects,
+      classes,
+      combos,
+    });
+
+    if (!bestClassTimetables) {
+      console.warn("[POST /generate] Generation failed: No valid timetable found.");
+      return res.status(400).json({ ok: false, error: "Failed to generate timetable." });
+    }
+
+    const rec = new TimetableResult({
+      class_timetables: bestClassTimetables,
+      faculty_timetables: bestFacultyTimetables,
+      score: bestScore,
+    });
+
+    await rec.save();
+    console.log("[POST /generate] Saved timetable result");
+
+    res.json({
+      ok: true,
+      score: bestScore,
+      class_timetables: bestClassTimetables,
+      faculty_timetables: bestFacultyTimetables,
+    });
+  } catch (err) {
+    console.error("[POST /generate] Error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 

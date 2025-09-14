@@ -40,20 +40,18 @@ function generate({
   }));
   classes = classes.map((c) => ({ ...c, _id: String(c._id || c.id) }));
 
-  // --- Combo lookup maps ---
+  // --- Maps ---
   const comboByMongoId = new Map(combos.map((c) => [c._id, c]));
-  const comboByBizId = new Map(
-    combos.filter((c) => c.id).map((c) => [c.id, c])
-  );
-
-  // --- Other maps ---
+  const comboByBizId = new Map(combos.filter((c) => c.id).map((c) => [c.id, c]));
   const facultyById = new Map(faculties.map((f) => [f._id, f]));
   const subjectById = new Map(subjects.map((s) => [s._id, s]));
+  const classById = new Map(classes.map((c) => [c._id, c]));
 
   // --- Timetable structures ---
   const class_timetables = {};
   const faculty_timetables = {};
   const subject_hours_assigned_per_class = {};
+  const daily_hours_assigned = {}; // daily_hours_assigned[classId][day] = number
 
   for (const cls of classes) {
     class_timetables[cls._id] = Array.from({ length: DAYS_PER_WEEK }, () =>
@@ -62,8 +60,8 @@ function generate({
       )
     );
     subject_hours_assigned_per_class[cls._id] = {};
-    for (const s of subjects)
-      subject_hours_assigned_per_class[cls._id][s._id] = 0;
+    daily_hours_assigned[cls._id] = Array.from({ length: DAYS_PER_WEEK }, () => 0);
+    for (const s of subjects) subject_hours_assigned_per_class[cls._id][s._id] = 0;
   }
   for (const f of faculties) {
     faculty_timetables[f._id] = Array.from({ length: DAYS_PER_WEEK }, () =>
@@ -73,7 +71,7 @@ function generate({
     );
   }
 
-  // --- Helpers to resolve combo ids ---
+  // --- Helpers ---
   function toComboMongoId(value) {
     const key = String(value);
     if (comboByMongoId.has(key)) return key;
@@ -145,18 +143,53 @@ function generate({
     return true;
   }
 
-  function is_placement_valid(classId, day, hour, combo_id) {
-    if (BREAK_HOURS.includes(hour)) return false;
+  function can_place_lab_block(classId, faculty_id, day, hour, blockSize) {
+    if (hour + blockSize > HOURS_PER_DAY) return false;
 
+    for (let h = hour; h < hour + blockSize; h++) {
+      if (BREAK_HOURS.includes(h)) return false;
+      if (class_timetables[classId][day][h] !== EMPTY_SLOT) return false;
+      if (faculty_timetables[faculty_id][day][h] !== EMPTY_SLOT) return false;
+    }
+    return true;
+  }
+
+  function daily_target_for_class(classId) {
+    const cls = classById.get(classId);
+    if (!cls) return 0;
+    return Math.ceil((cls.total_class_hours || 0) / DAYS_PER_WEEK);
+  }
+
+  function is_placement_valid(classId, day, hour, combo_id, blockSize = 1) {
+    if (BREAK_HOURS.includes(hour)) return false;
     const combo = comboByMongoId.get(String(combo_id));
     if (!combo) return false;
     const subj = subjectById.get(combo.subject_id);
     if (!subj) return false;
 
+    const cls = classById.get(classId);
+    const target = daily_target_for_class(classId);
+    if (daily_hours_assigned[classId][day] + blockSize > target) {
+      return false;
+    }
+
+    if (subj.type === "lab") {
+      if (!can_place_lab_block(classId, combo.faculty_id, day, hour, blockSize))
+        return false;
+      if (!check_teacher_gap_constraint(combo.faculty_id, day, hour)) return false;
+      if (!check_teacher_gap_constraint(combo.faculty_id, day, hour + blockSize - 1))
+        return false;
+      if (
+        subject_hours_assigned_per_class[classId][subj._id] + blockSize >
+        subj.no_of_hours_per_week
+      )
+        return false;
+      return true;
+    }
+
     if (class_timetables[classId][day][hour] !== EMPTY_SLOT) return false;
     if (!facultyById.has(combo.faculty_id)) return false;
-    if (faculty_timetables[combo.faculty_id][day][hour] !== EMPTY_SLOT)
-      return false;
+    if (faculty_timetables[combo.faculty_id][day][hour] !== EMPTY_SLOT) return false;
     if (!check_teacher_gap_constraint(combo.faculty_id, day, hour)) return false;
     if (
       !check_subject_same_hour_different_days_constraint(
@@ -198,37 +231,12 @@ function generate({
         })
         .map((cb) => cb._id);
       cls.assigned_teacher_subject_combos = auto;
-      console.log(
-        `ℹ️  Auto-assigned ${auto.length} combos to class ${cls.name} by semester ${cls.sem}`
-      );
     } else {
-      const originalList = Array.isArray(cls.assigned_teacher_subject_combos)
-        ? [...cls.assigned_teacher_subject_combos]
-        : cls.assigned_teacher_subject_combos;
-
       cls.assigned_teacher_subject_combos = resolveAssignedCombos(
         cls.assigned_teacher_subject_combos
       );
-
-      if (
-        Array.isArray(originalList) &&
-        originalList.length > 0 &&
-        cls.assigned_teacher_subject_combos.length === 0
-      ) {
-        console.warn(
-          `⚠️  Class ${cls.name}: provided assigned_teacher_subject_combos (${JSON.stringify(
-            originalList
-          )}) could not be resolved. No combos will be used for this class.`
-        );
-      } else {
-        console.log(
-          `ℹ️  Class ${cls.name} resolved combos:`,
-          cls.assigned_teacher_subject_combos
-        );
-      }
     }
 
-    // Compute total_class_hours
     let tot = 0;
     for (const cbid of cls.assigned_teacher_subject_combos) {
       const cb = comboByMongoId.get(String(cbid));
@@ -239,21 +247,25 @@ function generate({
       }
     }
     cls.total_class_hours = tot;
+    classById.set(cls._id, cls);
+  }
 
-    if (tot === 0) {
-      console.warn(
-        `⚠️  Class ${cls.name} has no valid combos or subjects with hours. It will be skipped in scheduling.`
-      );
-    } else {
-      console.log(`📘 Class ${cls.name}: total_class_hours = ${cls.total_class_hours}`);
+  const classIds = classes.filter((c) => c.total_class_hours > 0).map((c) => c._id);
+
+  // Early Fail Check
+  for (const cls of classes) {
+    const availableSlots = DAYS_PER_WEEK * (HOURS_PER_DAY - BREAK_HOURS.length);
+    if (cls.total_class_hours > availableSlots) {
+      return {
+        ok: false,
+        error: `Class ${cls.name} has more required hours than available slots.`,
+      };
     }
   }
 
-  // --- Only include classes that need scheduling ---
-  const classIds = classes.filter(c => c.total_class_hours > 0).map(c => c._id);
-  console.log(`📊 Scheduling ${classIds.length}/${classes.length} classes (skipped ${classes.length - classIds.length})`);
+  // Caching visited states
+  const visited = new Set();
 
-  // --- Backtracking core ---
   function generate_schedule_for_slot(day, hour, classIndex) {
     if (day >= DAYS_PER_WEEK) return true;
 
@@ -281,7 +293,7 @@ function generate({
     }
 
     const classId = classIds[classIndex];
-    const cls = classes.find((c) => c._id === classId);
+    const cls = classById.get(classId);
 
     if (class_assigned_hours(classId) >= cls.total_class_hours) {
       return generate_schedule_for_slot(day, hour, classIndex + 1);
@@ -300,39 +312,116 @@ function generate({
         candidates.push({
           combo_id: combo._id,
           rem,
-          subj: subj.name,
-          comboName: combo.combo_name,
+          subj,
+          combo,
         });
     }
 
-    console.log(
-      `➡️ Day ${day}, Hour ${hour}, Class ${cls.name}: candidates =`,
-      candidates.map((c) => `${c.comboName}/${c.subj} (rem ${c.rem})`)
-    );
+    // Smarter sorting
+        // --- added helper: count filled slots for a class on a day (not BREAK/EMPTY)
+    function countFilledInDay(classId, day) {
+      const dayRow = class_timetables[classId][day];
+      let cnt = 0;
+      for (let i = 0; i < dayRow.length; i++) {
+        const v = dayRow[i];
+        if (v !== EMPTY_SLOT && v !== BREAK_SLOT) cnt++;
+      }
+      return cnt;
+    }
 
-    candidates.sort((a, b) => b.rem - a.rem);
+    // Smarter sorting (keeps your original priorities, but prefer placements that reduce gaps)
+    // --- improved candidate sorting ---
+    candidates.sort((a, b) => {
+      // labs always come first
+      if (a.subj.type === "lab" && b.subj.type !== "lab") return -1;
+      if (b.subj.type === "lab" && a.subj.type !== "lab") return 1;
+
+      // prefer subjects with more remaining hours
+      if (b.rem !== a.rem) return b.rem - a.rem;
+
+      // gap heuristic: prefer placements that minimize projected gaps
+      function gapHeuristic(cand) {
+        const cid = classId;
+        const dayRow = class_timetables[cid][day];
+        let first = -1, last = -1, filledCount = 0;
+
+        for (let i = 0; i < dayRow.length; i++) {
+          const v = dayRow[i];
+          if (v !== EMPTY_SLOT && v !== BREAK_SLOT) {
+            if (first === -1) first = i;
+            last = i;
+            filledCount++;
+          }
+        }
+        const projFirst = first === -1 ? hour : Math.min(first, hour);
+        const projLast = last === -1 ? hour : Math.max(last, hour);
+
+        let breakCount = 0;
+        for (let i = projFirst; i <= projLast; i++) {
+          if (BREAK_HOURS.includes(i)) breakCount++;
+        }
+
+        const projFilled = filledCount + ((dayRow[hour] !== EMPTY_SLOT && dayRow[hour] !== BREAK_SLOT) ? 0 : 1);
+        const intervalLength = projLast - projFirst + 1;
+        return intervalLength - breakCount - projFilled; // lower is better
+      }
+
+      const gapA = gapHeuristic(a);
+      const gapB = gapHeuristic(b);
+      if (gapA !== gapB) return gapA - gapB;
+
+      // daily target bias: prefer candidates that bring us closer to daily goal
+      const target = daily_target_for_class(classId);
+      const used = daily_hours_assigned[classId][day];
+      const diffA = Math.abs((used + 1) - target);
+      const diffB = Math.abs((used + 1) - target);
+      if (diffA !== diffB) return diffA - diffB;
+
+      // faculty availability fallback
+      const freeA = faculty_timetables[a.combo.faculty_id].flat().filter((x) => x === EMPTY_SLOT).length;
+      const freeB = faculty_timetables[b.combo.faculty_id].flat().filter((x) => x === EMPTY_SLOT).length;
+      return freeA - freeB;
+    });
 
     for (const cand of candidates) {
       const combo_id = String(cand.combo_id);
-      const combo = comboByMongoId.get(combo_id);
-      const subj = subjectById.get(combo.subject_id);
+      const combo = cand.combo;
+      const subj = cand.subj;
 
-      if (is_placement_valid(classId, day, hour, combo_id)) {
-        console.log(
-          `✅ Place ${combo.combo_name} [${subj.name}] for ${cls.name} @ D${day} H${hour}`
-        );
-        class_timetables[classId][day][hour] = combo_id;
-        faculty_timetables[combo.faculty_id][day][hour] = combo_id;
-        subject_hours_assigned_per_class[classId][subj._id]++;
+      if (subj.type === "lab") {
+        const blockSize = subj.no_of_hours_per_week;
 
-        if (generate_schedule_for_slot(day, hour, classIndex + 1)) return true;
+        if (is_placement_valid(classId, day, hour, combo_id, blockSize)) {
+          for (let h = hour; h < hour + blockSize; h++) {
+            class_timetables[classId][day][h] = combo_id;
+            faculty_timetables[combo.faculty_id][day][h] = combo_id;
+            subject_hours_assigned_per_class[classId][subj._id]++;
+          }
+          daily_hours_assigned[classId][day] += blockSize;
 
-        console.log(
-          `↩️ Backtrack ${combo.combo_name} for ${cls.name} @ D${day} H${hour}`
-        );
-        subject_hours_assigned_per_class[classId][subj._id]--;
-        faculty_timetables[combo.faculty_id][day][hour] = EMPTY_SLOT;
-        class_timetables[classId][day][hour] = EMPTY_SLOT;
+          if (generate_schedule_for_slot(day, hour, classIndex + 1)) return true;
+
+          for (let h = hour; h < hour + blockSize; h++) {
+            subject_hours_assigned_per_class[classId][subj._id]--;
+            faculty_timetables[combo.faculty_id][day][h] = EMPTY_SLOT;
+            class_timetables[classId][day][h] = EMPTY_SLOT;
+          }
+          daily_hours_assigned[classId][day] -= blockSize;
+        }
+      } else {
+        if (is_placement_valid(classId, day, hour, combo_id, 1)) {
+          class_timetables[classId][day][hour] = combo_id;
+          faculty_timetables[combo.faculty_id][day][hour] = combo_id;
+          subject_hours_assigned_per_class[classId][subj._id]++;
+          daily_hours_assigned[classId][day]++;
+
+          if (generate_schedule_for_slot(day, hour, classIndex + 1)) return true;
+
+          subject_hours_assigned_per_class[classId][subj._id]--;
+          faculty_timetables[combo.faculty_id][day][hour] = EMPTY_SLOT;
+          class_timetables[classId][day][hour] = EMPTY_SLOT;
+          daily_hours_assigned[classId][day]--;
+        }
       }
     }
 
@@ -340,9 +429,16 @@ function generate({
   }
 
   function generate_full_timetable_recursive(day, hour) {
+    const stateKey = JSON.stringify({
+      day,
+      hour,
+      classHours: classIds.map((cid) => class_assigned_hours(cid)),
+    });
+    if (visited.has(stateKey)) return false;
+    visited.add(stateKey);
+
     if (day === DAYS_PER_WEEK) return true;
-    if (hour >= HOURS_PER_DAY)
-      return generate_full_timetable_recursive(day + 1, 0);
+    if (hour >= HOURS_PER_DAY) return generate_full_timetable_recursive(day + 1, 0);
     return generate_schedule_for_slot(day, hour, 0);
   }
 
@@ -359,8 +455,7 @@ function generate({
   console.log("🎉 Successfully generated timetable");
 
   const out_class_timetables = {};
-  for (const cls of classes)
-    out_class_timetables[cls._id] = class_timetables[cls._id];
+  for (const cls of classes) out_class_timetables[cls._id] = class_timetables[cls._id];
   const out_faculty_timetables = {};
   for (const f of faculties)
     out_faculty_timetables[f._id] = faculty_timetables[f._id];
@@ -372,4 +467,48 @@ function generate({
   };
 }
 
-export default { generate };
+// Debug Visualization
+function printTimetable(classId, timetable, classById) {
+  console.log(`\\n📅 Timetable for ${classById.get(classId).name}`);
+  timetable.forEach((row, d) => {
+    console.log(
+      `Day ${d + 1}:`,
+      row.map((slot) =>
+        slot === -1 ? "—" : slot === "BREAK" ? "B" : slot
+      ).join(" | ")
+    );
+  });
+}
+
+// Score timetable (lower is better)
+function scoreTimetable(class_timetables, classIds) {
+  let score = 0;
+  for (const cid of classIds) {
+    const timetable = class_timetables[cid];
+    for (const day of timetable) {
+      const first = day.findIndex((x) => x !== -1 && x !== "BREAK");
+      const last = day
+        .map((x, i) => ({ x, i }))
+        .reverse()
+        .find(({ x }) => x !== -1 && x !== "BREAK")?.i;
+      if (first !== -1 && last !== undefined) {
+        score +=
+          last -
+          first +
+          1 -
+          day.filter((x) => x !== -1 && x !== "BREAK").length;
+      }
+    }
+  }
+  return score;
+}
+
+// Shuffle helper
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+}
+
+export default { generate, printTimetable, scoreTimetable, shuffle };

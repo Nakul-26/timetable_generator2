@@ -6,6 +6,7 @@ function Timetable() {
   const [loading, setLoading] = useState(false);
   const [timetable, setTimetable] = useState(null);
   const [error, setError] = useState("");
+  const [bestScore, setBestScore] = useState(null); // 🔥 NEW: Track best score
 
   const [classes, setClasses] = useState([]);
   const [faculties, setFaculties] = useState([]);
@@ -18,7 +19,7 @@ function Timetable() {
   const [selectedFaculty, setSelectedFaculty] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
 
-  // fetch classes, faculties, subjects, combos
+  // Fetch classes, faculties, subjects, combos
   const fetchAll = async () => {
     try {
       const [comboRes, classRes, facRes, subRes] = await Promise.all([
@@ -59,13 +60,33 @@ function Timetable() {
     try {
       const res = await api.get("/result/latest");
       setTimetable(res.data);
+      setBestScore(res.data?.score || null);
     } catch (e) {
       setError("Failed to fetch timetable");
     }
     setLoading(false);
   };
 
-  // helpers
+  // 🔥 NEW: Regenerate timetable using your /result/regenerate endpoint
+  const regenerateTimetable = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.post("/result/regenerate");
+      console.log("response to regenerate:",res);
+      if (res.data?.ok) {
+        setTimetable(res.data);
+        setBestScore(res.data.score || null);
+      } else {
+        setError("Failed to regenerate timetable");
+      }
+    } catch (e) {
+      setError(e.response?.data?.error || "Failed to regenerate timetable");
+    }
+    setLoading(false);
+  };
+
+  // Helpers
   const getClassName = (id) => {
     const cls = classes.find((c) => String(c._id) === String(id));
     return cls ? `${cls.name} (${cls.id})` : id;
@@ -167,10 +188,19 @@ function Timetable() {
         <button className="secondary-btn" onClick={fetchLatest} disabled={loading}>
           Fetch Latest
         </button>
+        <button className="secondary-btn" onClick={regenerateTimetable} disabled={loading}>
+          {loading ? "Regenerating..." : "Regenerate Timetable"}
+        </button>
         <button className="secondary-btn" onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Filters" : "Show Filters"}
         </button>
       </div>
+
+      {bestScore !== null && (
+        <div style={{ marginTop: "10px", fontWeight: "bold" }}>
+          🏆 Best Score: {bestScore}
+        </div>
+      )}
 
       {showFilters && (
         <div className="filters-container">
