@@ -1,343 +1,446 @@
-import { Router } from "express";
-import Faculty from "../Faculty.js";
-import Subject from "../Subject.js";
-import ClassModel from "../Class.js";
-import Combo from "../Combo.js";
-import TimetableResult from "../TmietableResult.js";
-import generator from "../lib/generator.js";
-import runGenerate from "../lib/runGenerator.js";
+import { Router } from 'express';
+import Faculty from '../Faculty.js';
+import Subject from '../Subject.js';
+import ClassModel from '../Class.js';
+import Combo from '../Combo.js';
+import TimetableResult from '../TmietableResult.js';
+import generator from '../lib/generator.js';
+import runGenerate from '../lib/runGenerator.js';
+import mongoose from "mongoose";
 
 const router = Router();
 
-/* -------------------- FACULTIES -------------------- */
-
-// Create faculty
-router.post("/faculties", async (req, res) => {
+// --- Faculties CRUD ---
+//add faculties
+router.post('/faculties', async (req, res) => {
   console.log("[POST /faculties] Body:", req.body);
   try {
-    const faculty = new Faculty({
-      id: req.body.id,
-      name: req.body.name,
-    });
-    await faculty.save();
-    res.json(faculty);
-  } catch (err) {
-    console.error("[POST /faculties] Error:", err.message);
-    res.status(400).json({ ok: false, error: err.message });
+    const f = new Faculty();
+    f.id = req.body.id;
+    f.name = req.body.name;
+    await f.save();
+    console.log("[POST /faculties] Saved faculty:", f);
+    res.json(f);
+  } catch (e) {
+    console.error("[POST /faculties] Error:", e.message);
+    res.status(400).json({ error: e.message });
   }
 });
 
-// Get all faculties
-router.get("/faculties", async (_req, res) => {
+//get all faculties
+router.get('/faculties', async (req, res) => {
+  console.log("[GET /faculties] Fetching all faculties");
   try {
     const faculties = await Faculty.find().lean();
+    console.log("[GET /faculties] Found:", faculties.length, "records");
     res.json(faculties);
-  } catch (err) {
-    console.error("[GET /faculties] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (e) {
+    console.error("[GET /faculties] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Update faculty
-router.put("/faculties/:id", async (req, res) => {
+// Update an existing faculty
+router.put('/faculties/:id', async (req, res) => {
+  console.log("[PUT /faculties/:id] Params:", req.params, "Body:", req.body);
   try {
-    const updated = await Faculty.findByIdAndUpdate(
-      req.params.id,
-      { name: req.body.name, id: req.body.id },
+    const { id } = req.params;
+    const { name, id: facultyId } = req.body;
+    const updatedFaculty = await Faculty.findOneAndUpdate(
+      { _id: id },
+      { name: name, id: facultyId },
       { new: true, runValidators: true }
     );
-    if (!updated) return res.status(404).json({ ok: false, error: "Faculty not found" });
-    res.json(updated);
-  } catch (err) {
-    console.error("[PUT /faculties/:id] Error:", err.message);
-    res.status(400).json({ ok: false, error: err.message });
+    if (!updatedFaculty) {
+      console.warn("[PUT /faculties/:id] Faculty not found for _id:", id);
+      return res.status(404).json({ error: 'Faculty not found.' });
+    }
+    console.log("[PUT /faculties/:id] Updated faculty:", updatedFaculty);
+    res.json(updatedFaculty);
+  } catch (e) {
+    console.error("[PUT /faculties/:id] Error:", e.message);
+    res.status(400).json({ error: e.message });
   }
 });
 
-// Delete faculty (and linked combos)
-router.delete("/faculties/:id", async (req, res) => {
+// Delete a faculty
+router.delete('/faculties/:id', async (req, res) => {
+  console.log("[DELETE /faculties/:id] Params:", req.params);
   try {
-    const deleted = await Faculty.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ ok: false, error: "Faculty not found" });
+    const { id } = req.params;
+    const deletedFaculty = await Faculty.findByIdAndDelete(id);
+    if (!deletedFaculty) {
+      console.warn("[DELETE /faculties/:id] Faculty not found:", id);
+      return res.status(404).json({ error: 'Faculty not found.' });
+    }
 
-    const deletedCombos = await Combo.deleteMany({ faculty_id: req.params.id });
-    console.log(`[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos`);
+    const deletedCombos = await Combo.deleteMany({ faculty_id: id });
+    console.log(
+      `[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos linked to faculty ${id}`
+    );
 
-    res.json({ ok: true, message: "Faculty deleted successfully" });
-  } catch (err) {
-    console.error("[DELETE /faculties/:id] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    console.log("[DELETE /faculties/:id] Deleted faculty:", deletedFaculty);
+    res.json({ message: 'Faculty deleted successfully.' });
+  } catch (e) {
+    console.error("[DELETE /faculties/:id] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-/* -------------------- SUBJECTS -------------------- */
-
-// Create subject
-router.post("/subjects", async (req, res) => {
+// --- Subjects CRUD ---
+// Add a subject
+router.post('/subjects', async (req, res) => {
   console.log("[POST /subjects] Body:", req.body);
   try {
-    const subject = new Subject(req.body);
-    await subject.save();
-    res.json(subject);
-  } catch (err) {
-    console.error("[POST /subjects] Error:", err.message);
-    res.status(400).json({ ok: false, error: err.message });
+    const s = new Subject({
+      id: req.body.id,
+      name: req.body.name,
+      no_of_hours_per_week: req.body.no_of_hours_per_week,
+      sem: req.body.sem,
+      type: req.body.type // ✅ new property
+    });
+
+    await s.save();
+    console.log("[POST /subjects] Saved subject:", s);
+    res.json(s);
+  } catch (e) {
+    console.error("[POST /subjects] Error:", e.message);
+    res.status(400).json({ error: e.message });
   }
 });
 
 // Get all subjects
-router.get("/subjects", async (_req, res) => {
+router.get('/subjects', async (req, res) => {
+  console.log("[GET /subjects] Fetching all subjects");
   try {
     const subjects = await Subject.find().lean();
+    console.log("[GET /subjects] Found:", subjects.length, "records");
     res.json(subjects);
-  } catch (err) {
-    console.error("[GET /subjects] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (e) {
+    console.error("[GET /subjects] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Update subject
-router.put("/subjects/:id", async (req, res) => {
+// Edit a subject
+router.put('/subjects/:id', async (req, res) => {
   try {
-    const updated = await Subject.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    if (!updated) return res.status(404).json({ ok: false, error: "Subject not found" });
-    res.json(updated);
-  } catch (err) {
-    console.error("[PUT /subjects/:id] Error:", err.message);
-    res.status(400).json({ ok: false, error: err.message });
+    const { id } = req.params;
+    const { name, no_of_hours_per_week, sem, type } = req.body;
+
+    const updatedSubject = await Subject.findOneAndUpdate(
+      { _id: id },
+      { name, no_of_hours_per_week, sem, type }, // ✅ include type
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedSubject) {
+      return res.status(404).json({ error: "Subject not found." });
+    }
+    res.json(updatedSubject);
+  } catch (e) {
+    console.error("[PUT /subjects/:id] Error:", e.message);
+    res.status(400).json({ error: e.message });
   }
 });
 
-// Delete subject (and linked combos)
-router.delete("/subjects/:id", async (req, res) => {
+// Delete a subject
+router.delete('/subjects/:id', async (req, res) => {
   try {
-    const deleted = await Subject.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ ok: false, error: "Subject not found" });
+    const { id } = req.params;
+    const deletedSubject = await Subject.findByIdAndDelete(id);
+    if (!deletedSubject) {
+      return res.status(404).json({ error: "Subject not found." });
+    }
 
-    const deletedCombos = await Combo.deleteMany({ subject_id: req.params.id });
-    console.log(`[DELETE /subjects/:id] Deleted ${deletedCombos.deletedCount} combos`);
+    const deletedCombos = await Combo.deleteMany({ subject_id: id });
+    console.log(
+      `[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos linked to subject ${id}`
+    );
 
-    res.json({ ok: true, message: "Subject deleted successfully" });
-  } catch (err) {
-    console.error("[DELETE /subjects/:id] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.json({ message: "Subject deleted successfully." });
+  } catch (e) {
+    console.error("[DELETE /subjects/:id] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
+  
 
-/* -------------------- CLASSES -------------------- */
-
-// Create class
-router.post("/classes", async (req, res) => {
+// --- Classes CRUD ---
+//add classes
+router.post('/classes', async (req, res) => {
+  console.log("[POST /classes] Body:", req.body);
   try {
     const c = new ClassModel({
       ...req.body,
       assigned_teacher_subject_combos: req.body.assigned_teacher_subject_combos || [],
-      total_class_hours: req.body.total_class_hours || 0,
+      total_class_hours: req.body.total_class_hours || 0
     });
     await c.save();
+    console.log("[POST /classes] Saved class:", c);
     res.json(c);
-  } catch (err) {
-    console.error("[POST /classes] Error:", err.message);
-    res.status(400).json({ ok: false, error: err.message });
+  } catch (e) {
+    console.error("[POST /classes] Error:", e.message);
+    res.status(400).json({ error: e.message });
   }
 });
 
-// Get all classes
-router.get("/classes", async (_req, res) => {
+//get all classes
+router.get('/classes', async (req, res) => {
+  console.log("[GET /classes] Fetching all classes");
   try {
     const classes = await ClassModel.find().lean();
+    console.log("[GET /classes] Found:", classes.length, "records");
     res.json(classes);
-  } catch (err) {
-    console.error("[GET /classes] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (e) {
+    console.error("[GET /classes] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Update class
-router.put("/classes/:id", async (req, res) => {
+// Edit a class
+router.put('/classes/:id', async (req, res) => {
   try {
-    const updated = await ClassModel.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
-    if (!updated) return res.status(404).json({ ok: false, error: "Class not found" });
-    res.json(updated);
-  } catch (err) {
-    console.error("[PUT /classes/:id] Error:", err.message);
-    res.status(400).json({ ok: false, error: err.message });
+    const { id } = req.params;
+    const updateData = req.body;
+    const updatedClass = await ClassModel.findOneAndUpdate(
+      { _id: id },
+      updateData,
+      { new: true, runValidators: true }
+    );
+    if (!updatedClass) {
+      return res.status(404).json({ error: 'Class not found.' });
+    }
+    res.json(updatedClass);
+  } catch (e) {
+    console.error("[PUT /classes/:id] Error:", e.message);
+    res.status(400).json({ error: e.message });
   }
 });
 
-// Delete class (and linked combos)
-router.delete("/classes/:id", async (req, res) => {
+// Delete a class
+router.delete('/classes/:id', async (req, res) => {
   try {
-    const deleted = await ClassModel.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ ok: false, error: "Class not found" });
-
-    const deletedCombos = await Combo.deleteMany({ class_id: req.params.id });
-    console.log(`[DELETE /classes/:id] Deleted ${deletedCombos.deletedCount} combos`);
-
-    res.json({ ok: true, message: "Class deleted successfully" });
-  } catch (err) {
-    console.error("[DELETE /classes/:id] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-/* -------------------- COMBOS -------------------- */
-
-// Create and assign combo
-router.post("/combos", async (req, res) => {
-  try {
-    const { faculty_id, subject_id, combo_name, class_id } = req.body;
-    if (!faculty_id || !subject_id || !combo_name || !class_id) {
-      return res.status(400).json({ ok: false, error: "Missing required fields" });
+    const { id } = req.params;
+    const deletedClass = await ClassModel.findByIdAndDelete(id);
+    if (!deletedClass) {
+      return res.status(404).json({ error: 'Class not found.' });
     }
 
+    const deletedCombos = await Combo.deleteMany({ class_id: id });
+    console.log(
+      `[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos linked to class ${id}`
+    );
+
+    res.json({ message: 'Class deleted successfully.' });
+  } catch (e) {
+    console.error("[DELETE /classes/:id] Error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Combos ---
+
+router.post("/add-and-assign-combo", async (req, res) => {
+  console.log("[POST /add-and-assign-combo] Body:", req.body);
+
+  try {
+    const { faculty_id, subject_id, combo_name, class_id } = req.body;
+
+    // Validate required fields
+    if (!faculty_id || !subject_id || !combo_name || !class_id) {
+      console.warn("[POST /add-and-assign-combo] Missing required fields");
+      return res.status(400).json({
+        error: "faculty_id, subject_id, combo_name, and class_id are required."
+      });
+    }
+
+    // Create combo with class_id
     const combo = new Combo({ faculty_id, subject_id, combo_name, class_id });
     await combo.save();
+    console.log("[POST /add-and-assign-combo] Saved combo:", combo);
 
+    // Assign combo to the class
     await ClassModel.updateOne(
       { _id: class_id },
       { $addToSet: { assigned_teacher_subject_combos: combo._id } }
     );
 
+    // Fetch updated class for response
     const updatedClass = await ClassModel.findById(class_id).lean();
-    res.json({ ok: true, combo, assignedTo: updatedClass });
-  } catch (err) {
-    console.error("[POST /combos] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+
+    res.json({ combo, assignedTo: updatedClass });
+  } catch (e) {
+    console.error("[POST /add-and-assign-combo] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Get all combos
-router.get("/combos", async (_req, res) => {
+// Get all combos with assigned class
+router.get('/create-and-assign-combos', async (req, res) => {
   try {
     const combos = await Combo.find().lean();
     res.json(combos);
-  } catch (err) {
-    console.error("[GET /combos] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (e) {
+    console.error("[GET /create-and-assign-combos] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Update combo
-router.put("/combos/:id", async (req, res) => {
+//update a combo and reassign it to a different class if needed
+router.put('/create-and-assign-combos/:id', async (req, res) => {
   try {
+    const { id } = req.params;
     const { faculty_id, subject_id, combo_name, class_id } = req.body;
-    const combo = await Combo.findById(req.params.id);
-    if (!combo) return res.status(404).json({ ok: false, error: "Combo not found" });
 
-    // Unassign if moved to another class
-    if (combo.class_id && combo.class_id.toString() !== class_id) {
+    // Find existing combo
+    const existingCombo = await Combo.findById(id);
+    if (!existingCombo) {
+      return res.status(404).json({ error: 'Combo not found.' });
+    }
+
+    // Validate subject & class semester match
+    if (subject_id && class_id) {
+      const [subject, classData] = await Promise.all([
+        Subject.findById(subject_id).lean(),
+        ClassModel.findById(class_id).lean()
+      ]);
+
+      if (!subject) {
+        return res.status(404).json({ error: 'Subject not found.' });
+      }
+      if (!classData) {
+        return res.status(404).json({ error: 'Class not found.' });
+      }
+
+      if (subject.sem !== classData.sem) {
+        return res.status(400).json({ 
+          error: `Subject semester (${subject.sem}) does not match Class semester (${classData.sem}).` 
+        });
+      }
+    }
+
+    // Unassign from old class if class_id changed
+    if (existingCombo.class_id && existingCombo.class_id.toString() !== class_id) {
       await ClassModel.updateOne(
-        { _id: combo.class_id },
-        { $pull: { assigned_teacher_subject_combos: combo._id } }
+        { _id: existingCombo.class_id },
+        { $pull: { assigned_teacher_subject_combos: existingCombo._id } }
       );
     }
 
-    Object.assign(combo, { faculty_id, subject_id, combo_name, class_id });
-    await combo.save();
+    // Update combo
+    existingCombo.faculty_id = faculty_id;
+    existingCombo.subject_id = subject_id;
+    existingCombo.combo_name = combo_name;
+    existingCombo.class_id = class_id;
+    await existingCombo.save();
 
+    // Assign to the new class
     if (class_id) {
       await ClassModel.updateOne(
         { _id: class_id },
-        { $addToSet: { assigned_teacher_subject_combos: combo._id } }
+        { $addToSet: { assigned_teacher_subject_combos: existingCombo._id } }
       );
     }
 
-    const updated = await Combo.findById(req.params.id)
-      .populate("faculty_id")
-      .populate("subject_id")
-      .populate("class_id")
+    // Populate updated combo for response
+    const updatedCombo = await Combo.findById(id)
+      .populate('faculty_id')
+      .populate('subject_id')
+      .populate('class_id')
       .lean();
 
-    res.json(updated);
-  } catch (err) {
-    console.error("[PUT /combos/:id] Error:", err.message);
-    res.status(400).json({ ok: false, error: err.message });
+    res.json(updatedCombo);
+  } catch (e) {
+    console.error("[PUT /create-and-assign-combos/:id] Error:", e.message);
+    res.status(400).json({ error: e.message });
   }
 });
 
-// Delete combo
-router.delete("/combos/:id", async (req, res) => {
-  try {
-    const deleted = await Combo.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ ok: false, error: "Combo not found" });
 
-    if (deleted.class_id) {
+
+// Delete a combo and unassign it from its class
+router.delete('/create-and-assign-combos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedCombo = await Combo.findByIdAndDelete(id);
+    if (!deletedCombo) {
+      return res.status(404).json({ error: 'Combo not found.' });
+    }
+
+    // Unassign from the class
+    if (deletedCombo.class_id) {
       await ClassModel.updateOne(
-        { _id: deleted.class_id },
-        { $pull: { assigned_teacher_subject_combos: deleted._id } }
+        { _id: deletedCombo.class_id },
+        { $pull: { assigned_teacher_subject_combos: deletedCombo._id } }
       );
     }
 
-    res.json({ ok: true, message: "Combo deleted successfully" });
-  } catch (err) {
-    console.error("[DELETE /combos/:id] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    res.json({ message: 'Combo deleted and unassigned from class successfully.' });
+  } catch (e) {
+    console.error("[DELETE /create-and-assign-combos/:id] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-/* -------------------- TIMETABLE -------------------- */
-
-// Generate timetable
-router.post("/timetables/generate", async (_req, res) => {
+// --- Timetable ---
+router.post('/generate', async (req, res) => {
+  console.log("[POST /generate] Generating timetable");
   try {
-    const [faculties, subjects, classes, combos] = await Promise.all([
-      Faculty.find().lean(),
-      Subject.find().lean(),
-      ClassModel.find().lean(),
-      Combo.find().lean(),
-    ]);
+    const faculties = await Faculty.find().lean();
+    const subjects = await Subject.find().lean();
+    const classes = await ClassModel.find().lean();
+    const combos = await Combo.find().lean();
 
-    const result = generator.generate({
-      faculties,
-      subjects,
-      classes,
-      combos,
-      DAYS_PER_WEEK: 5,
-      HOURS_PER_DAY: 9,
+    console.log("[POST /generate] Counts:", {
+      faculties: faculties.length,
+      subjects: subjects.length,
+      classes: classes.length,
+      combos: combos.length
     });
 
-    if (!result.ok) return res.status(400).json(result);
+    const result = generator.generate({
+      faculties, subjects, classes, combos,
+      DAYS_PER_WEEK: 5, HOURS_PER_DAY: 9
+    });
+
+    if (!result.ok) {
+      console.warn("[POST /generate] Generation failed:", result);
+      return res.status(400).json(result);
+    }
 
     const rec = new TimetableResult({
       class_timetables: result.class_timetables,
-      faculty_timetables: result.faculty_timetables,
+      faculty_timetables: result.faculty_timetables
     });
     await rec.save();
-
+    console.log("[POST /generate] Saved timetable result");
     res.json({ ok: true, result });
-  } catch (err) {
-    console.error("[POST /timetables/generate] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+  } catch (e) {
+    console.error("[POST /generate] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Get latest timetable
-router.get("/timetables/latest", async (_req, res) => {
+router.get('/result/latest', async (req, res) => {
+  console.log("[GET /result/latest] Fetching latest timetable result");
   try {
-    const latest = await TimetableResult.findOne().sort({ createdAt: -1 }).lean();
-    res.json(latest);
-  } catch (err) {
-    console.error("[GET /timetables/latest] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    const r = await TimetableResult.findOne().sort({ createdAt: -1 }).lean();
+    console.log("[GET /result/latest] Found:", r ? "Yes" : "No");
+    res.json(r);
+  } catch (e) {
+    console.error("[GET /result/latest] Error:", e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// Regenerate timetable
-router.post("/timetables/regenerate", async (_req, res) => {
+router.post("/result/regenerate", async (req, res) => {
   try {
-    const [faculties, subjects, classes, combos] = await Promise.all([
-      Faculty.find().lean(),
-      Subject.find().lean(),
-      ClassModel.find().lean(),
-      Combo.find().lean(),
-    ]);
+    const faculties = await Faculty.find().lean();
+    const subjects = await Subject.find().lean();
+    const classes = await ClassModel.find().lean();
+    const combos = await Combo.find().lean();
 
     const { bestClassTimetables, bestFacultyTimetables, bestScore } = runGenerate({
       faculties,
@@ -347,7 +450,8 @@ router.post("/timetables/regenerate", async (_req, res) => {
     });
 
     if (!bestClassTimetables) {
-      return res.status(400).json({ ok: false, error: "Failed to generate timetable" });
+      console.warn("[POST /generate] Generation failed: No valid timetable found.");
+      return res.status(400).json({ ok: false, error: "Failed to generate timetable." });
     }
 
     const rec = new TimetableResult({
@@ -355,23 +459,35 @@ router.post("/timetables/regenerate", async (_req, res) => {
       faculty_timetables: bestFacultyTimetables,
       score: bestScore,
     });
-    await rec.save();
 
-    res.json({ ok: true, score: bestScore, class_timetables: bestClassTimetables, faculty_timetables: bestFacultyTimetables });
+    await rec.save();
+    console.log("[POST /generate] Saved timetable result");
+
+    res.json({
+      ok: true,
+      score: bestScore,
+      class_timetables: bestClassTimetables,
+      faculty_timetables: bestFacultyTimetables,
+    });
   } catch (err) {
-    console.error("[POST /timetables/regenerate] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    console.error("[POST /generate] Error:", err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Delete all timetables
-router.delete("/timetables", async (_req, res) => {
+router.delete("/timetables", async (req, res) => {
   try {
+    // Delete all timetables
     const result = await TimetableResult.deleteMany({});
-    res.json({ ok: true, deletedCount: result.deletedCount, message: "All timetables deleted successfully" });
+
+    res.status(200).json({
+      ok: true,
+      deletedCount: result.deletedCount, // tells how many docs were removed
+      message: "All timetables deleted successfully"
+    });
   } catch (err) {
-    console.error("[DELETE /timetables] Error:", err.message);
-    res.status(500).json({ ok: false, error: err.message });
+    console.error("❌ Error deleting timetables:", err);
+    res.status(500).json({ ok: false, error: "Failed to delete timetables" });
   }
 });
 
