@@ -4,6 +4,10 @@ import axios from "../../api/axios";
 
 function ManageSubject() {
   const [subjects, setSubjects] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [classes, setClasses] = useState([]);
+  const [combos, setCombos] = useState([]);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editId, setEditId] = useState(null);
@@ -27,18 +31,39 @@ function ManageSubject() {
     navigate("/subject/add");
   };
 
+  const fetchCombos = async () => {
+    setLoading(true);
+    try {
+      const comboRes = await axios.get("/create-and-assign-combos");
+      console.log("combos:",comboRes);
+      setCombos(comboRes.data);
+    } catch (err) {
+      console.log("error:",err);
+      setError("Failed to fetch data.");
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     const fetchSubjects = async () => {
       setLoading(true);
       try {
-        const res = await axios.get("/subjects");
-        setSubjects(res.data);
+        console.log("trying");
+        const facultyRes = await axios.get("/faculties");
+        const classRes = await axios.get("/classes");
+        const subjectRes = await axios.get("/subjects");
+        console.log("faculty res:",facultyRes);
+        setTeachers(facultyRes.data);
+        setClasses(classRes.data);
+        setSubjects(subjectRes.data);
       } catch (err) {
-        setError("Failed to fetch subjects.");
+        console.log("fetch faculty error:",err);
+        setError("Failed to fetch teachers.");
       }
       setLoading(false);
     };
     fetchSubjects();
+    fetchCombos();
   }, []);
 
   const handleDelete = async (id) => {
@@ -148,6 +173,7 @@ function ManageSubject() {
               <th>Semester</th>
               <th>Credits</th>
               <th>Subject Type</th>
+              <th>Assigned Class-Faculty</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -212,6 +238,22 @@ function ManageSubject() {
                     ) : (
                       subject.type
                     )}
+                  </td>
+                  <td>
+                    {combos
+                      .filter(c => c.subject_id === subject._id) // get combos for teacher
+                      .map(c => {
+                        const cls = classes.find(cls => cls._id === c.class_id);
+                        const fac = teachers.find(fac => fac._id === c.faculty_id);
+
+                        return (
+                          <div key={`${c.class_id}-${c.faculty_id}`}>
+                            <p>
+                              Class: {cls?.name || "Unknown"} - Faculty: {fac?.name || "Unknown"} ({fac.id})
+                            </p>
+                          </div>
+                        );
+                      })}
                   </td>
                   <td>
                     {editId === subject._id ? (
