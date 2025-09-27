@@ -7,6 +7,7 @@ function generate({
   DAYS_PER_WEEK = 5,
   HOURS_PER_DAY = 9,
   BREAK_HOURS = [2, 5], // tea break at 3rd hour, lunch break at 6th hour (0-based index)
+  fixed_slots = [], // NEW: list of fixed slot objects (see docs below)
 }) {
   const EMPTY_SLOT = -1;
   const BREAK_SLOT = "BREAK";
@@ -54,17 +55,23 @@ function generate({
   const daily_hours_assigned = {}; // daily_hours_assigned[classId][day] = number
 
   for (const cls of classes) {
-    class_timetables[cls._id] = Array.from({ length: DAYS_PER_WEEK }, () =>
+    const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
+    class_timetables[cls._id] = Array.from({ length: daysPerWeek }, () =>
       Array.from({ length: HOURS_PER_DAY }, (_, h) =>
         BREAK_HOURS.includes(h) ? BREAK_SLOT : EMPTY_SLOT
       )
     );
     subject_hours_assigned_per_class[cls._id] = {};
-    daily_hours_assigned[cls._id] = Array.from({ length: DAYS_PER_WEEK }, () => 0);
+    daily_hours_assigned[cls._id] = Array.from({ length: daysPerWeek }, () => 0);
     for (const s of subjects) subject_hours_assigned_per_class[cls._id][s._id] = 0;
   }
+
+  // compute max days across classes (fall back to DAYS_PER_WEEK if no classes)
+  const classDays = classes.map((c) => Number(c.days_per_week || DAYS_PER_WEEK));
+  const MAX_DAYS = classDays.length ? Math.max(...classDays) : DAYS_PER_WEEK;
+
   for (const f of faculties) {
-    faculty_timetables[f._id] = Array.from({ length: DAYS_PER_WEEK }, () =>
+    faculty_timetables[f._id] = Array.from({ length: MAX_DAYS }, () =>
       Array.from({ length: HOURS_PER_DAY }, (_, h) =>
         BREAK_HOURS.includes(h) ? BREAK_SLOT : EMPTY_SLOT
       )
@@ -73,6 +80,7 @@ function generate({
 
   // --- Helpers ---
   function toComboMongoId(value) {
+    if (value == null) return null;
     const key = String(value);
     if (comboByMongoId.has(key)) return key;
     const byBiz = comboByBizId.get(key);
@@ -90,7 +98,7 @@ function generate({
     return resolved;
   }
 
-  // --- Constraints ---
+  // --- Constraints (unchanged, copied from your original code) ---
   function check_teacher_gap_constraint(faculty_id, day, hour) {
     const ft = faculty_timetables[faculty_id];
     if (!ft) return false;
@@ -126,7 +134,9 @@ function generate({
     hour
   ) {
     const ct = class_timetables[classId];
-    for (let d = 0; d < DAYS_PER_WEEK; d++) {
+    const cls = classById.get(classId);
+    const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
+    for (let d = 0; d < daysPerWeek; d++) {
       if (d === day) continue;
       const idAt = ct[d][hour];
       if (idAt !== EMPTY_SLOT && idAt !== BREAK_SLOT) {
@@ -157,15 +167,33 @@ function generate({
   function daily_target_for_class(classId) {
     const cls = classById.get(classId);
     if (!cls) return 0;
-    return Math.ceil((cls.total_class_hours || 0) / DAYS_PER_WEEK);
+    const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
+    return Math.ceil((cls.total_class_hours || 0) / daysPerWeek);
+  }
+
+  // IMPORTANT: check fixed slots (we will prefill them below)
+  // helper: returns whether a slot (classId, day, hour) is fixed and what combo it requires
+  const fixedMap = new Map(); // key = `${classId}|${day}|${hour}` -> { comboId, byUser:true }
+  function setFixedSlot(classId, day, hour, comboId) {
+    fixedMap.set(`${classId}|${day}|${hour}`, { comboId });
+  }
+  function getFixedSlot(classId, day, hour) {
+    return fixedMap.get(`${classId}|${day}|${hour}`) || null;
   }
 
   function is_placement_valid(classId, day, hour, combo_id, blockSize = 1) {
+    // if (BLOCK_IS_BREAK ==  false) { } // noop to keep linter quiet in case
     if (BREAK_HOURS.includes(hour)) return false;
     const combo = comboByMongoId.get(String(combo_id));
     if (!combo) return false;
     const subj = subjectById.get(combo.subject_id);
     if (!subj) return false;
+
+    // check fixed slots: if any hour in the placement is fixed and fixed combo != this combo -> invalid
+    for (let h = hour; h < hour + blockSize; h++) {
+      const fixed = getFixedSlot(classId, day, h);
+      if (fixed && fixed.comboId !== combo._id) return false;
+    }
 
     const cls = classById.get(classId);
     const target = daily_target_for_class(classId);
@@ -176,6 +204,7 @@ function generate({
     if (subj.type === "lab") {
       if (!can_place_lab_block(classId, combo.faculty_id, day, hour, blockSize))
         return false;
+      // teacher gap check at both ends of block
       if (!check_teacher_gap_constraint(combo.faculty_id, day, hour)) return false;
       if (!check_teacher_gap_constraint(combo.faculty_id, day, hour + blockSize - 1))
         return false;
@@ -254,20 +283,123 @@ function generate({
 
   // Early Fail Check
   for (const cls of classes) {
-    const availableSlots = DAYS_PER_WEEK * (HOURS_PER_DAY - BREAK_HOURS.length);
+    const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
+    const availableSlots = daysPerWeek * (HOURS_PER_DAY - BREAK_HOURS.length);
     if (cls.total_class_hours > availableSlots) {
       return {
         ok: false,
-        error: `Class ${cls.name} has more required hours than available slots.`,
+        error: `Class ${cls.name} has more required hours (${cls.total_class_hours}) than available slots (${availableSlots}).`,
       };
     }
   }
 
-  // Caching visited states
+  // --- PREFILL FIXED SLOTS (NEW) ---
+  // fixed_slots is an array of objects like:
+  // { class: 'classId', day: 0, hour: 2, combo: 'comboId' }
+  // OR: { class: 'classId', day: 0, hour: 2, subject: 'subjectId' }
+  // optional: blockSize: number (for a multi-hour lab block)
+  // optional: faculty: 'facultyId' (when resolving subject -> prefer a combo with this faculty)
+  if (!Array.isArray(fixed_slots)) fixed_slots = [];
+
+  // helper to resolve subject -> a combo assigned to the class for that subject
+  function resolveComboForSubjectAndClass({ classId, subjectId, facultyPref }) {
+    const cls = classById.get(classId);
+    if (!cls) return null;
+    for (const cbid of cls.assigned_teacher_subject_combos) {
+      const cb = comboByMongoId.get(String(cbid));
+      if (!cb) continue;
+      if (cb.subject_id === subjectId) {
+        if (facultyPref && String(cb.faculty_id) !== String(facultyPref)) continue;
+        return cb._id;
+      }
+    }
+    // fallback: any combo for that subject
+    for (const cbid of cls.assigned_teacher_subject_combos) {
+      const cb = comboByMongoId.get(String(cbid));
+      if (!cb) continue;
+      if (cb.subject_id === subjectId) return cb._id;
+    }
+    return null;
+  }
+
+  // Apply each fixed slot
+  for (const slot of fixed_slots) {
+    const classId = String(slot.class);
+    const day = Number(slot.day);
+    const hour = Number(slot.hour);
+    const blockSize = slot.blockSize != null ? Number(slot.blockSize) : 1;
+
+    if (!classById.has(classId)) {
+      return { ok: false, error: `Fixed slot references unknown class ${slot.class}` };
+    }
+    const clsForSlot = classById.get(classId);
+    const daysForClass = Number(clsForSlot.days_per_week || DAYS_PER_WEEK);
+    if (day < 0 || day >= daysForClass) {
+      return { ok: false, error: `Fixed slot day out of range for class ${classId}: ${slot.day}` };
+    }
+    if (hour < 0 || hour >= HOURS_PER_DAY) {
+      return { ok: false, error: `Fixed slot hour out of range: ${slot.hour}` };
+    }
+
+    // Resolve combo id
+    let comboId = null;
+    if (slot.combo) {
+      comboId = toComboMongoId(slot.combo);
+      if (!comboId) {
+        return { ok: false, error: `Fixed slot references unknown combo ${slot.combo}` };
+      }
+    } else if (slot.subject) {
+      const subjId = String(slot.subject);
+      if (!subjectById.has(subjId)) {
+        return { ok: false, error: `Fixed slot references unknown subject ${slot.subject}` };
+      }
+      const resolved = resolveComboForSubjectAndClass({
+        classId,
+        subjectId: subjId,
+        facultyPref: slot.faculty,
+      });
+      if (!resolved) {
+        return { ok: false, error: `No combo found in class ${classId} for subject ${subjId}` };
+      }
+      comboId = resolved;
+    } else {
+      return { ok: false, error: `Fixed slot must include either combo or subject: ${JSON.stringify(slot)}` };
+    }
+
+    // Validate block doesn't hit breaks and that contiguous hours available
+    if (hour + blockSize > HOURS_PER_DAY) {
+      return { ok: false, error: `Fixed block too large for day/hour: ${JSON.stringify(slot)}` };
+    }
+    for (let h = hour; h < hour + blockSize; h++) {
+      if (BREAK_HOURS.includes(h)) {
+        return { ok: false, error: `Fixed block intersects a break hour: ${JSON.stringify(slot)}` };
+      }
+      if (class_timetables[classId][day][h] !== EMPTY_SLOT) {
+        return { ok: false, error: `Fixed block collides with prefilled class slot for ${classId} day ${day} hour ${h}` };
+      }
+      const facultyId = comboByMongoId.get(comboId).faculty_id;
+      if (faculty_timetables[facultyId][day][h] !== EMPTY_SLOT) {
+        return { ok: false, error: `Fixed block collides with faculty availability for ${facultyId} at ${day}:${h}` };
+      }
+    }
+
+    // Place fixed block
+    const combo = comboByMongoId.get(comboId);
+    const subj = subjectById.get(combo.subject_id);
+    for (let h = hour; h < hour + blockSize; h++) {
+      class_timetables[classId][day][h] = comboId;
+      faculty_timetables[combo.faculty_id][day][h] = comboId;
+      subject_hours_assigned_per_class[classId][subj._id] += 1;
+      daily_hours_assigned[classId][day] += 1;
+      setFixedSlot(classId, day, h, comboId);
+    }
+  }
+
+  // --- Caching visited states ---
   const visited = new Set();
 
   function generate_schedule_for_slot(day, hour, classIndex) {
-    if (day >= DAYS_PER_WEEK) return true;
+    if (day >= MAX_DAYS) return true;
 
     if (BREAK_HOURS.includes(hour)) {
       if (classIndex === classIds.length) {
@@ -294,8 +426,20 @@ function generate({
 
     const classId = classIds[classIndex];
     const cls = classById.get(classId);
+    const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
+
+    if (day >= daysPerWeek) {
+      return generate_schedule_for_slot(day, hour, classIndex + 1);
+    }
 
     if (class_assigned_hours(classId) >= cls.total_class_hours) {
+      return generate_schedule_for_slot(day, hour, classIndex + 1);
+    }
+
+    // If this particular slot is fixed for this class, skip placing anything else here
+    const fixed = getFixedSlot(classId, day, hour);
+    if (fixed) {
+      // slot already occupied by fixed combo; just advance to next class
       return generate_schedule_for_slot(day, hour, classIndex + 1);
     }
 
@@ -317,8 +461,7 @@ function generate({
         });
     }
 
-    // Smarter sorting
-        // --- added helper: count filled slots for a class on a day (not BREAK/EMPTY)
+    // Smarter sorting and gap heuristic (kept from original, with small safety)
     function countFilledInDay(classId, day) {
       const dayRow = class_timetables[classId][day];
       let cnt = 0;
@@ -329,17 +472,13 @@ function generate({
       return cnt;
     }
 
-    // Smarter sorting (keeps your original priorities, but prefer placements that reduce gaps)
-    // --- improved candidate sorting ---
     candidates.sort((a, b) => {
-      // labs always come first
+      // labs first
       if (a.subj.type === "lab" && b.subj.type !== "lab") return -1;
       if (b.subj.type === "lab" && a.subj.type !== "lab") return 1;
 
-      // prefer subjects with more remaining hours
       if (b.rem !== a.rem) return b.rem - a.rem;
 
-      // gap heuristic: prefer placements that minimize projected gaps
       function gapHeuristic(cand) {
         const cid = classId;
         const dayRow = class_timetables[cid][day];
@@ -370,14 +509,12 @@ function generate({
       const gapB = gapHeuristic(b);
       if (gapA !== gapB) return gapA - gapB;
 
-      // daily target bias: prefer candidates that bring us closer to daily goal
       const target = daily_target_for_class(classId);
       const used = daily_hours_assigned[classId][day];
       const diffA = Math.abs((used + 1) - target);
       const diffB = Math.abs((used + 1) - target);
       if (diffA !== diffB) return diffA - diffB;
 
-      // faculty availability fallback
       const freeA = faculty_timetables[a.combo.faculty_id].flat().filter((x) => x === EMPTY_SLOT).length;
       const freeB = faculty_timetables[b.combo.faculty_id].flat().filter((x) => x === EMPTY_SLOT).length;
       return freeA - freeB;
@@ -390,6 +527,14 @@ function generate({
 
       if (subj.type === "lab") {
         const blockSize = subj.no_of_hours_per_week;
+
+        // skip if any of the block hours are fixed to another combo
+        let conflictFixed = false;
+        for (let h = hour; h < hour + blockSize; h++) {
+          const f = getFixedSlot(classId, day, h);
+          if (f && f.comboId !== combo_id) { conflictFixed = true; break; }
+        }
+        if (conflictFixed) continue;
 
         if (is_placement_valid(classId, day, hour, combo_id, blockSize)) {
           for (let h = hour; h < hour + blockSize; h++) {
@@ -409,6 +554,10 @@ function generate({
           daily_hours_assigned[classId][day] -= blockSize;
         }
       } else {
+        // check fixed for this single hour
+        const fixedHere = getFixedSlot(classId, day, hour);
+        if (fixedHere && fixedHere.comboId !== combo_id) continue;
+
         if (is_placement_valid(classId, day, hour, combo_id, 1)) {
           class_timetables[classId][day][hour] = combo_id;
           faculty_timetables[combo.faculty_id][day][hour] = combo_id;
@@ -437,7 +586,7 @@ function generate({
     if (visited.has(stateKey)) return false;
     visited.add(stateKey);
 
-    if (day === DAYS_PER_WEEK) return true;
+    if (day === MAX_DAYS) return true;
     if (hour >= HOURS_PER_DAY) return generate_full_timetable_recursive(day + 1, 0);
     return generate_schedule_for_slot(day, hour, 0);
   }
@@ -466,6 +615,13 @@ function generate({
     faculty_timetables: out_faculty_timetables,
   };
 }
+
+// export default {
+//   generate,
+//   printTimetable,
+//   scoreTimetable,
+//   shuffle,
+// };
 
 // Debug Visualization
 function printTimetable(classId, timetable, classById) {

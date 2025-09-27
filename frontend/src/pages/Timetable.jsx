@@ -6,7 +6,7 @@ function Timetable() {
   const [loading, setLoading] = useState(false);
   const [timetable, setTimetable] = useState(null);
   const [error, setError] = useState("");
-  const [bestScore, setBestScore] = useState(null); // 🔥 NEW: Track best score
+  const [bestScore, setBestScore] = useState(null);
 
   const [classes, setClasses] = useState([]);
   const [faculties, setFaculties] = useState([]);
@@ -19,7 +19,12 @@ function Timetable() {
   const [selectedFaculty, setSelectedFaculty] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
 
-  // Fetch classes, faculties, subjects, combos
+  // Fixed slots state
+  // Structure: { classId: { day: { period: comboId } } }
+  const [fixedSlots, setFixedSlots] = useState({});
+  const DAYS_PER_WEEK = 5;
+  const HOURS_PER_DAY = 9;
+
   const fetchAll = async () => {
     try {
       const [comboRes, classRes, facRes, subRes] = await Promise.all([
@@ -28,7 +33,6 @@ function Timetable() {
         axios.get("/faculties"),
         axios.get("/subjects"),
       ]);
-
       setClassCombos(comboRes.data);
       setClasses(classRes.data);
       setFaculties(facRes.data);
@@ -42,11 +46,122 @@ function Timetable() {
     fetchAll();
   }, []);
 
+  // Handle dropdown change in empty timetable
+  const handleSlotChange = (classId, day, hour, comboId) => {
+    setFixedSlots((prev) => {
+      const copy = { ...prev };
+      if (!copy[classId]) copy[classId] = {};
+      if (!copy[classId][day]) copy[classId][day] = {};
+      if (comboId) {
+        copy[classId][day][hour] = comboId;
+      } else {
+        delete copy[classId][day][hour];
+      }
+      return copy;
+    });
+  };
+
+  const renderEmptyTable = (classId) => {
+    const cls = classes.find((c) => c._id === classId);
+    return (
+      <div key={classId} style={{ marginBottom: "30px" }}>
+        <h3>
+          Class: {cls?.sem} {cls?.section}
+        </h3>
+        <table className="styled-table">
+          <thead>
+            <tr>
+              <th>Day / Period</th>
+              {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
+                <th key={p}>P{p + 1}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: DAYS_PER_WEEK }).map((_, d) => (
+              <tr key={d}>
+                <td>Day {d + 1}</td>
+                {Array.from({ length: HOURS_PER_DAY }).map((_, h) => {
+                  const selected =
+                    fixedSlots[classId]?.[d]?.[h] || "";
+                  return (
+                    <td key={h}>
+                      <select
+                        value={selected}
+                        onChange={(e) =>
+                          handleSlotChange(classId, d, h, e.target.value)
+                        }
+                      >
+                        <option value="">
+                          --Select faculty-subject--
+                        </option>
+                        {classCombos
+                          .filter((c) => c.class_id === classId)
+                          .map((c) => {
+                            const fac = faculties.find(
+                              (f) => f._id === c.faculty_id
+                            );
+                            const sub = subjects.find(
+                              (s) => s._id === c.subject_id
+                            );
+                            return (
+                              <option key={c._id} value={c._id}>
+                                {fac
+                                  ? `${fac.name} (${fac.id})`
+                                  : "-none-"}{" "}
+                                :{" "}
+                                {sub
+                                  ? `${sub.name} (${sub.id})`
+                                  : "-none-"}
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const transformFixedSlots = (slots) => {
+    const payload = [];
+    for (const classId in slots) {
+      if (Object.hasOwnProperty.call(slots, classId)) {
+        const days = slots[classId];
+        for (const day in days) {
+          if (Object.hasOwnProperty.call(days, day)) {
+            const hours = days[day];
+            for (const hour in hours) {
+              if (Object.hasOwnProperty.call(hours, hour)) {
+                const comboId = hours[hour];
+                if (comboId) {
+                  payload.push({
+                    class: classId,
+                    day: parseInt(day, 10),
+                    hour: parseInt(hour, 10),
+                    combo: comboId,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return payload;
+  };
+
   const generateTimetable = async () => {
     setLoading(true);
     setError("");
     try {
-      await api.post("/generate");
+      const payload = transformFixedSlots(fixedSlots);
+      await api.post("/generate", { fixedSlots: payload }); // ✅ include fixed slots
       await fetchLatest();
     } catch (e) {
       setError(e.response?.data?.error || "Failed to generate timetable");
@@ -67,13 +182,12 @@ function Timetable() {
     setLoading(false);
   };
 
-  // 🔥 NEW: Regenerate timetable using your /result/regenerate endpoint
   const regenerateTimetable = async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await api.post("/result/regenerate");
-      console.log("response to regenerate:",res);
+      const payload = transformFixedSlots(fixedSlots);
+      const res = await api.post("/result/regenerate", { fixedSlots: payload }); // ✅ include fixed slots
       if (res.data?.ok) {
         setTimetable(res.data);
         setBestScore(res.data.score || null);
@@ -82,6 +196,17 @@ function Timetable() {
       }
     } catch (e) {
       setError(e.response?.data?.error || "Failed to regenerate timetable");
+    }
+    setLoading(false);
+  };
+
+  const deleteAllTimetables = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await api.delete("/timetables");
+    } catch (e) {
+      setError(e.response?.data?.error || "Failed to delete timetables");
     }
     setLoading(false);
   };
@@ -100,6 +225,20 @@ function Timetable() {
   const getSubjectName = (id) => {
     const sub = subjects.find((s) => String(s._id) === String(id));
     return sub ? `${sub.name} (${sub.id})` : id;
+  };
+
+  const toggleFixedSlot = (classId, dayIdx, periodIdx, comboId) => {
+    setFixedSlots((prev) => {
+      const copy = { ...prev };
+      if (!copy[classId]) copy[classId] = {};
+      if (!copy[classId][dayIdx]) copy[classId][dayIdx] = {};
+      if (copy[classId][dayIdx][periodIdx] === comboId) {
+        delete copy[classId][dayIdx][periodIdx];
+      } else {
+        copy[classId][dayIdx][periodIdx] = comboId;
+      }
+      return copy;
+    });
   };
 
   const renderClassTable = (classId, slots) => {
@@ -133,21 +272,36 @@ function Timetable() {
                   if (!combo) {
                     return <td key={p}>{slotId}</td>;
                   }
-
-                  // Apply filters
                   if (
                     (selectedFaculty && combo.faculty_id !== selectedFaculty) ||
                     (selectedSubject && combo.subject_id !== selectedSubject)
                   ) {
                     return <td key={p}>-</td>;
                   }
+                  const isFixed =
+                    fixedSlots[classId]?.[dayIdx]?.[p] === combo._id;
 
                   return (
-                    <td key={p}>
+                    <td
+                      key={p}
+                      style={{
+                        backgroundColor: isFixed ? "#d1ffd1" : "inherit",
+                        cursor: "pointer",
+                      }}
+                      onClick={() =>
+                        toggleFixedSlot(classId, dayIdx, p, combo._id)
+                      }
+                      title={
+                        isFixed ? "Click to unfix this slot" : "Click to fix slot"
+                      }
+                    >
                       <div>
                         <b>{getSubjectName(combo.subject_id)}</b>
                       </div>
                       <div>{getFacultyName(combo.faculty_id)}</div>
+                      {isFixed && (
+                        <div style={{ fontSize: "0.8em" }}>📌 Fixed</div>
+                      )}
                     </td>
                   );
                 })}
@@ -159,26 +313,8 @@ function Timetable() {
     );
   };
 
-  const deleteAllTimetables = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await api.delete("/timetables");
-      console.log("response to regenerate:",res);
-      if (res) {
-        setError("");
-      } else {
-        setError("Failed to regenerate timetable");
-      }
-    } catch (e) {
-      setError(e.response?.data?.error || "Failed to regenerate timetable");
-    }
-    setLoading(false);
-  }
-
   const filteredTimetable = () => {
     if (!timetable) return null;
-
     let filteredEntries = Object.entries(timetable.class_timetables);
     if (selectedClass) {
       filteredEntries = filteredEntries.filter(
@@ -211,7 +347,7 @@ function Timetable() {
         <button className="secondary-btn" onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Filters" : "Show Filters"}
         </button>
-        <button className="secondart-btn" onClick={deleteAllTimetables} disabled={loading}>
+        <button className="secondary-btn" onClick={deleteAllTimetables} disabled={loading}>
           Delete All Timetables
         </button>
       </div>
@@ -259,6 +395,11 @@ function Timetable() {
 
       {error && <div className="error-message">{error}</div>}
 
+      {/* Empty timetable with assignment dropdowns */}
+      {!timetable &&
+        classes.map((cls) => renderEmptyTable(cls._id))}
+
+      {/* Generated timetable */}
       {timetable && (
         <div style={{ marginTop: "20px" }}>
           {filteredTimetable().map(([classId, slots]) =>

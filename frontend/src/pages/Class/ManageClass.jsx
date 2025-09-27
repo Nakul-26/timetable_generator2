@@ -17,6 +17,7 @@ function ManageClass() {
   const [editSemester, setEditSemester] = useState("");
   const [editSection, setEditSection] = useState("");
   const [editClassId, setEditClassId] = useState("");
+  const [editDaysPerWeek, setEditDaysPerWeek] = useState(5);
 
   // 🔍 Filter states
   const [showFilters, setShowFilters] = useState(false);
@@ -79,6 +80,7 @@ function ManageClass() {
     setEditSection(classItem.section);
     setEditSemester(classItem.sem);
     setEditClassId(classItem.id);
+    setEditDaysPerWeek(classItem.days_per_week || 5);
   };
 
   const handleEditSubmit = async (e) => {
@@ -89,6 +91,7 @@ function ManageClass() {
         sem: editSemester,
         section: editSection,
         id: editClassId,
+        days_per_week: editDaysPerWeek,
       };
       await api.put(`/classes/${editId}`, updatedData);
       setClasses(
@@ -173,6 +176,7 @@ function ManageClass() {
               <th>Name</th>
               <th>Section</th>
               <th>Semester</th>
+              <th>Days/Week</th>
               <th>Assigned Faculty-Subject</th>
               <th>Actions</th>
             </tr>
@@ -223,6 +227,17 @@ function ManageClass() {
                       />
                     ) : (
                       classItem.sem
+                    )}
+                  </td>
+                  <td>
+                    {editId === classItem._id ? (
+                      <input
+                        type="number"
+                        value={editDaysPerWeek}
+                        onChange={(e) => setEditDaysPerWeek(e.target.value)}
+                      />
+                    ) : (
+                      classItem.days_per_week || 5
                     )}
                   </td>
                   <td>

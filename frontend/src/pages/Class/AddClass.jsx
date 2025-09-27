@@ -10,6 +10,7 @@ const AddClass = () => {
   const [semester, setSemester] = useState("");
   const [section, setSection] = useState("");
   const [name, setName] = useState("");
+  const [daysPerWeek, setDaysPerWeek] = useState(5);
 
   const validate = () => {
     if (!name.trim()) return "Class name is required.";
@@ -34,13 +35,15 @@ const AddClass = () => {
         id: classId, 
         sem: semester,
         name, 
-        section 
+        section, 
+        days_per_week: daysPerWeek
       });
       setSuccess("Class added successfully!");
       setClassId("");
       setName("");
       setSemester("");
       setSection("");
+      setDaysPerWeek(5);
     } catch (err) {
       setError("Failed to add class.");
     }
@@ -92,6 +95,17 @@ const AddClass = () => {
             placeholder="Section (e.g. A)"
             value={section}
             onChange={(e) => setSection(e.target.value)}
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label>Days Per Week</label>
+          <input
+            type="number"
+            name="daysPerWeek"
+            placeholder="Days per week (e.g. 5)"
+            value={daysPerWeek}
+            onChange={(e) => setDaysPerWeek(e.target.value)}
             required
           />
         </div>

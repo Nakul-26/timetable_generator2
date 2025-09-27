@@ -1,7 +1,7 @@
 // runGenerator.js
 import Generator from "./generator.js";
 
-function runGenerate({ faculties, subjects, classes, combos }) {
+function runGenerate({ faculties, subjects, classes, combos, fixedSlots }) {
   // --- Try multiple schedules and keep the best ---
   let bestClassTimetables = null;
   let bestFacultyTimetables = null;
@@ -18,6 +18,7 @@ function runGenerate({ faculties, subjects, classes, combos }) {
       subjects,
       classes,
       combos,
+      fixed_slots: fixedSlots,
     });
 
     if (!ok) {

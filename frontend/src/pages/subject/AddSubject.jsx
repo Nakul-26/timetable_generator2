@@ -53,7 +53,7 @@ function AddSubject() {
       setCode("");
       setSem("");
       setCredits("");
-      setType("");
+      setType("theory");
     } catch (err) {
       setError("Failed to add subject.");
     }

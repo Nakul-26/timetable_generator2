@@ -400,9 +400,12 @@ router.post('/generate', async (req, res) => {
       combos: combos.length
     });
 
+    const { fixedSlots } = req.body;
+
     const result = generator.generate({
       faculties, subjects, classes, combos,
-      DAYS_PER_WEEK: 5, HOURS_PER_DAY: 9
+      DAYS_PER_WEEK: 5, HOURS_PER_DAY: 9,
+      fixed_slots: fixedSlots
     });
 
     if (!result.ok) {
@@ -442,11 +445,14 @@ router.post("/result/regenerate", async (req, res) => {
     const classes = await ClassModel.find().lean();
     const combos = await Combo.find().lean();
 
+    const { fixedSlots } = req.body;
+
     const { bestClassTimetables, bestFacultyTimetables, bestScore } = runGenerate({
       faculties,
       subjects,
       classes,
       combos,
+      fixedSlots,
     });
 
     if (!bestClassTimetables) {
