@@ -25,7 +25,7 @@ router.post('/register', async (req, res) => {
     await user.save();
     res.status(201).json({ message: 'User created successfully' });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -44,7 +44,7 @@ router.post('/login', async (req, res) => {
         res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'none' });
         res.json({ success: true, user: faculty });
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: 'Internal Server Error' });
     }
 });
 
@@ -68,8 +68,7 @@ protectedRouter.post('/faculties', async (req, res) => {
     console.log("[POST /faculties] Saved faculty:", f);
     res.json(f);
   } catch (e) {
-    console.error("[POST /faculties] Error:", e.message);
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -81,8 +80,7 @@ protectedRouter.get('/faculties', async (req, res) => {
     console.log("[GET /faculties] Found:", faculties.length, "records");
     res.json(faculties);
   } catch (e) {
-    console.error("[GET /faculties] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -92,9 +90,11 @@ protectedRouter.put('/faculties/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, id: facultyId } = req.body;
+    const updateData = { name, id: facultyId };
+
     const updatedFaculty = await Faculty.findOneAndUpdate(
       { _id: id },
-      { name: name, id: facultyId },
+      updateData,
       { new: true, runValidators: true }
     );
     if (!updatedFaculty) {
@@ -104,8 +104,7 @@ protectedRouter.put('/faculties/:id', async (req, res) => {
     console.log("[PUT /faculties/:id] Updated faculty:", updatedFaculty);
     res.json(updatedFaculty);
   } catch (e) {
-    console.error("[PUT /faculties/:id] Error:", e.message);
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -128,8 +127,7 @@ protectedRouter.delete('/faculties/:id', async (req, res) => {
     console.log("[DELETE /faculties/:id] Deleted faculty:", deletedFaculty);
     res.json({ message: 'Faculty deleted successfully.' });
   } catch (e) {
-    console.error("[DELETE /faculties/:id] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -150,8 +148,7 @@ protectedRouter.post('/subjects', async (req, res) => {
     console.log("[POST /subjects] Saved subject:", s);
     res.json(s);
   } catch (e) {
-    console.error("[POST /subjects] Error:", e.message);
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -163,8 +160,7 @@ protectedRouter.get('/subjects', async (req, res) => {
     console.log("[GET /subjects] Found:", subjects.length, "records");
     res.json(subjects);
   } catch (e) {
-    console.error("[GET /subjects] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -185,8 +181,7 @@ protectedRouter.put('/subjects/:id', async (req, res) => {
     }
     res.json(updatedSubject);
   } catch (e) {
-    console.error("[PUT /subjects/:id] Error:", e.message);
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -206,8 +201,7 @@ protectedRouter.delete('/subjects/:id', async (req, res) => {
 
     res.json({ message: "Subject deleted successfully." });
   } catch (e) {
-    console.error("[DELETE /subjects/:id] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
   
@@ -226,8 +220,7 @@ protectedRouter.post('/classes', async (req, res) => {
     console.log("[POST /classes] Saved class:", c);
     res.json(c);
   } catch (e) {
-    console.error("[POST /classes] Error:", e.message);
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -239,8 +232,7 @@ protectedRouter.get('/classes', async (req, res) => {
     console.log("[GET /classes] Found:", classes.length, "records");
     res.json(classes);
   } catch (e) {
-    console.error("[GET /classes] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -248,7 +240,9 @@ protectedRouter.get('/classes', async (req, res) => {
 protectedRouter.put('/classes/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const { name, sem, section } = req.body;
+    const updateData = { name, sem, section };
+
     const updatedClass = await ClassModel.findOneAndUpdate(
       { _id: id },
       updateData,
@@ -259,8 +253,7 @@ protectedRouter.put('/classes/:id', async (req, res) => {
     }
     res.json(updatedClass);
   } catch (e) {
-    console.error("[PUT /classes/:id] Error:", e.message);
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -280,8 +273,7 @@ protectedRouter.delete('/classes/:id', async (req, res) => {
 
     res.json({ message: 'Class deleted successfully.' });
   } catch (e) {
-    console.error("[DELETE /classes/:id] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -317,8 +309,7 @@ protectedRouter.post("/add-and-assign-combo", async (req, res) => {
 
     res.json({ combo, assignedTo: updatedClass });
   } catch (e) {
-    console.error("[POST /add-and-assign-combo] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -328,8 +319,7 @@ protectedRouter.get('/create-and-assign-combos', async (req, res) => {
     const combos = await Combo.find().lean();
     res.json(combos);
   } catch (e) {
-    console.error("[GET /create-and-assign-combos] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -398,8 +388,7 @@ protectedRouter.put('/create-and-assign-combos/:id', async (req, res) => {
 
     res.json(updatedCombo);
   } catch (e) {
-    console.error("[PUT /create-and-assign-combos/:id] Error:", e.message);
-    res.status(400).json({ error: e.message });
+    res.status(400).json({ error: 'Bad Request' });
   }
 });
 
@@ -425,8 +414,7 @@ protectedRouter.delete('/create-and-assign-combos/:id', async (req, res) => {
 
     res.json({ message: 'Combo deleted and unassigned from class successfully.' });
   } catch (e) {
-    console.error("[DELETE /create-and-assign-combos/:id] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -467,8 +455,7 @@ protectedRouter.post('/generate', async (req, res) => {
     console.log("[POST /generate] Saved timetable result");
     res.json({ ok: true, result });
   } catch (e) {
-    console.error("[POST /generate] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -479,8 +466,7 @@ protectedRouter.get('/result/latest', async (req, res) => {
     console.log("[GET /result/latest] Found:", r ? "Yes" : "No");
     res.json(r);
   } catch (e) {
-    console.error("[GET /result/latest] Error:", e.message);
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -522,8 +508,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
       faculty_timetables: bestFacultyTimetables,
     });
   } catch (err) {
-    console.error("[POST /generate] Error:", err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -538,11 +523,11 @@ protectedRouter.delete("/timetables", async (req, res) => {
       message: "All timetables deleted successfully"
     });
   } catch (err) {
-    console.error("❌ Error deleting timetables:", err);
-    res.status(500).json({ ok: false, error: "Failed to delete timetables" });
+    res.status(500).json({ ok: false, error: "Internal Server Error" });
   }
 });
 
 router.use(protectedRouter);
 
 export default router;
+
