@@ -7,12 +7,58 @@ import TimetableResult from '../TmietableResult.js';
 import generator from '../lib/generator.js';
 import runGenerate from '../lib/runGenerator.js';
 import mongoose from "mongoose";
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import auth from '../../middleware/auth.js';
 
 const router = Router();
+const protectedRouter = Router();
+
+protectedRouter.use(auth);
+
+// --- User Authentication ---
+router.post('/register', async (req, res) => {
+  try {
+    const { id, name, email, password, role } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = new Faculty({ id, name, email, password: hashedPassword, role });
+    await user.save();
+    res.status(201).json({ message: 'User created successfully' });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const faculty = await Faculty.findOne({ email });
+        if (!faculty) {
+            return res.status(400).json({ success: false, message: 'Invalid credentials' });
+        }
+        const isMatch = await bcrypt.compare(password, faculty.password);
+        if (!isMatch) {
+            return res.status(400).json({ success: false, message: 'Invalid credentials' });
+        }
+        const token = jwt.sign({ id: faculty._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'none' });
+        res.json({ success: true, user: faculty });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+router.post('/logout', (req, res) => {
+    res.clearCookie('token').json({ success: true });
+});
+
+protectedRouter.get('/me', (req, res) => {
+    res.json(req.user);
+});
 
 // --- Faculties CRUD ---
 //add faculties
-router.post('/faculties', async (req, res) => {
+protectedRouter.post('/faculties', async (req, res) => {
   console.log("[POST /faculties] Body:", req.body);
   try {
     const f = new Faculty();
@@ -28,7 +74,7 @@ router.post('/faculties', async (req, res) => {
 });
 
 //get all faculties
-router.get('/faculties', async (req, res) => {
+protectedRouter.get('/faculties', async (req, res) => {
   console.log("[GET /faculties] Fetching all faculties");
   try {
     const faculties = await Faculty.find().lean();
@@ -41,7 +87,7 @@ router.get('/faculties', async (req, res) => {
 });
 
 // Update an existing faculty
-router.put('/faculties/:id', async (req, res) => {
+protectedRouter.put('/faculties/:id', async (req, res) => {
   console.log("[PUT /faculties/:id] Params:", req.params, "Body:", req.body);
   try {
     const { id } = req.params;
@@ -64,7 +110,7 @@ router.put('/faculties/:id', async (req, res) => {
 });
 
 // Delete a faculty
-router.delete('/faculties/:id', async (req, res) => {
+protectedRouter.delete('/faculties/:id', async (req, res) => {
   console.log("[DELETE /faculties/:id] Params:", req.params);
   try {
     const { id } = req.params;
@@ -89,7 +135,7 @@ router.delete('/faculties/:id', async (req, res) => {
 
 // --- Subjects CRUD ---
 // Add a subject
-router.post('/subjects', async (req, res) => {
+protectedRouter.post('/subjects', async (req, res) => {
   console.log("[POST /subjects] Body:", req.body);
   try {
     const s = new Subject({
@@ -110,7 +156,7 @@ router.post('/subjects', async (req, res) => {
 });
 
 // Get all subjects
-router.get('/subjects', async (req, res) => {
+protectedRouter.get('/subjects', async (req, res) => {
   console.log("[GET /subjects] Fetching all subjects");
   try {
     const subjects = await Subject.find().lean();
@@ -123,7 +169,7 @@ router.get('/subjects', async (req, res) => {
 });
 
 // Edit a subject
-router.put('/subjects/:id', async (req, res) => {
+protectedRouter.put('/subjects/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, no_of_hours_per_week, sem, type } = req.body;
@@ -145,7 +191,7 @@ router.put('/subjects/:id', async (req, res) => {
 });
 
 // Delete a subject
-router.delete('/subjects/:id', async (req, res) => {
+protectedRouter.delete('/subjects/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const deletedSubject = await Subject.findByIdAndDelete(id);
@@ -168,7 +214,7 @@ router.delete('/subjects/:id', async (req, res) => {
 
 // --- Classes CRUD ---
 //add classes
-router.post('/classes', async (req, res) => {
+protectedRouter.post('/classes', async (req, res) => {
   console.log("[POST /classes] Body:", req.body);
   try {
     const c = new ClassModel({
@@ -186,7 +232,7 @@ router.post('/classes', async (req, res) => {
 });
 
 //get all classes
-router.get('/classes', async (req, res) => {
+protectedRouter.get('/classes', async (req, res) => {
   console.log("[GET /classes] Fetching all classes");
   try {
     const classes = await ClassModel.find().lean();
@@ -199,7 +245,7 @@ router.get('/classes', async (req, res) => {
 });
 
 // Edit a class
-router.put('/classes/:id', async (req, res) => {
+protectedRouter.put('/classes/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
@@ -219,7 +265,7 @@ router.put('/classes/:id', async (req, res) => {
 });
 
 // Delete a class
-router.delete('/classes/:id', async (req, res) => {
+protectedRouter.delete('/classes/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const deletedClass = await ClassModel.findByIdAndDelete(id);
@@ -241,7 +287,7 @@ router.delete('/classes/:id', async (req, res) => {
 
 // --- Combos ---
 
-router.post("/add-and-assign-combo", async (req, res) => {
+protectedRouter.post("/add-and-assign-combo", async (req, res) => {
   console.log("[POST /add-and-assign-combo] Body:", req.body);
 
   try {
@@ -277,7 +323,7 @@ router.post("/add-and-assign-combo", async (req, res) => {
 });
 
 // Get all combos with assigned class
-router.get('/create-and-assign-combos', async (req, res) => {
+protectedRouter.get('/create-and-assign-combos', async (req, res) => {
   try {
     const combos = await Combo.find().lean();
     res.json(combos);
@@ -288,7 +334,7 @@ router.get('/create-and-assign-combos', async (req, res) => {
 });
 
 //update a combo and reassign it to a different class if needed
-router.put('/create-and-assign-combos/:id', async (req, res) => {
+protectedRouter.put('/create-and-assign-combos/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { faculty_id, subject_id, combo_name, class_id } = req.body;
@@ -360,7 +406,7 @@ router.put('/create-and-assign-combos/:id', async (req, res) => {
 
 
 // Delete a combo and unassign it from its class
-router.delete('/create-and-assign-combos/:id', async (req, res) => {
+protectedRouter.delete('/create-and-assign-combos/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -385,7 +431,7 @@ router.delete('/create-and-assign-combos/:id', async (req, res) => {
 });
 
 // --- Timetable ---
-router.post('/generate', async (req, res) => {
+protectedRouter.post('/generate', async (req, res) => {
   console.log("[POST /generate] Generating timetable");
   try {
     const faculties = await Faculty.find().lean();
@@ -426,7 +472,7 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-router.get('/result/latest', async (req, res) => {
+protectedRouter.get('/result/latest', async (req, res) => {
   console.log("[GET /result/latest] Fetching latest timetable result");
   try {
     const r = await TimetableResult.findOne().sort({ createdAt: -1 }).lean();
@@ -438,7 +484,7 @@ router.get('/result/latest', async (req, res) => {
   }
 });
 
-router.post("/result/regenerate", async (req, res) => {
+protectedRouter.post("/result/regenerate", async (req, res) => {
   try {
     const faculties = await Faculty.find().lean();
     const subjects = await Subject.find().lean();
@@ -481,7 +527,7 @@ router.post("/result/regenerate", async (req, res) => {
   }
 });
 
-router.delete("/timetables", async (req, res) => {
+protectedRouter.delete("/timetables", async (req, res) => {
   try {
     // Delete all timetables
     const result = await TimetableResult.deleteMany({});
@@ -496,5 +542,7 @@ router.delete("/timetables", async (req, res) => {
     res.status(500).json({ ok: false, error: "Failed to delete timetables" });
   }
 });
+
+router.use(protectedRouter);
 
 export default router;

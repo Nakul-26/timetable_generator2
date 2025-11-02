@@ -35,7 +35,7 @@ function ManageClass() {
   const fetchCombos = async () => {
     setLoading(true);
     try {
-      const comboRes = await api.get("/create-and-assign-combos");
+      const comboRes = await api.get(("/create-and-assign-combos"), {}, { withCredentials: true });
       console.log("combos:",comboRes);
       setCombos(comboRes.data);
     } catch (err) {

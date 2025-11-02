@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ServerApiVersion } from "mongodb";
+import cookieParser from "cookie-parser";
 import API from "./models/routes/api.js"; // ensure this uses ESM too
 import mongoose from "mongoose";
 
@@ -49,6 +50,7 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 
 
 mongoose.connect(uri, {

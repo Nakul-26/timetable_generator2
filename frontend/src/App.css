@@ -340,12 +340,12 @@ h2 {
 
 /* Home Container */
 .home-container {
-  max-width: 800px;
+  max-width: 1600px;
   background: #fff;
   padding: 40px;
   border-radius: 12px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-  text-align: center;
+  text-align: left;
   animation: fadeIn 0.3s ease-in-out;
   margin: auto;
   margin-top: 40px
@@ -356,12 +356,58 @@ h2 {
   font-weight: 700;
   color: #ff6b6b;
   margin-bottom: 20px;
+  text-align: center;
 }
 
 .home-container p {
   font-size: 1.1rem;
   color: #444;
   line-height: 1.6;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.guide-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border-left: 4px solid #ff8c42;
+}
+
+.guide-section h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333 !important;
+  margin-bottom: 15px;
+}
+
+.guide-section p {
+  font-size: 1rem;
+  color: #555;
+  text-align: left;
+  margin-bottom: 15px;
+}
+
+.guide-section ul {
+  list-style-position: inside;
+  padding-left: 10px;
+}
+
+.guide-section li {
+  margin-bottom: 10px;
+  font-size: 1rem;
+  color: #555;
+}
+
+.guide-section a {
+  color: #ff6b6b;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.guide-section a:hover {
+  text-decoration: underline;
 }
 
 /* Subtle fade-in effect */

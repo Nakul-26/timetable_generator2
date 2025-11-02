@@ -228,6 +228,7 @@ function Timetable() {
   };
 
   const toggleFixedSlot = (classId, dayIdx, periodIdx, comboId) => {
+    console.log("Toggling fixed slot:", classId, dayIdx, periodIdx, comboId);
     setFixedSlots((prev) => {
       const copy = { ...prev };
       if (!copy[classId]) copy[classId] = {};
@@ -288,9 +289,9 @@ function Timetable() {
                         backgroundColor: isFixed ? "#d1ffd1" : "inherit",
                         cursor: "pointer",
                       }}
-                      onClick={() =>
-                        toggleFixedSlot(classId, dayIdx, p, combo._id)
-                      }
+                      // onClick={() =>
+                      //   toggleFixedSlot(classId, dayIdx, p, combo._id)
+                      // }
                       title={
                         isFixed ? "Click to unfix this slot" : "Click to fix slot"
                       }

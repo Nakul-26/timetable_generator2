@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import FacultyManager from '../src/pages/teacher/ManageTeacher';
 import SubjectManager from './pages/subject/ManageSubject';
 import ClassManager from './pages/Class/ManageClass';
@@ -10,40 +10,91 @@ import AddClass from './pages/Class/AddClass';
 import AddCombo from './pages/combo/AddCombo';
 import ManageCombo from './pages/combo/ManageCombo';
 import Navbar from './components/Navbar2';
+import Login from './pages/Login';
+import { AuthProvider } from './context/AuthContext';
+import PrivateRoute from './components/PrivateRoute';
 import './App.css';
 
 // Styled homepage
 const HomePage = () => (
   <div className="home-container">
-    <h1>Welcome to the Timetable Generator Application!</h1>
-    <p>
-      Use the navigation bar to manage faculties, subjects, classes,
-      combos, and generate beautiful timetables.
-    </p>
+    <h1>Welcome to the Timetable Generator!</h1>
+    <p>Here’s a simple guide to get you started:</p>
+    
+    <div className="guide-section">
+      <h2>Step 1: Manage Your Core Data</h2>
+      <p>Before generating a timetable, make sure you have added all the necessary information:</p>
+      <ul>
+        <li><strong>Faculties:</strong> Go to the <a href="/faculties">Faculties</a> page to add and manage teachers.</li>
+        <li><strong>Subjects:</strong> Use the <a href="/subjects">Subjects</a> page to define all the subjects offered.</li>
+        <li><strong>Classes:</strong> Add and manage classes, including their semester and section, on the <a href="/classes">Classes</a> page.</li>
+      </ul>
+    </div>
+
+    <div className="guide-section">
+      <h2>Step 2: Create Subject-Teacher Combos</h2>
+      <p>Once your core data is set up, head over to the <a href="/combos">Combos</a> page. Here, you can:</p>
+      <ul>
+        <li>Assign a specific teacher to a subject.</li>
+        <li>Link this combination to a class.</li>
+      </ul>
+    </div>
+
+    <div className="guide-section">
+      <h2>Step 3: Generate the Timetable</h2>
+      <p>With everything in place, you’re ready to generate the timetable!</p>
+      <ul>
+        <li>Navigate to the <a href="/timetable">Timetable</a> page.</li>
+        <li>Click the "Generate Timetable" button to see the magic happen.</li>
+      </ul>
+    </div>
+
+    <div className="guide-section">
+      <h2>Advanced Features</h2>
+      <p>Take your timetable to the next level with these powerful features:</p>
+      <ul>
+        <li><strong>Fix Slots:</strong> Need a specific lecture at a specific time? On the <a href="/timetable">Timetable</a> page, you can lock a subject to a particular time slot before generating the timetable.</li>
+        <li><strong>Regenerate:</strong> Not satisfied with the generated timetable? Use the "Regenerate" button to create a new version. (Note: This feature is experimental and may not always produce a better result).</li>
+        <li><strong>Filters:</strong> Easily find the information you need by using the filters on the <a href="/faculties">Faculties</a>, <a href="/subjects">Subjects</a>, and <a href="/classes">Classes</a> pages.</li>
+      </ul>
+    </div>
   </div>
 );
 
 function App() {
   return (
-    <BrowserRouter>
-      <div className="app-container">
-        <Navbar />
-        <main className="main-content">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/faculties" element={<FacultyManager />} />
-            <Route path="/subjects" element={<SubjectManager />} />
-            <Route path="/classes" element={<ClassManager />} />
-            <Route path="/timetable" element={<Timetable />} />
-            <Route path="/teacher/add" element={<AddTeacher />} />
-            <Route path="/subject/add" element={<AddSubject />} />
-            <Route path="/class/add" element={<AddClass />} />
-            <Route path="/combo/add" element={<AddCombo />} />
-            <Route path="/combos" element={<ManageCombo />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<PrivateRoute />}>
+            <Route
+              path="/*"
+              element={
+                <div className="app-container">
+                  <Navbar />
+                  <main className="main-content">
+                    <Routes>
+                      <Route path="/" element={ <HomePage /> } />
+                      <Route path="/home" element={<HomePage />} />
+                      <Route path="/faculties" element={<FacultyManager />} />
+                      <Route path="/subjects" element={<SubjectManager />} />
+                      <Route path="/classes" element={<ClassManager />} />
+                      <Route path="/timetable" element={<Timetable />} />
+                      <Route path="/teacher/add" element={<AddTeacher />} />
+                      <Route path="/subject/add" element={<AddSubject />} />
+                      <Route path="/class/add" element={<AddClass />} />
+                      <Route path="/combo/add" element={<AddCombo />} />
+                      <Route path="/combos" element={<ManageCombo />} />
+                    </Routes>
+                  </main>
+                </div>
+              }
+            />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 
