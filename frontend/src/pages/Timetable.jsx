@@ -158,6 +158,7 @@ function Timetable() {
 
   const generateTimetable = async () => {
     setLoading(true);
+    deleteAllTimetables();
     setError("");
     try {
       const payload = transformFixedSlots(fixedSlots);
@@ -184,6 +185,7 @@ function Timetable() {
 
   const regenerateTimetable = async () => {
     setLoading(true);
+    deleteAllTimetables();
     setError("");
     try {
       const payload = transformFixedSlots(fixedSlots);
