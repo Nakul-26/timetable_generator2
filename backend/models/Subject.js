@@ -10,6 +10,10 @@ const SubjectSchema = new Schema({
     type: String, 
     enum: ["theory", "lab"], 
     required: true 
+  },
+  combined_classes: {
+    type: [String],
+    default: []
   }
 });
 export default mongoose.model('Subject', SubjectSchema);

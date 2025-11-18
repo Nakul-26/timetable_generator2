@@ -58,6 +58,33 @@
     outline: none;
 }
 
+.password-input-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-container input {
+    flex-grow: 1;
+    padding-right: 60px; /* Make space for the button */
+}
+
+.toggle-password-visibility {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: #ff6b6b;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 5px;
+    font-size: 0.9rem;
+}
+
+.toggle-password-visibility:hover {
+    text-decoration: underline;
+}
+
 .login-btn {
     padding: 14px 20px;
     border: none;

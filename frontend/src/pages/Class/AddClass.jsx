@@ -10,7 +10,7 @@ const AddClass = () => {
   const [semester, setSemester] = useState("");
   const [section, setSection] = useState("");
   const [name, setName] = useState("");
-  const [daysPerWeek, setDaysPerWeek] = useState(5);
+  const [daysPerWeek, setDaysPerWeek] = useState(6);
 
   const validate = () => {
     if (!name.trim()) return "Class name is required.";
@@ -43,7 +43,7 @@ const AddClass = () => {
       setName("");
       setSemester("");
       setSection("");
-      setDaysPerWeek(5);
+      setDaysPerWeek(6);
     } catch (err) {
       setError("Failed to add class.");
     }
@@ -103,7 +103,7 @@ const AddClass = () => {
           <input
             type="number"
             name="daysPerWeek"
-            placeholder="Days per week (e.g. 5)"
+            placeholder="Days per week (e.g. 6)"
             value={daysPerWeek}
             onChange={(e) => setDaysPerWeek(e.target.value)}
             required

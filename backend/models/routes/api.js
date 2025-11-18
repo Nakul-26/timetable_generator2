@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import Faculty from '../Faculty.js';
+import Admin from '../Admin.js';
 import Subject from '../Subject.js';
 import ClassModel from '../Class.js';
 import Combo from '../Combo.js';
@@ -7,21 +8,31 @@ import TimetableResult from '../TmietableResult.js';
 import generator from '../lib/generator.js';
 import runGenerate from '../lib/runGenerator.js';
 import mongoose from "mongoose";
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import adminAuth from '../../middleware/adminAuth.js';
+import rateLimit from 'express-rate-limit';
 import auth from '../../middleware/auth.js';
 
 const router = Router();
 const protectedRouter = Router();
+
+// --- Rate Limiter for Login ---
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 login requests per windowMs
+  message: 'Too many login attempts from this IP, please try again after 15 minutes',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 protectedRouter.use(auth);
 
 // --- User Authentication ---
 router.post('/register', async (req, res) => {
   try {
-    const { id, name, email, password, role } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new Faculty({ id, name, email, password: hashedPassword, role });
+    const { id, name } = req.body;
+    const user = new Faculty({ id, name });
     await user.save();
     res.status(201).json({ message: 'User created successfully' });
   } catch (error) {
@@ -29,21 +40,39 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+protectedRouter.post('/users/create', adminAuth, async (req, res) => {
+  try {
+    const { id, name } = req.body;
+    const user = new Faculty({ id, name });
+    await user.save();
+    res.status(201).json({ message: 'User created successfully' });
+  } catch (error) {
+    res.status(400).json({ error: 'Bad Request' });
+  }
+});
+
+router.post('/login', loginLimiter, async (req, res) => {
     try {
+        console.log('Login request body:', req.body);
         const { email, password } = req.body;
-        const faculty = await Faculty.findOne({ email });
-        if (!faculty) {
+        const admin = await Admin.findOne({ email });
+        console.log('Attempting login for email:', email);
+        console.log('Found admin:', admin);
+        if (!admin) {
+            console.error('Login failed: Admin not found for email', email);
             return res.status(400).json({ success: false, message: 'Invalid credentials' });
         }
-        const isMatch = await bcrypt.compare(password, faculty.password);
+        const isMatch = await admin.matchPassword(password);
+        console.log('Password match result:', isMatch);
         if (!isMatch) {
+            console.error('Login failed: Incorrect password for email', email);
             return res.status(400).json({ success: false, message: 'Invalid credentials' });
         }
-        const token = jwt.sign({ id: faculty._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const token = admin.generateAuthToken();
         res.cookie('token', token, { httpOnly: true, secure: true, sameSite: 'none' });
-        res.json({ success: true, user: faculty });
+        res.json({ success: true, user: admin });
     } catch (err) {
+        console.error('Login error:', err);
         res.status(500).json({ success: false, message: 'Internal Server Error' });
     }
 });
@@ -68,6 +97,7 @@ protectedRouter.post('/faculties', async (req, res) => {
     console.log("[POST /faculties] Saved faculty:", f);
     res.json(f);
   } catch (e) {
+    console.log(e);
     res.status(400).json({ error: 'Bad Request' });
   }
 });
@@ -141,7 +171,8 @@ protectedRouter.post('/subjects', async (req, res) => {
       name: req.body.name,
       no_of_hours_per_week: req.body.no_of_hours_per_week,
       sem: req.body.sem,
-      type: req.body.type // ✅ new property
+      type: req.body.type, // ✅ new property
+      combined_classes: req.body.combined_classes
     });
 
     await s.save();
@@ -168,11 +199,11 @@ protectedRouter.get('/subjects', async (req, res) => {
 protectedRouter.put('/subjects/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, no_of_hours_per_week, sem, type } = req.body;
+    const { name, no_of_hours_per_week, sem, type, combined_classes } = req.body;
 
     const updatedSubject = await Subject.findOneAndUpdate(
       { _id: id },
-      { name, no_of_hours_per_week, sem, type }, // ✅ include type
+      { name, no_of_hours_per_week, sem, type, combined_classes }, // ✅ include type
       { new: true, runValidators: true }
     );
 
@@ -438,7 +469,7 @@ protectedRouter.post('/generate', async (req, res) => {
 
     const result = generator.generate({
       faculties, subjects, classes, combos,
-      DAYS_PER_WEEK: 5, HOURS_PER_DAY: 9,
+      DAYS_PER_WEEK: 6, HOURS_PER_DAY: 8,
       fixed_slots: fixedSlots
     });
 
@@ -449,7 +480,8 @@ protectedRouter.post('/generate', async (req, res) => {
 
     const rec = new TimetableResult({
       class_timetables: result.class_timetables,
-      faculty_timetables: result.faculty_timetables
+      faculty_timetables: result.faculty_timetables,
+      faculty_daily_hours: result.faculty_daily_hours
     });
     await rec.save();
     console.log("[POST /generate] Saved timetable result");
@@ -479,7 +511,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
 
     const { fixedSlots } = req.body;
 
-    const { bestClassTimetables, bestFacultyTimetables, bestScore } = runGenerate({
+    const { bestClassTimetables, bestFacultyTimetables, bestFacultyDailyHours, bestScore } = runGenerate({
       faculties,
       subjects,
       classes,
@@ -495,6 +527,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
     const rec = new TimetableResult({
       class_timetables: bestClassTimetables,
       faculty_timetables: bestFacultyTimetables,
+      faculty_daily_hours: bestFacultyDailyHours,
       score: bestScore,
     });
 
@@ -506,6 +539,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
       score: bestScore,
       class_timetables: bestClassTimetables,
       faculty_timetables: bestFacultyTimetables,
+      faculty_daily_hours: bestFacultyDailyHours,
     });
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error' });

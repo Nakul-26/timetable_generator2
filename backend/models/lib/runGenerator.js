@@ -5,6 +5,7 @@ function runGenerate({ faculties, subjects, classes, combos, fixedSlots }) {
   // --- Try multiple schedules and keep the best ---
   let bestClassTimetables = null;
   let bestFacultyTimetables = null;
+  let bestFacultyDailyHours = null;
   let bestScore = Infinity;
 
   for (let attempt = 0; attempt < 10; attempt++) {
@@ -13,7 +14,7 @@ function runGenerate({ faculties, subjects, classes, combos, fixedSlots }) {
     Generator.shuffle(faculties);
     Generator.shuffle(subjects);
 
-    const { ok, class_timetables, faculty_timetables } = Generator.generate({
+    const { ok, class_timetables, faculty_timetables, faculty_daily_hours } = Generator.generate({
       faculties,
       subjects,
       classes,
@@ -37,6 +38,7 @@ function runGenerate({ faculties, subjects, classes, combos, fixedSlots }) {
       bestScore = score;
       bestClassTimetables = class_timetables;
       bestFacultyTimetables = faculty_timetables;
+      bestFacultyDailyHours = faculty_daily_hours;
     }
   }
 
@@ -56,7 +58,7 @@ function runGenerate({ faculties, subjects, classes, combos, fixedSlots }) {
     console.error("❌ Could not generate a valid timetable.");
   }
 
-  return { bestClassTimetables, bestFacultyTimetables, bestScore };
+  return { bestClassTimetables, bestFacultyTimetables, bestFacultyDailyHours, bestScore };
 }
 
 export default runGenerate;

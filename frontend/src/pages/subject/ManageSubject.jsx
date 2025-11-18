@@ -18,6 +18,7 @@ function ManageSubject() {
   const [editSem, setEditSem] = useState("");
   const [editCredits, setEditCredits] = useState("");
   const [editType, setEditType] = useState("");
+  const [editCombinedClasses, setEditCombinedClasses] = useState([]);
 
   // 🔍 Filter states
   const [showFilters, setShowFilters] = useState(false);
@@ -83,6 +84,16 @@ function ManageSubject() {
     setEditSem(subject.sem);
     setEditCredits(subject.no_of_hours_per_week);
     setEditType(subject.type);
+    setEditCombinedClasses(subject.combined_classes || []);
+  };
+
+  const handleEditCombinedClassesChange = (e) => {
+    const { value, checked } = e.target;
+    if (checked) {
+      setEditCombinedClasses([...editCombinedClasses, value]);
+    } else {
+      setEditCombinedClasses(editCombinedClasses.filter((id) => id !== value));
+    }
   };
 
   const handleEditSubmit = async (e) => {
@@ -94,6 +105,7 @@ function ManageSubject() {
         sem: editSem,
         no_of_hours_per_week: editCredits,
         type: editType,
+        combined_classes: editCombinedClasses,
       };
       await axios.put(`/subjects/${editId}`, updatedSubject);
       setSubjects(
@@ -107,6 +119,7 @@ function ManageSubject() {
       setEditSem("");
       setEditCredits("");
       setEditType("theory");
+      setEditCombinedClasses([]);
     } catch (err) {
       setError("Failed to update subject.");
     }
@@ -173,6 +186,7 @@ function ManageSubject() {
               <th>Semester</th>
               <th>Credits</th>
               <th>Subject Type</th>
+              <th>Combined Classes</th>
               <th>Assigned Class-Faculty</th>
               <th>Actions</th>
             </tr>
@@ -237,6 +251,30 @@ function ManageSubject() {
                       </select>
                     ) : (
                       subject.type
+                    )}
+                  </td>
+                  <td>
+                    {editId === subject._id ? (
+                      <div className="edit-checkbox-container">
+                        <div className="form-checkbox-group">
+                          {classes.map((c) => (
+                            <label key={c._id} className="checkbox-label">
+                              <input
+                                type="checkbox"
+                                value={c._id}
+                                checked={editCombinedClasses.includes(c._id)}
+                                onChange={handleEditCombinedClassesChange}
+                              />
+                              {c.name}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      subject.combined_classes?.map(classId => {
+                        const combinedClass = classes.find(c => c._id === classId);
+                        return combinedClass ? combinedClass.name : '';
+                      }).join(', ')
                     )}
                   </td>
                   <td>

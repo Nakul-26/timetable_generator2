@@ -1,20 +1,19 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
-import readline from 'readline';
-import Faculty from './models/Faculty.js';
+import Admin from './models/Admin.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {
-      dbName: 'test2',
+      dbName: 'timetable_jayanth',
       serverSelectionTimeoutMS: 20000
     });
     console.log('✅ Connected to MongoDB');
@@ -24,40 +23,36 @@ const connectDB = async () => {
   }
 };
 
-const createAdmin = async () => {
+const createAdmin = async (email, password) => {
   try {
     await connectDB();
 
-    rl.question('Enter admin ID: ', (id) => {
-      rl.question('Enter admin name: ', (name) => {
-        rl.question('Enter admin email: ', (email) => {
-          rl.question('Enter admin password: ', async (password) => {
-            const hashedPassword = await bcrypt.hash(password, 10);
-            const admin = new Faculty({
-              id,
-              name,
-              email,
-              password: hashedPassword,
-              role: 'admin'
-            });
+    if (!email || !password) {
+      console.error('Usage: node seed.js <email> <password>');
+      mongoose.connection.close();
+      return;
+    }
 
-            try {
-              await admin.save();
-              console.log('Admin user created successfully');
-            } catch (error) {
-              console.error('Error creating admin user:', error.message);
-            } finally {
-              mongoose.connection.close();
-              rl.close();
-            }
-          });
-        });
-      });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const admin = new Admin({
+      email,
+      password: hashedPassword,
     });
+
+    try {
+      await admin.save();
+      console.log('Admin user created successfully');
+    } catch (error) {
+      console.error('Error creating admin user:', error.message);
+    } finally {
+      mongoose.connection.close();
+    }
   } catch (error) {
     console.error('Error:', error.message);
     process.exit(1);
   }
 };
 
-createAdmin();
+const email = process.argv[2];
+const password = process.argv[3];
+createAdmin(email, password);

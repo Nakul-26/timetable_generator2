@@ -21,7 +21,7 @@ const limiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 
-app.use('/api', limiter);
+
 
 
 // --- MongoDB Client ---
@@ -66,7 +66,7 @@ app.use(cookieParser());
 
 
 mongoose.connect(uri, {
-  dbName: 'test2',
+  dbName: 'timetable_jayanth',
   serverSelectionTimeoutMS: 20000 // Increase timeout for stability
 })
     .then(() => {

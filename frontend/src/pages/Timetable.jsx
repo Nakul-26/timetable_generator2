@@ -7,6 +7,7 @@ function Timetable() {
   const [timetable, setTimetable] = useState(null);
   const [error, setError] = useState("");
   const [bestScore, setBestScore] = useState(null);
+  const [facultyDailyHours, setFacultyDailyHours] = useState(null);
 
   const [classes, setClasses] = useState([]);
   const [faculties, setFaculties] = useState([]);
@@ -22,8 +23,8 @@ function Timetable() {
   // Fixed slots state
   // Structure: { classId: { day: { period: comboId } } }
   const [fixedSlots, setFixedSlots] = useState({});
-  const DAYS_PER_WEEK = 5;
-  const HOURS_PER_DAY = 9;
+  const DAYS_PER_WEEK = 6;
+  const HOURS_PER_DAY = 8;
 
   const fetchAll = async () => {
     try {
@@ -177,6 +178,7 @@ function Timetable() {
       const res = await api.get("/result/latest");
       setTimetable(res.data);
       setBestScore(res.data?.score || null);
+      setFacultyDailyHours(res.data?.faculty_daily_hours || null);
     } catch (e) {
       setError("Failed to fetch timetable");
     }
@@ -193,6 +195,7 @@ function Timetable() {
       if (res.data?.ok) {
         setTimetable(res.data);
         setBestScore(res.data.score || null);
+        setFacultyDailyHours(res.data.faculty_daily_hours || null);
       } else {
         setError("Failed to regenerate timetable");
       }
@@ -254,11 +257,9 @@ function Timetable() {
           <thead>
             <tr>
               <th>Day / Period</th>
-              {Array.from({ length: 9 }).map((_, p) => (
+              {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
                 <th key={p}>
                   P{p + 1}
-                  {p === 2 ? " (Tea Break)" : ""}
-                  {p === 5 ? " (Lunch Break)" : ""}
                 </th>
               ))}
             </tr>
@@ -308,6 +309,35 @@ function Timetable() {
                     </td>
                   );
                 })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  const renderFacultyDailyHours = () => {
+    if (!facultyDailyHours) return null;
+    return (
+      <div style={{ marginTop: "40px" }}>
+        <h3>Faculty Daily Hours</h3>
+        <table className="styled-table">
+          <thead>
+            <tr>
+              <th>Faculty</th>
+              {Array.from({ length: DAYS_PER_WEEK }).map((_, day) => (
+                <th key={day}>Day {day + 1}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(facultyDailyHours).map(([facultyId, dailyHours]) => (
+              <tr key={facultyId}>
+                <td>{getFacultyName(facultyId)}</td>
+                {Array.from({ length: DAYS_PER_WEEK }).map((_, day) => (
+                  <td key={day}>{dailyHours[day] || 0}</td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -408,6 +438,7 @@ function Timetable() {
           {filteredTimetable().map(([classId, slots]) =>
             renderClassTable(classId, slots)
           )}
+          {renderFacultyDailyHours()}
         </div>
       )}
     </div>

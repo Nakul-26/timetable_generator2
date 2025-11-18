@@ -10,14 +10,35 @@ function AddSubject() {
   const [sem, setSem] = useState("");
   const [credits, setCredits] = useState("");
   const [type, setType] = useState("theory");
+  const [combinedClasses, setCombinedClasses] = useState([]);
+  const [classes, setClasses] = useState([]);
+
+  useEffect(() => {
+    const fetchClasses = async () => {
+      try {
+        const response = await axios.get("/classes");
+        setClasses(response.data);
+      } catch (error) {
+        console.error("Failed to fetch classes:", error);
+      }
+    };
+    fetchClasses();
+  }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     if (name === "name") setName(value);
     if (name === "code") setCode(value);
     if (name === "sem") setSem(value);
     if (name === "credits") setCredits(value);
     if (name === "type") setType(value);
+    if (name === "combinedClasses") {
+      if (checked) {
+        setCombinedClasses([...combinedClasses, value]);
+      } else {
+        setCombinedClasses(combinedClasses.filter((id) => id !== value));
+      }
+    }
   };
 
   const validate = () => {
@@ -46,6 +67,7 @@ function AddSubject() {
         sem,
         no_of_hours_per_week: credits,
         type: type,
+        combined_classes: combinedClasses,
       });
       // console.log("res:",res);
       setSuccess("Subject added successfully!");
@@ -54,6 +76,7 @@ function AddSubject() {
       setSem("");
       setCredits("");
       setType("theory");
+      setCombinedClasses([]);
     } catch (err) {
       setError("Failed to add subject.");
     }
@@ -120,6 +143,23 @@ function AddSubject() {
           <option value="lab">Lab</option>
         </select>
       </div>
+      <div className="form-group">
+          <label>Combined Classes</label>
+          <div className="form-checkbox-group">
+            {classes.map((c) => (
+              <label key={c._id} className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="combinedClasses"
+                  value={c._id}
+                  checked={combinedClasses.includes(c._id)}
+                  onChange={handleChange}
+                />
+                {c.name}
+              </label>
+            ))}
+          </div>
+        </div>
         <button type="submit" disabled={loading} className="primary-btn">
           {loading ? "Adding..." : "Add Subject"}
         </button>
