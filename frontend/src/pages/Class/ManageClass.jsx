@@ -242,15 +242,15 @@ function ManageClass() {
                   </td>
                   <td>
                     {combos
-                      .filter(c => c.class_id === classItem._id) // get combos for teacher
+                      .filter(c => c.class_ids?.some(classId => classId._id === classItem._id)) // get combos for a class
                       .map(c => {
-                        const sub = subjects.find(sub => sub._id === c.subject_id);
-                        const fac = teachers.find(fac => fac._id === c.faculty_id);
+                        const sub = c.subject_id;
+                        const fac = c.faculty_id;
 
                         return (
-                          <div key={`${c.subject_id}-${c.faculty_id}`}>
+                          <div key={c._id}>
                             <p>
-                              Faculty: {fac?.name || "Unknown"} ({fac.id}) - Subject: {sub?.name || "Unknown"} ({sub.id})
+                              Faculty: {fac?.name || "Unknown"} ({fac?.id || "N/A"}) - Subject: {sub?.name || "Unknown"} ({sub?.id || "N/A"})
                             </p>
                           </div>
                         );

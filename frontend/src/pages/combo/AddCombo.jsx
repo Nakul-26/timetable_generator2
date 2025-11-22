@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import axios from "../../api/axios";
+import Select from "react-select";
 
 const AddCombo = () => {
   const [comboName, setComboName] = useState("");
   const [semester, setSemester] = useState("");
-  const [classId, setClassId] = useState("");
+  const [classIds, setClassIds] = useState([]);
   const [subjectId, setSubjectId] = useState("");
   const [facultyId, setFacultyId] = useState("");
 
@@ -59,13 +60,13 @@ const AddCombo = () => {
         combo_name: comboName,
         faculty_id: facultyId,
         subject_id: subjectId,
-        class_id: classId,
+        class_ids: classIds.map(c => c.value),
       });
 
       setSuccess("Combo added successfully!");
       setComboName("");
       setSemester("");
-      setClassId("");
+      setClassIds([]);
       setSubjectId("");
       setFacultyId("");
     } catch (err) {
@@ -97,7 +98,7 @@ const AddCombo = () => {
             value={semester}
             onChange={(e) => {
               setSemester(e.target.value);
-              setClassId("");
+              setClassIds([]);
               setSubjectId("");
               setFacultyId("");
             }}
@@ -114,27 +115,21 @@ const AddCombo = () => {
         {/* Class (depends on semester) */}
         {semester && (
           <div className="form-group">
-            <label>Class</label>
-            <select
-              value={classId}
-              onChange={(e) => {
-                setClassId(e.target.value);
-                setSubjectId("");
-                setFacultyId("");
-              }}
-            >
-              <option value="">Select Class</option>
-              {filteredClasses.map((c) => (
-                <option key={c._id} value={c._id}>
-                  {c.name} ({c.id})
-                </option>
-              ))}
-            </select>
+            <label>Classes</label>
+            <Select
+              isMulti
+              value={classIds}
+              onChange={setClassIds}
+              options={filteredClasses.map((c) => ({
+                value: c._id,
+                label: `${c.name} (${c.id})`,
+              }))}
+            />
           </div>
         )}
 
         {/* Subject (depends on semester) */}
-        {classId && (
+        {classIds.length > 0 && (
           <div className="form-group">
             <label>Subject</label>
             <select

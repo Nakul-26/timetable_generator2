@@ -187,7 +187,7 @@ function ManageSubject() {
               <th>Credits</th>
               <th>Subject Type</th>
               <th>Combined Classes</th>
-              <th>Assigned Class-Faculty</th>
+              <th style={{ width: '30%' }}>Assigned Class-Faculty</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -195,7 +195,7 @@ function ManageSubject() {
             {Array.isArray(filteredSubjects) &&
               filteredSubjects.map((subject) => (
                 <tr key={subject._id}>
-                  <td>
+                  <td style={{ width: '10%' }}>
                     {editId === subject._id ? (
                       <input
                         type="text"
@@ -206,7 +206,7 @@ function ManageSubject() {
                       subject.name
                     )}
                   </td>
-                  <td>
+                  <td style={{ width: '10%' }}>
                     {editId === subject._id ? (
                       <input
                         type="text"
@@ -217,7 +217,7 @@ function ManageSubject() {
                       subject.id
                     )}
                   </td>
-                  <td>
+                  <td style={{ width: '10%' }}>
                     {editId === subject._id ? (
                       <input
                         type="text"
@@ -277,20 +277,29 @@ function ManageSubject() {
                       }).join(', ')
                     )}
                   </td>
-                  <td>
+                  <td style={{ width: '30%' }}>
                     {combos
-                      .filter(c => c.subject_id === subject._id) // get combos for teacher
+                      .filter(c => c.subject_id?._id === subject._id) // get combos for subject
                       .map(c => {
-                        const cls = classes.find(cls => cls._id === c.class_id);
-                        const fac = teachers.find(fac => fac._id === c.faculty_id);
-
-                        return (
-                          <div key={`${c.class_id}-${c.faculty_id}`}>
-                            <p>
-                              Class: {cls?.name || "Unknown"} - Faculty: {fac?.name || "Unknown"} ({fac.id})
-                            </p>
-                          </div>
-                        );
+                        const fac = c.faculty_id;
+                        if (!c.class_ids || c.class_ids.length === 0) {
+                          return (
+                            <div key={c._id}>
+                              <p>
+                                Faculty: {fac?.name || "Unknown"} ({fac?.id || "N/A"}) - Class: Not Assigned
+                              </p>
+                            </div>
+                          );
+                        }
+                        return c.class_ids.map(cls => {
+                          return (
+                            <div key={`${c._id}-${cls._id}`}>
+                              <p>
+                                Class: {cls?.name || "Unknown"} ({cls?.id || 'N/A'}) - Faculty: {fac?.name || "Unknown"} ({fac?.id || 'N/A'})
+                              </p>
+                            </div>
+                          );
+                        });
                       })}
                   </td>
                   <td>

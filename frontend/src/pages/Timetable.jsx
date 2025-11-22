@@ -97,23 +97,13 @@ function Timetable() {
                           --Select faculty-subject--
                         </option>
                         {classCombos
-                          .filter((c) => c.class_id === classId)
+                          .filter((c) => c.class_ids && c.class_ids.some(cls => cls._id === classId))
                           .map((c) => {
-                            const fac = faculties.find(
-                              (f) => f._id === c.faculty_id
-                            );
-                            const sub = subjects.find(
-                              (s) => s._id === c.subject_id
-                            );
+                            const fac = c.faculty_id;
+                            const sub = c.subject_id;
                             return (
                               <option key={c._id} value={c._id}>
-                                {fac
-                                  ? `${fac.name} (${fac.id})`
-                                  : "-none-"}{" "}
-                                :{" "}
-                                {sub
-                                  ? `${sub.name} (${sub.id})`
-                                  : "-none-"}
+                                {fac ? `${fac.name} (${fac.id})` : "-none-"} : {sub ? `${sub.name} (${sub.id})` : "-none-"}
                               </option>
                             );
                           })}
@@ -272,13 +262,31 @@ function Timetable() {
                   if (slotId === -1) {
                     return <td key={p}>-</td>;
                   }
-                  const combo = classCombos.find((c) => c._id === slotId);
+
+                  let combo = classCombos.find((c) => c._id === slotId);
+                  let isCombined = false;
+
+                  // Heuristic to handle in-memory combined-class combos from the backend
+                  if (!combo && typeof slotId === 'string' && slotId.endsWith('-combined')) {
+                    const originalComboId = slotId.replace('-combined', '');
+                    const originalCombo = classCombos.find(c => c._id === originalComboId);
+                    if (originalCombo) {
+                      combo = originalCombo;
+                      isCombined = true;
+                    }
+                  }
+
                   if (!combo) {
                     return <td key={p}>{slotId}</td>;
                   }
+
                   if (
-                    (selectedFaculty && combo.faculty_id !== selectedFaculty) ||
-                    (selectedSubject && combo.subject_id !== selectedSubject)
+                    (selectedFaculty &&
+                      (!combo.faculty_id ||
+                        String(combo.faculty_id._id) !== selectedFaculty)) ||
+                    (selectedSubject &&
+                      (!combo.subject_id ||
+                        String(combo.subject_id._id) !== selectedSubject))
                   ) {
                     return <td key={p}>-</td>;
                   }
@@ -300,9 +308,10 @@ function Timetable() {
                       }
                     >
                       <div>
-                        <b>{getSubjectName(combo.subject_id)}</b>
+                        <b>{combo.subject_id ? combo.subject_id.name : 'N/A'}</b>
+                        {isCombined && <span style={{fontSize: '0.8em', color: 'blue'}}> (Combined)</span>}
                       </div>
-                      <div>{getFacultyName(combo.faculty_id)}</div>
+                      <div>{combo.faculty_id ? `${combo.faculty_id.name} (${combo.faculty_id.id})` : 'N/A'}</div>
                       {isFixed && (
                         <div style={{ fontSize: "0.8em" }}>📌 Fixed</div>
                       )}

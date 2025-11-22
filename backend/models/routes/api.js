@@ -297,10 +297,14 @@ protectedRouter.delete('/classes/:id', async (req, res) => {
       return res.status(404).json({ error: 'Class not found.' });
     }
 
-    const deletedCombos = await Combo.deleteMany({ class_id: id });
-    console.log(
-      `[DELETE /faculties/:id] Deleted ${deletedCombos.deletedCount} combos linked to class ${id}`
+    // Pull the deleted class's ID from any combos that reference it
+    await Combo.updateMany(
+      { class_ids: id },
+      { $pull: { class_ids: id } }
     );
+
+    // Delete any combos that are now unassigned from all classes
+    await Combo.deleteMany({ class_ids: { $size: 0 } });
 
     res.json({ message: 'Class deleted successfully.' });
   } catch (e) {
@@ -314,31 +318,31 @@ protectedRouter.post("/add-and-assign-combo", async (req, res) => {
   console.log("[POST /add-and-assign-combo] Body:", req.body);
 
   try {
-    const { faculty_id, subject_id, combo_name, class_id } = req.body;
+    const { faculty_id, subject_id, combo_name, class_ids } = req.body;
 
     // Validate required fields
-    if (!faculty_id || !subject_id || !combo_name || !class_id) {
+    if (!faculty_id || !subject_id || !combo_name || !class_ids || !Array.isArray(class_ids) || class_ids.length === 0) {
       console.warn("[POST /add-and-assign-combo] Missing required fields");
       return res.status(400).json({
-        error: "faculty_id, subject_id, combo_name, and class_id are required."
+        error: "faculty_id, subject_id, combo_name, and a non-empty array of class_ids are required."
       });
     }
 
-    // Create combo with class_id
-    const combo = new Combo({ faculty_id, subject_id, combo_name, class_id });
+    // Create combo with class_ids
+    const combo = new Combo({ faculty_id, subject_id, combo_name, class_ids });
     await combo.save();
     console.log("[POST /add-and-assign-combo] Saved combo:", combo);
 
-    // Assign combo to the class
-    await ClassModel.updateOne(
-      { _id: class_id },
+    // Assign combo to all selected classes
+    await ClassModel.updateMany(
+      { _id: { $in: class_ids } },
       { $addToSet: { assigned_teacher_subject_combos: combo._id } }
     );
 
-    // Fetch updated class for response
-    const updatedClass = await ClassModel.findById(class_id).lean();
+    // Fetch updated classes for response
+    const updatedClasses = await ClassModel.find({ _id: { $in: class_ids } }).lean();
 
-    res.json({ combo, assignedTo: updatedClass });
+    res.json({ combo, assignedTo: updatedClasses });
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -347,7 +351,7 @@ protectedRouter.post("/add-and-assign-combo", async (req, res) => {
 // Get all combos with assigned class
 protectedRouter.get('/create-and-assign-combos', async (req, res) => {
   try {
-    const combos = await Combo.find().lean();
+    const combos = await Combo.find().populate('faculty_id').populate('subject_id').populate('class_ids').lean();
     res.json(combos);
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -358,7 +362,7 @@ protectedRouter.get('/create-and-assign-combos', async (req, res) => {
 protectedRouter.put('/create-and-assign-combos/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { faculty_id, subject_id, combo_name, class_id } = req.body;
+    const { faculty_id, subject_id, combo_name, class_ids } = req.body;
 
     // Find existing combo
     const existingCombo = await Combo.findById(id);
@@ -367,31 +371,44 @@ protectedRouter.put('/create-and-assign-combos/:id', async (req, res) => {
     }
 
     // Validate subject & class semester match
-    if (subject_id && class_id) {
-      const [subject, classData] = await Promise.all([
-        Subject.findById(subject_id).lean(),
-        ClassModel.findById(class_id).lean()
-      ]);
-
+    if (subject_id && class_ids && class_ids.length > 0) {
+      const subject = await Subject.findById(subject_id).lean();
       if (!subject) {
         return res.status(404).json({ error: 'Subject not found.' });
       }
-      if (!classData) {
-        return res.status(404).json({ error: 'Class not found.' });
+      const classes = await ClassModel.find({ _id: { $in: class_ids } }).lean();
+      if (classes.length !== class_ids.length) {
+        return res.status(404).json({ error: 'One or more classes not found.' });
       }
 
-      if (subject.sem !== classData.sem) {
-        return res.status(400).json({ 
-          error: `Subject semester (${subject.sem}) does not match Class semester (${classData.sem}).` 
-        });
+      for (const cls of classes) {
+        if (subject.sem !== cls.sem) {
+          return res.status(400).json({
+            error: `Subject semester (${subject.sem}) does not match Class semester (${cls.sem}) for class ${cls.name}.`
+          });
+        }
       }
     }
 
-    // Unassign from old class if class_id changed
-    if (existingCombo.class_id && existingCombo.class_id.toString() !== class_id) {
-      await ClassModel.updateOne(
-        { _id: existingCombo.class_id },
+    const old_class_ids = existingCombo.class_ids.map(id => id.toString());
+    const new_class_ids = class_ids.map(id => id.toString());
+
+    const classes_to_remove = old_class_ids.filter(id => !new_class_ids.includes(id));
+    const classes_to_add = new_class_ids.filter(id => !old_class_ids.includes(id));
+
+    // Unassign from old classes
+    if (classes_to_remove.length > 0) {
+      await ClassModel.updateMany(
+        { _id: { $in: classes_to_remove } },
         { $pull: { assigned_teacher_subject_combos: existingCombo._id } }
+      );
+    }
+
+    // Assign to new classes
+    if (classes_to_add.length > 0) {
+      await ClassModel.updateMany(
+        { _id: { $in: classes_to_add } },
+        { $addToSet: { assigned_teacher_subject_combos: existingCombo._id } }
       );
     }
 
@@ -399,22 +416,14 @@ protectedRouter.put('/create-and-assign-combos/:id', async (req, res) => {
     existingCombo.faculty_id = faculty_id;
     existingCombo.subject_id = subject_id;
     existingCombo.combo_name = combo_name;
-    existingCombo.class_id = class_id;
+    existingCombo.class_ids = class_ids;
     await existingCombo.save();
-
-    // Assign to the new class
-    if (class_id) {
-      await ClassModel.updateOne(
-        { _id: class_id },
-        { $addToSet: { assigned_teacher_subject_combos: existingCombo._id } }
-      );
-    }
 
     // Populate updated combo for response
     const updatedCombo = await Combo.findById(id)
       .populate('faculty_id')
       .populate('subject_id')
-      .populate('class_id')
+      .populate('class_ids')
       .lean();
 
     res.json(updatedCombo);
@@ -435,15 +444,15 @@ protectedRouter.delete('/create-and-assign-combos/:id', async (req, res) => {
       return res.status(404).json({ error: 'Combo not found.' });
     }
 
-    // Unassign from the class
-    if (deletedCombo.class_id) {
-      await ClassModel.updateOne(
-        { _id: deletedCombo.class_id },
+    // Unassign from the classes
+    if (deletedCombo.class_ids && deletedCombo.class_ids.length > 0) {
+      await ClassModel.updateMany(
+        { _id: { $in: deletedCombo.class_ids } },
         { $pull: { assigned_teacher_subject_combos: deletedCombo._id } }
       );
     }
 
-    res.json({ message: 'Combo deleted and unassigned from class successfully.' });
+    res.json({ message: 'Combo deleted and unassigned from classes successfully.' });
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
@@ -456,7 +465,49 @@ protectedRouter.post('/generate', async (req, res) => {
     const faculties = await Faculty.find().lean();
     const subjects = await Subject.find().lean();
     const classes = await ClassModel.find().lean();
-    const combos = await Combo.find().lean();
+    let combos = await Combo.find().lean();
+
+    // --- Pre-processing for Combined Classes (Patch) ---
+    console.log("[Pre-processing] Creating in-memory combos for combined classes...");
+    const subjectsWithCombinedClasses = subjects.filter(s => s.combined_classes && s.combined_classes.length > 1);
+    const processedSubjectIds = new Set();
+
+    for (const subject of subjectsWithCombinedClasses) {
+      if (processedSubjectIds.has(String(subject._id))) continue;
+
+      const templateCombo = combos.find(c => String(c.subject_id) === String(subject._id));
+      if (templateCombo) {
+        const faculty_id = templateCombo.faculty_id;
+        
+        const remainingCombos = combos.filter(c => String(c.subject_id) !== String(subject._id));
+
+        const combinedCombo = {
+          ...templateCombo,
+          _id: `${templateCombo._id}-combined`,
+          class_ids: subject.combined_classes,
+        };
+        remainingCombos.push(combinedCombo);
+        
+        for (const classId of subject.combined_classes) {
+          const classToUpdate = classes.find(c => String(c._id) === String(classId));
+          if (classToUpdate) {
+            if (classToUpdate.assigned_teacher_subject_combos === undefined || classToUpdate.assigned_teacher_subject_combos === null) {
+              classToUpdate.assigned_teacher_subject_combos = [];
+            }
+            const comboSet = new Set(classToUpdate.assigned_teacher_subject_combos.map(id => String(id)));
+            comboSet.add(String(combinedCombo._id));
+            classToUpdate.assigned_teacher_subject_combos = Array.from(comboSet);
+          }
+        }
+        
+        combos = remainingCombos;
+        processedSubjectIds.add(String(subject._id));
+        console.log(`[Pre-processing] Created combined combo for subject ${subject.name} with faculty ${faculty_id}`);
+      } else {
+        console.warn(`[Pre-processing] Could not create combined combo for subject ${subject.name}: No existing combo found to determine faculty.`);
+      }
+    }
+    // --- End of Patch ---
 
     console.log("[POST /generate] Counts:", {
       faculties: faculties.length,
@@ -507,7 +558,49 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
     const faculties = await Faculty.find().lean();
     const subjects = await Subject.find().lean();
     const classes = await ClassModel.find().lean();
-    const combos = await Combo.find().lean();
+    let combos = await Combo.find().lean();
+
+    // --- Pre-processing for Combined Classes (Patch) ---
+    console.log("[Pre-processing] Creating in-memory combos for combined classes...");
+    const subjectsWithCombinedClasses = subjects.filter(s => s.combined_classes && s.combined_classes.length > 1);
+    const processedSubjectIds = new Set();
+
+    for (const subject of subjectsWithCombinedClasses) {
+      if (processedSubjectIds.has(String(subject._id))) continue;
+
+      const templateCombo = combos.find(c => String(c.subject_id) === String(subject._id));
+      if (templateCombo) {
+        const faculty_id = templateCombo.faculty_id;
+        
+        const remainingCombos = combos.filter(c => String(c.subject_id) !== String(subject._id));
+
+        const combinedCombo = {
+          ...templateCombo,
+          _id: `${templateCombo._id}-combined`,
+          class_ids: subject.combined_classes,
+        };
+        remainingCombos.push(combinedCombo);
+        
+        for (const classId of subject.combined_classes) {
+          const classToUpdate = classes.find(c => String(c._id) === String(classId));
+          if (classToUpdate) {
+            if (classToUpdate.assigned_teacher_subject_combos === undefined || classToUpdate.assigned_teacher_subject_combos === null) {
+              classToUpdate.assigned_teacher_subject_combos = [];
+            }
+            const comboSet = new Set(classToUpdate.assigned_teacher_subject_combos.map(id => String(id)));
+            comboSet.add(String(combinedCombo._id));
+            classToUpdate.assigned_teacher_subject_combos = Array.from(comboSet);
+          }
+        }
+        
+        combos = remainingCombos;
+        processedSubjectIds.add(String(subject._id));
+        console.log(`[Pre-processing] Created combined combo for subject ${subject.name} with faculty ${faculty_id}`);
+      } else {
+        console.warn(`[Pre-processing] Could not create combined combo for subject ${subject.name}: No existing combo found to determine faculty.`);
+      }
+    }
+    // --- End of Patch ---
 
     const { fixedSlots } = req.body;
 

@@ -185,18 +185,27 @@ const ManageTeacher = () => {
                   </td>
                   <td>
                     {combos
-                      .filter(c => c.faculty_id === teacher._id) // get combos for teacher
+                      .filter(c => c.faculty_id?._id === teacher._id) // get combos for teacher
                       .map(c => {
-                        const cls = classes.find(cls => cls._id === c.class_id);
-                        const subj = subjects.find(subj => subj._id === c.subject_id);
-
-                        return (
-                          <div key={`${c.class_id}-${c.subject_id}`}>
-                            <p>
-                              Class: {cls?.name || "Unknown"} - Subject: {subj?.name || "Unknown"} ({subj?.id})
-                            </p>
-                          </div>
-                        );
+                        const subj = c.subject_id;
+                        if (!c.class_ids || c.class_ids.length === 0) {
+                          return (
+                            <div key={c._id}>
+                              <p>
+                                Subject: {subj?.name || "Unknown"} ({subj?.id || "N/A"}) - Class: Not Assigned
+                              </p>
+                            </div>
+                          );
+                        }
+                        return c.class_ids.map(cls => {
+                          return (
+                            <div key={`${c._id}-${cls._id}`}>
+                              <p>
+                                Class: {cls?.name || "Unknown"} ({cls?.id || 'N/A'}) - Subject: {subj?.name || "Unknown"} ({subj?.id || 'N/A'})
+                              </p>
+                            </div>
+                          );
+                        });
                       })}
                   </td>
                   <td>
