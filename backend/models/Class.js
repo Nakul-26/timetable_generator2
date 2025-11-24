@@ -7,7 +7,8 @@ const ClassSchema = new Schema({
   name: String,
   section: String,
   days_per_week: { type: Number, default: 5 },
-  assigned_teacher_subject_combos: [{ type: Schema.Types.ObjectId, ref: 'Combo' }],
-  total_class_hours: Number
+  total_class_hours: Number,
+  subjects: [{ type: Schema.Types.ObjectId, ref: 'Subject' }],
+  faculties: [{ type: Schema.Types.ObjectId, ref: 'Faculty' }],
 });
 export default mongoose.model('Class', ClassSchema);

@@ -1,16 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
+import AssignModal from "./AssignModal";
 
 function ManageClass() {
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
-  const [combos, setCombos] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editId, setEditId] = useState(null);
+
+  // State for the assignment modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedClass, setSelectedClass] = useState(null);
 
   // State variables for editing a class
   const [editName, setEditName] = useState("");
@@ -32,37 +36,29 @@ function ManageClass() {
     navigate("/class/add");
   };
 
-  const fetchCombos = async () => {
+  const fetchClasses = async () => {
     setLoading(true);
     try {
-      const comboRes = await api.get(("/create-and-assign-combos"), {}, { withCredentials: true });
-      console.log("combos:",comboRes);
-      setCombos(comboRes.data);
+      const classRes = await api.get("/classes");
+      const facultyRes = await api.get("/faculties");
+      const subjectRes = await api.get("/subjects");
+      setTeachers(facultyRes.data);
+      setSubjects(subjectRes.data);
+      setClasses(classRes.data);
     } catch (err) {
-      console.log("error:",err);
-      setError("Failed to fetch data.");
+      setError("Failed to fetch initial data.");
     }
     setLoading(false);
   };
 
   useEffect(() => {
-    const fetchClasses = async () => {
-      setLoading(true);
-      try {
-        const classRes = await api.get("/classes");
-        const facultyRes = await api.get("/faculties");
-        const subjectRes = await api.get("/subjects");
-        setTeachers(facultyRes.data);
-        setSubjects(subjectRes.data);
-        setClasses(classRes.data);
-      } catch (err) {
-        setError("Failed to fetch classes.");
-      }
-      setLoading(false);
-    };
     fetchClasses();
-    fetchCombos();
   }, []);
+
+  const handleOpenModal = (klass) => {
+    setSelectedClass(klass);
+    setIsModalOpen(true);
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this class?")) return;
@@ -177,7 +173,8 @@ function ManageClass() {
               <th>Section</th>
               <th>Semester</th>
               <th>Days/Week</th>
-              <th>Assigned Faculty-Subject</th>
+              <th>Assigned Subjects</th>
+              <th>Assigned Faculties</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -241,20 +238,14 @@ function ManageClass() {
                     )}
                   </td>
                   <td>
-                    {combos
-                      .filter(c => c.class_ids?.some(classId => classId._id === classItem._id)) // get combos for a class
-                      .map(c => {
-                        const sub = c.subject_id;
-                        const fac = c.faculty_id;
-
-                        return (
-                          <div key={c._id}>
-                            <p>
-                              Faculty: {fac?.name || "Unknown"} ({fac?.id || "N/A"}) - Subject: {sub?.name || "Unknown"} ({sub?.id || "N/A"})
-                            </p>
-                          </div>
-                        );
-                      })}
+                    {(classItem.subjects || []).map(s => (
+                        <div key={s._id}>{s.name}</div>
+                    ))}
+                  </td>
+                  <td>
+                      {(classItem.faculties || []).map(f => (
+                          <div key={f._id}>{f.name}</div>
+                      ))}
                   </td>
                   <td>
                     {editId === classItem._id ? (
@@ -271,6 +262,12 @@ function ManageClass() {
                       </>
                     ) : (
                       <>
+                        <button
+                          onClick={() => handleOpenModal(classItem)}
+                          className="secondary-btn"
+                        >
+                          Assignments
+                        </button>
                         <button
                           onClick={() => handleEdit(classItem)}
                           className="primary-btn"
@@ -290,6 +287,18 @@ function ManageClass() {
               ))}
           </tbody>
         </table>
+      )}
+      {isModalOpen && (
+        <AssignModal
+            klass={selectedClass}
+            subjects={subjects}
+            faculties={teachers}
+            onClose={() => setIsModalOpen(false)}
+            onSave={() => {
+                setIsModalOpen(false);
+                fetchClasses();
+            }}
+        />
       )}
     </div>
   );

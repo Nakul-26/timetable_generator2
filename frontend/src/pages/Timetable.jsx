@@ -67,7 +67,7 @@ function Timetable() {
     return (
       <div key={classId} style={{ marginBottom: "30px" }}>
         <h3>
-          Class: {cls?.sem} {cls?.section}
+          Class: {getClassName(classId)}
         </h3>
         <table className="styled-table">
           <thead>
@@ -209,7 +209,7 @@ function Timetable() {
   // Helpers
   const getClassName = (id) => {
     const cls = classes.find((c) => String(c._id) === String(id));
-    return cls ? `${cls.name} (${cls.id})` : id;
+    return cls ? `${cls.id}, ${cls.name} (Sem: ${cls.sem}, Section: ${cls.section})` : id;
   };
 
   const getFacultyName = (id) => {

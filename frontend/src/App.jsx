@@ -7,8 +7,8 @@ import Timetable from './pages/Timetable';
 import AddTeacher from './pages/teacher/AddTeacher';
 import AddSubject from './pages/subject/AddSubject';
 import AddClass from './pages/Class/AddClass';
-import AddCombo from './pages/combo/AddCombo';
-import ManageCombo from './pages/combo/ManageCombo';
+import ManageClassSubject from './pages/assignments/ManageClassSubject';
+import ManageClassFaculty from './pages/assignments/ManageClassFaculty';
 import Navbar from './components/Navbar2';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
@@ -32,11 +32,11 @@ const HomePage = () => (
     </div>
 
     <div className="guide-section">
-      <h2>Step 2: Create Subject-Teacher Combos</h2>
-      <p>Once your core data is set up, head over to the <a href="/combos">Combos</a> page. Here, you can:</p>
+      <h2>Step 2: Assign Subjects and Teachers to Classes</h2>
+      <p>Once your core data is set up, you can manage assignments globally or per-class:</p>
       <ul>
-        <li>Assign a specific teacher to a subject.</li>
-        <li>Link this combination to a class.</li>
+        <li><strong>Global View:</strong> Use the <a href="/class-subjects">Class-Subjects</a> and <a href="/class-faculties">Class-Faculties</a> pages to manage all assignments in one place.</li>
+        <li><strong>Per-Class View:</strong> Go to the <a href="/classes">Classes</a> page and use the `Assignments` button for a specific class.</li>
       </ul>
     </div>
 
@@ -55,7 +55,7 @@ const HomePage = () => (
       <ul>
         <li><strong>Fix Slots:</strong> Need a specific lecture at a specific time? On the <a href="/timetable">Timetable</a> page, you can lock a subject to a particular time slot before generating the timetable.</li>
         <li><strong>Regenerate:</strong> Not satisfied with the generated timetable? Use the "Regenerate" button to create a new version. (Note: This feature is experimental and may not always produce a better result).</li>
-        <li><strong>Filters:</strong> Easily find the information you need by using the filters on the <a href="/faculties">Faculties</a>, <a href="/subjects">Subjects</a>, and <a href="/classes">Classes</a> pages.</li>
+        <li><strong>Filters:</strong> Easily find the information you need by using the filters on the <a href="/faculties">Faculties</a>, <a href="/subjects">Subjects</a>, and <a href="/classes">Classes </a> pages.</li>
       </ul>
     </div>
   </div>
@@ -80,12 +80,12 @@ function App() {
                       <Route path="/faculties" element={<FacultyManager />} />
                       <Route path="/subjects" element={<SubjectManager />} />
                       <Route path="/classes" element={<ClassManager />} />
+                      <Route path="/class-subjects" element={<ManageClassSubject />} />
+                      <Route path="/class-faculties" element={<ManageClassFaculty />} />
                       <Route path="/timetable" element={<Timetable />} />
                       <Route path="/teacher/add" element={<AddTeacher />} />
                       <Route path="/subject/add" element={<AddSubject />} />
                       <Route path="/class/add" element={<AddClass />} />
-                      <Route path="/combo/add" element={<AddCombo />} />
-                      <Route path="/combos" element={<ManageCombo />} />
                     </Routes>
                   </main>
                 </div>

@@ -6,7 +6,6 @@ function ManageSubject() {
   const [subjects, setSubjects] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [classes, setClasses] = useState([]);
-  const [combos, setCombos] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -32,19 +31,6 @@ function ManageSubject() {
     navigate("/subject/add");
   };
 
-  const fetchCombos = async () => {
-    setLoading(true);
-    try {
-      const comboRes = await axios.get("/create-and-assign-combos");
-      console.log("combos:",comboRes);
-      setCombos(comboRes.data);
-    } catch (err) {
-      console.log("error:",err);
-      setError("Failed to fetch data.");
-    }
-    setLoading(false);
-  };
-
   useEffect(() => {
     const fetchSubjects = async () => {
       setLoading(true);
@@ -64,7 +50,6 @@ function ManageSubject() {
       setLoading(false);
     };
     fetchSubjects();
-    fetchCombos();
   }, []);
 
   const handleDelete = async (id) => {
@@ -187,7 +172,7 @@ function ManageSubject() {
               <th>Credits</th>
               <th>Subject Type</th>
               <th>Combined Classes</th>
-              <th style={{ width: '30%' }}>Assigned Class-Faculty</th>
+              <th>Assigned Classes & Faculties</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -277,30 +262,15 @@ function ManageSubject() {
                       }).join(', ')
                     )}
                   </td>
-                  <td style={{ width: '30%' }}>
-                    {combos
-                      .filter(c => c.subject_id?._id === subject._id) // get combos for subject
-                      .map(c => {
-                        const fac = c.faculty_id;
-                        if (!c.class_ids || c.class_ids.length === 0) {
-                          return (
-                            <div key={c._id}>
-                              <p>
-                                Faculty: {fac?.name || "Unknown"} ({fac?.id || "N/A"}) - Class: Not Assigned
-                              </p>
-                            </div>
-                          );
-                        }
-                        return c.class_ids.map(cls => {
-                          return (
-                            <div key={`${c._id}-${cls._id}`}>
-                              <p>
-                                Class: {cls?.name || "Unknown"} ({cls?.id || 'N/A'}) - Faculty: {fac?.name || "Unknown"} ({fac?.id || 'N/A'})
-                              </p>
-                            </div>
-                          );
-                        });
-                      })}
+                  <td>
+                    {classes
+                      .filter(cls => cls.subjects?.some(s => s._id === subject._id))
+                      .map(cls => (
+                        <div key={cls._id}>
+                          <strong>{cls.name}:</strong>{" "}
+                          {(cls.faculties || []).map(f => f.name).join(", ")}
+                        </div>
+                      ))}
                   </td>
                   <td>
                     {editId === subject._id ? (
