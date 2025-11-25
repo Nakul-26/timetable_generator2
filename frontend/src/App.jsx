@@ -9,6 +9,7 @@ import AddSubject from './pages/subject/AddSubject';
 import AddClass from './pages/Class/AddClass';
 import ManageClassSubject from './pages/assignments/ManageClassSubject';
 import ManageClassFaculty from './pages/assignments/ManageClassFaculty';
+import ManageTeacherSubject from './pages/combo/ManageTeacherSubject';
 import Navbar from './components/Navbar2';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
@@ -28,6 +29,7 @@ const HomePage = () => (
         <li><strong>Faculties:</strong> Go to the <a href="/faculties">Faculties</a> page to add and manage teachers.</li>
         <li><strong>Subjects:</strong> Use the <a href="/subjects">Subjects</a> page to define all the subjects offered.</li>
         <li><strong>Classes:</strong> Add and manage classes, including their semester and section, on the <a href="/classes">Classes</a> page.</li>
+        <li><strong>Teacher-Subject Combos:</strong> Use the <a href="/teacher-subject-combos">Teacher-Subject-Combos</a> page to define all the Teacher-Subject-Combos offered.</li>
       </ul>
     </div>
 
@@ -86,6 +88,7 @@ function App() {
                       <Route path="/teacher/add" element={<AddTeacher />} />
                       <Route path="/subject/add" element={<AddSubject />} />
                       <Route path="/class/add" element={<AddClass />} />
+                      <Route path="/teacher-subject-combos" element={<ManageTeacherSubject />} />
                     </Routes>
                   </main>
                 </div>

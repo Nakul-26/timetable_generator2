@@ -8,7 +8,6 @@ function AddSubject() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [sem, setSem] = useState("");
-  const [credits, setCredits] = useState("");
   const [type, setType] = useState("theory");
   const [combinedClasses, setCombinedClasses] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -30,7 +29,6 @@ function AddSubject() {
     if (name === "name") setName(value);
     if (name === "code") setCode(value);
     if (name === "sem") setSem(value);
-    if (name === "credits") setCredits(value);
     if (name === "type") setType(value);
     if (name === "combinedClasses") {
       if (checked) {
@@ -45,7 +43,6 @@ function AddSubject() {
     if (!name.trim()) return "Subject name is required.";
     if (!code.trim()) return "Subject code is required.";
     if (!sem.trim()) return "Semester is required.";
-    if (!credits.trim()) return "Credits are required.";
     if (!type.trim()) return "subject type are required";
     return "";
   };
@@ -65,7 +62,6 @@ function AddSubject() {
         name,
         id: code,
         sem,
-        no_of_hours_per_week: credits,
         type: type,
         combined_classes: combinedClasses,
       });
@@ -74,7 +70,6 @@ function AddSubject() {
       setName("");
       setCode("");
       setSem("");
-      setCredits("");
       setType("theory");
       setCombinedClasses([]);
     } catch (err) {
@@ -120,17 +115,7 @@ function AddSubject() {
             required
           />
         </div>
-        <div className="form-group">
-          <label>Credits</label>
-          <input
-            type="number"
-            name="credits"
-            placeholder="Credits"
-            value={credits}
-            onChange={handleChange}
-            required
-          />
-        </div>
+
        <div className="form-group">
         <label>Subject Type</label>
         <select

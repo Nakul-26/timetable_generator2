@@ -4,7 +4,6 @@ const { Schema } = mongoose;
 const SubjectSchema = new Schema({
   id: { type: String, unique: true },
   name: String,
-  no_of_hours_per_week: Number,
   sem: Number,
   type: { 
     type: String, 

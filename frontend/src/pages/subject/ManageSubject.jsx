@@ -15,7 +15,6 @@ function ManageSubject() {
   const [editName, setEditName] = useState("");
   const [editCode, setEditCode] = useState("");
   const [editSem, setEditSem] = useState("");
-  const [editCredits, setEditCredits] = useState("");
   const [editType, setEditType] = useState("");
   const [editCombinedClasses, setEditCombinedClasses] = useState([]);
 
@@ -67,7 +66,6 @@ function ManageSubject() {
     setEditName(subject.name);
     setEditCode(subject.id);
     setEditSem(subject.sem);
-    setEditCredits(subject.no_of_hours_per_week);
     setEditType(subject.type);
     setEditCombinedClasses(subject.combined_classes || []);
   };
@@ -88,7 +86,6 @@ function ManageSubject() {
         name: editName,
         id: editCode,
         sem: editSem,
-        no_of_hours_per_week: editCredits,
         type: editType,
         combined_classes: editCombinedClasses,
       };
@@ -102,7 +99,6 @@ function ManageSubject() {
       setEditName("");
       setEditCode("");
       setEditSem("");
-      setEditCredits("");
       setEditType("theory");
       setEditCombinedClasses([]);
     } catch (err) {
@@ -169,7 +165,6 @@ function ManageSubject() {
               <th>Name</th>
               <th>Code</th>
               <th>Semester</th>
-              <th>Credits</th>
               <th>Subject Type</th>
               <th>Combined Classes</th>
               <th>Assigned Classes & Faculties</th>
@@ -202,7 +197,7 @@ function ManageSubject() {
                       subject.id
                     )}
                   </td>
-                  <td style={{ width: '10%' }}>
+<td>
                     {editId === subject._id ? (
                       <input
                         type="text"
@@ -211,17 +206,6 @@ function ManageSubject() {
                       />
                     ) : (
                       subject.sem
-                    )}
-                  </td>
-                  <td>
-                    {editId === subject._id ? (
-                      <input
-                        type="number"
-                        value={editCredits}
-                        onChange={(e) => setEditCredits(e.target.value)}
-                      />
-                    ) : (
-                      subject.no_of_hours_per_week
                     )}
                   </td>
                   <td>

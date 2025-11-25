@@ -3,6 +3,8 @@ import Faculty from '../Faculty.js';
 import Admin from '../Admin.js';
 import Subject from '../Subject.js';
 import ClassModel from '../Class.js';
+import ClassSubject from '../ClassSubject.js';
+import TeacherSubjectCombination from '../TeacherSubjectCombination.js';
 import TimetableResult from '../TmietableResult.js';
 import generator from '../lib/generator.js';
 import runGenerate from '../lib/runGenerator.js';
@@ -149,7 +151,13 @@ protectedRouter.delete('/faculties/:id', async (req, res) => {
       return res.status(404).json({ error: 'Faculty not found.' });
     }
 
-    console.log("[DELETE /faculties/:id] Deleted faculty:", deletedFaculty);
+    // Delete associated teacher-subject combinations
+    await TeacherSubjectCombination.deleteMany({ faculty: id });
+
+    // Remove faculty from all classes
+    await ClassModel.updateMany({}, { $pull: { faculties: id } });
+
+    console.log("[DELETE /faculties/:id] Deleted faculty and associated data:", deletedFaculty);
     res.json({ message: 'Faculty deleted successfully.' });
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -164,7 +172,6 @@ protectedRouter.post('/subjects', async (req, res) => {
     const s = new Subject({
       id: req.body.id,
       name: req.body.name,
-      no_of_hours_per_week: req.body.no_of_hours_per_week,
       sem: req.body.sem,
       type: req.body.type, // ✅ new property
       combined_classes: req.body.combined_classes
@@ -194,11 +201,11 @@ protectedRouter.get('/subjects', async (req, res) => {
 protectedRouter.put('/subjects/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, no_of_hours_per_week, sem, type, combined_classes } = req.body;
+    const { name, sem, type, combined_classes } = req.body;
 
     const updatedSubject = await Subject.findOneAndUpdate(
       { _id: id },
-      { name, no_of_hours_per_week, sem, type, combined_classes }, // ✅ include type
+      { name, sem, type, combined_classes }, // ✅ include type
       { new: true, runValidators: true }
     );
 
@@ -219,6 +226,12 @@ protectedRouter.delete('/subjects/:id', async (req, res) => {
     if (!deletedSubject) {
       return res.status(404).json({ error: "Subject not found." });
     }
+
+    // Delete associated teacher-subject combinations
+    await TeacherSubjectCombination.deleteMany({ subject: id });
+
+    // Delete associated class-subject assignments
+    await ClassSubject.deleteMany({ subject: id });
 
     res.json({ message: "Subject deleted successfully." });
   } catch (e) {
@@ -249,7 +262,7 @@ protectedRouter.post('/classes', async (req, res) => {
 protectedRouter.get('/classes', async (req, res) => {
   console.log("[GET /classes] Fetching all classes");
   try {
-    const classes = await ClassModel.find().populate('subjects').populate('faculties').lean();
+    const classes = await ClassModel.find().populate('faculties').lean();
     console.log("[GET /classes] Found:", classes.length, "records");
     res.json(classes);
   } catch (e) {
@@ -287,54 +300,112 @@ protectedRouter.delete('/classes/:id', async (req, res) => {
       return res.status(404).json({ error: 'Class not found.' });
     }
 
+    // Delete associated class-subject assignments
+    await ClassSubject.deleteMany({ class: id });
+
     res.json({ message: 'Class deleted successfully.' });
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
+// --- Teacher Subject Combination CRUD ---
+// Get all teacher-subject combinations
+protectedRouter.get('/teacher-subject-combos', async (req, res) => {
+  try {
+    const combos = await TeacherSubjectCombination.find().populate('faculty').populate('subject').lean();
+    res.json(combos);
+  } catch (e) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Create a new teacher-subject combination
+protectedRouter.post('/teacher-subject-combos', async (req, res) => {
+  try {
+    const { faculty, subject } = req.body;
+    const combo = new TeacherSubjectCombination({ faculty, subject });
+    await combo.save();
+    res.json(combo);
+  } catch (e) {
+    res.status(400).json({ error: 'Bad Request' });
+  }
+});
+
+// Delete a teacher-subject combination
+protectedRouter.delete('/teacher-subject-combos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedCombo = await TeacherSubjectCombination.findByIdAndDelete(id);
+    if (!deletedCombo) {
+      return res.status(404).json({ error: 'Combination not found.' });
+    }
+    res.json({ message: 'Combination deleted successfully.' });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+
 // --- Assign/Unassign Subjects and Faculties to/from Classes ---
 
-// Add a subject to a class
-protectedRouter.post('/classes/:classId/subjects', async (req, res) => {
+// --- Class Subject Assignments CRUD ---
+
+// Get all class-subject assignments
+protectedRouter.get('/class-subjects', async (req, res) => {
     try {
-        const { classId } = req.params;
-        const { subjectId } = req.body;
+        const assignments = await ClassSubject.find().populate('class').populate('subject').lean();
+        res.json(assignments);
+    } catch (e) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 
-        const updatedClass = await ClassModel.findByIdAndUpdate(
-            classId,
-            { $addToSet: { subjects: subjectId } },
-            { new: true }
-        ).populate('subjects').populate('faculties');
-
-        if (!updatedClass) {
-            return res.status(404).json({ error: 'Class not found.' });
-        }
-        res.json(updatedClass);
+// Create a new class-subject assignment
+protectedRouter.post('/class-subjects', async (req, res) => {
+    try {
+        const { classId, subjectId, hoursPerWeek } = req.body;
+        const assignment = new ClassSubject({ class: classId, subject: subjectId, hoursPerWeek });
+        await assignment.save();
+        res.json(assignment);
     } catch (e) {
         res.status(400).json({ error: 'Bad Request' });
     }
 });
 
-// Remove a subject from a class
-protectedRouter.delete('/classes/:classId/subjects/:subjectId', async (req, res) => {
+// Update a class-subject assignment
+protectedRouter.put('/class-subjects/:id', async (req, res) => {
     try {
-        const { classId, subjectId } = req.params;
-
-        const updatedClass = await ClassModel.findByIdAndUpdate(
-            classId,
-            { $pull: { subjects: subjectId } },
+        const { id } = req.params;
+        const { hoursPerWeek } = req.body;
+        const updatedAssignment = await ClassSubject.findByIdAndUpdate(
+            id,
+            { hoursPerWeek },
             { new: true }
-        ).populate('subjects').populate('faculties');
-
-        if (!updatedClass) {
-            return res.status(404).json({ error: 'Class not found.' });
+        );
+        if (!updatedAssignment) {
+            return res.status(404).json({ error: 'Assignment not found.' });
         }
-        res.json(updatedClass);
+        res.json(updatedAssignment);
     } catch (e) {
         res.status(400).json({ error: 'Bad Request' });
     }
 });
+
+// Delete a class-subject assignment
+protectedRouter.delete('/class-subjects/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deletedAssignment = await ClassSubject.findByIdAndDelete(id);
+        if (!deletedAssignment) {
+            return res.status(404).json({ error: 'Assignment not found.' });
+        }
+        res.json({ message: 'Assignment deleted successfully.' });
+    } catch (e) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 
 // Add a faculty to a class
 protectedRouter.post('/classes/:classId/faculties', async (req, res) => {
@@ -346,7 +417,7 @@ protectedRouter.post('/classes/:classId/faculties', async (req, res) => {
             classId,
             { $addToSet: { faculties: facultyId } },
             { new: true }
-        ).populate('subjects').populate('faculties');
+        ).populate('faculties');
 
         if (!updatedClass) {
             return res.status(404).json({ error: 'Class not found.' });
@@ -366,7 +437,7 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
             classId,
             { $pull: { faculties: facultyId } },
             { new: true }
-        ).populate('subjects').populate('faculties');
+        ).populate('faculties');
 
         if (!updatedClass) {
             return res.status(404).json({ error: 'Class not found.' });
@@ -382,21 +453,28 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
 protectedRouter.post('/generate', async (req, res) => {
   console.log("[POST /generate] Generating timetable using the new college model.");
   try {
-    const { fixedSlots, teacherSubjectMap } = req.body;
+    const { fixedSlots } = req.body;
 
     const allFaculties = await Faculty.find().lean();
     const allSubjects = await Subject.find().lean();
-    const allClasses = await ClassModel.find().populate('subjects').populate('faculties').lean();
+    const allClasses = await ClassModel.find().populate('faculties').lean();
+    const allClassSubjects = await ClassSubject.find().lean();
+    const teacherSubjectCombos = await TeacherSubjectCombination.find().lean();
 
-    const classSubjects = [];
+    const classSubjects = allClassSubjects.map(cs => ({
+        classId: cs.class,
+        subjectId: cs.subject,
+        hoursPerWeek: cs.hoursPerWeek
+    }));
+
+    const teacherSubjectMap = teacherSubjectCombos.map(combo => ({
+      teacherId: combo.faculty,
+      subjectId: combo.subject
+    }));
+
     const classTeachers = [];
 
     allClasses.forEach(c => {
-        if (c.subjects) {
-            c.subjects.forEach(s => {
-                classSubjects.push({ classId: c._id, subjectId: s._id });
-            });
-        }
         if (c.faculties) {
             c.faculties.forEach(f => {
                 classTeachers.push({ classId: c._id, teacherId: f._id });
@@ -460,21 +538,28 @@ protectedRouter.get('/result/latest', async (req, res) => {
 
 protectedRouter.post("/result/regenerate", async (req, res) => {
   try {
-    const { fixedSlots, teacherSubjectMap } = req.body;
+    const { fixedSlots } = req.body;
 
     const allFaculties = await Faculty.find().lean();
     const allSubjects = await Subject.find().lean();
-    const allClasses = await ClassModel.find().populate('subjects').populate('faculties').lean();
+    const allClasses = await ClassModel.find().populate('faculties').lean();
+    const allClassSubjects = await ClassSubject.find().lean();
+    const teacherSubjectCombos = await TeacherSubjectCombination.find().lean();
 
-    const classSubjects = [];
+    const classSubjects = allClassSubjects.map(cs => ({
+        classId: cs.class,
+        subjectId: cs.subject,
+        hoursPerWeek: cs.hoursPerWeek
+    }));
+
+    const teacherSubjectMap = teacherSubjectCombos.map(combo => ({
+      teacherId: combo.faculty,
+      subjectId: combo.subject
+    }));
+
     const classTeachers = [];
 
     allClasses.forEach(c => {
-        if (c.subjects) {
-            c.subjects.forEach(s => {
-                classSubjects.push({ classId: c._id, subjectId: s._id });
-            });
-        }
         if (c.faculties) {
             c.faculties.forEach(f => {
                 classTeachers.push({ classId: c._id, teacherId: f._id });
