@@ -92,9 +92,40 @@ app.use((req, res, next) => {
 });
 
 // --- Routes ---
+import { sampleData } from "./sample_data.js";
+import { convertNewCollegeInput } from "./models/lib/convertNewCollegeInputToGeneratorData.js";
+import generator from "./models/lib/generator.js";
+
 app.use("/api", API);
 app.get("/", (req, res) => {
   res.send("API is working 2");
+});
+
+app.get("/generate-sample", async (req, res) => {
+  try {
+    const { classes, subjects, teachers, classSubjects, classTeachers, teacherSubjectCombos } = sampleData;
+
+    const generatorData = convertNewCollegeInput({
+      classes,
+      subjects,
+      teachers,
+      classSubjects,
+      classTeachers,
+      teacherSubjectCombos
+    });
+
+    const result = generator.generate(generatorData);
+
+    if (!result.ok) {
+      console.warn("[POST /generate] Generation failed:", result);
+      return res.status(400).json(result);
+    }
+
+    res.json({ ok: true, result });
+  } catch (e) {
+    console.error("Error during sample timetable generation:", e);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 

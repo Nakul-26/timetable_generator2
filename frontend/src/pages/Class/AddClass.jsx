@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
+import DataContext from "../../context/DataContext";
 
 const AddClass = () => {
+  const { refetchData } = useContext(DataContext);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -44,6 +46,7 @@ const AddClass = () => {
       setSemester("");
       setSection("");
       setDaysPerWeek(6);
+      refetchData();
     } catch (err) {
       setError("Failed to add class.");
     }

@@ -449,6 +449,7 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
 });
 
 
+
 // --- Timetable ---
 protectedRouter.post('/generate', async (req, res) => {
   console.log("[POST /generate] Generating timetable using the new college model.");
@@ -461,6 +462,8 @@ protectedRouter.post('/generate', async (req, res) => {
     const allClassSubjects = await ClassSubject.find().lean();
     const teacherSubjectCombos = await TeacherSubjectCombination.find().lean();
 
+
+
     const classSubjects = allClassSubjects.map(cs => ({
         classId: cs.class,
         subjectId: cs.subject,
@@ -468,8 +471,8 @@ protectedRouter.post('/generate', async (req, res) => {
     }));
 
     const teacherSubjectMap = teacherSubjectCombos.map(combo => ({
-      teacherId: combo.faculty,
-      subjectId: combo.subject
+      teacherId: combo.faculty._id,
+      subjectId: combo.subject._id
     }));
 
     const classTeachers = [];
@@ -488,7 +491,7 @@ protectedRouter.post('/generate', async (req, res) => {
         teachers: allFaculties,
         classSubjects,
         classTeachers,
-        teacherSubjectMap
+        teacherSubjectCombos: teacherSubjectMap
     });
     
     const { faculties, subjects, classes, combos } = generatorData;
@@ -514,7 +517,8 @@ protectedRouter.post('/generate', async (req, res) => {
     const rec = new TimetableResult({
       class_timetables: result.class_timetables,
       faculty_timetables: result.faculty_timetables,
-      faculty_daily_hours: result.faculty_daily_hours
+      faculty_daily_hours: result.faculty_daily_hours,
+      combos,
     });
     await rec.save();
     console.log("[POST /generate] Saved timetable result");
@@ -553,8 +557,8 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
     }));
 
     const teacherSubjectMap = teacherSubjectCombos.map(combo => ({
-      teacherId: combo.faculty,
-      subjectId: combo.subject
+      teacherId: combo.faculty._id,
+      subjectId: combo.subject._id
     }));
 
     const classTeachers = [];
@@ -573,7 +577,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
         teachers: allFaculties,
         classSubjects,
         classTeachers,
-        teacherSubjectMap
+        teacherSubjectCombos: teacherSubjectMap
     });
     
     const { faculties, subjects, classes, combos } = generatorData;
@@ -596,6 +600,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
       faculty_timetables: bestFacultyTimetables,
       faculty_daily_hours: bestFacultyDailyHours,
       score: bestScore,
+      combos,
     });
 
     await rec.save();

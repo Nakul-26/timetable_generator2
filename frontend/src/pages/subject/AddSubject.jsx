@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import axios from "../../api/axios";
+import DataContext from "../../context/DataContext";
 
 function AddSubject() {
+  const { classes, refetchData } = useContext(DataContext);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -10,19 +12,6 @@ function AddSubject() {
   const [sem, setSem] = useState("");
   const [type, setType] = useState("theory");
   const [combinedClasses, setCombinedClasses] = useState([]);
-  const [classes, setClasses] = useState([]);
-
-  useEffect(() => {
-    const fetchClasses = async () => {
-      try {
-        const response = await axios.get("/classes");
-        setClasses(response.data);
-      } catch (error) {
-        console.error("Failed to fetch classes:", error);
-      }
-    };
-    fetchClasses();
-  }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -58,20 +47,20 @@ function AddSubject() {
     }
     setLoading(true);
     try {
-      const res = await axios.post("/subjects", {
+      await axios.post("/subjects", {
         name,
         id: code,
         sem,
         type: type,
         combined_classes: combinedClasses,
       });
-      // console.log("res:",res);
       setSuccess("Subject added successfully!");
       setName("");
       setCode("");
       setSem("");
       setType("theory");
       setCombinedClasses([]);
+      refetchData();
     } catch (err) {
       setError("Failed to add subject.");
     }

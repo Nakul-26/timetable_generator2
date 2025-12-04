@@ -1,50 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useState } from "react";
 import api from "../../api/axios";
 import Select from 'react-select';
+import DataContext from "../../context/DataContext";
 
 const ManageClassFaculty = () => {
-    const [classes, setClasses] = useState([]);
-    const [faculties, setFaculties] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-
-    // Add states
+    const { classes, faculties, loading, error, refetchData } = useContext(DataContext);
     const [addClass, setAddClass] = useState(null);
-    const [addFaculty, setAddFaculty] = useState(null);
-
-    const fetchAssignments = async () => {
-        setLoading(true);
-        try {
-            const [classRes, facultyRes] = await Promise.all([
-                api.get("/classes"),
-                api.get("/faculties"),
-            ]);
-            setClasses(classRes.data);
-            setFaculties(facultyRes.data);
-        } catch (err) {
-            setError("Failed to fetch data.");
-        }
-        setLoading(false);
-    };
-
-    useEffect(() => {
-        fetchAssignments();
-    }, []);
+    const [addFaculties, setAddFaculties] = useState([]);
 
     const handleAdd = async (e) => {
         e.preventDefault();
-        if (!addClass || !addFaculty) {
-            setError("Please select a class and a faculty.");
+        if (!addClass || !addFaculties || addFaculties.length === 0) {
             return;
         }
         try {
-            await api.post(`/classes/${addClass.value}/faculties`, { facultyId: addFaculty.value });
-            fetchAssignments();
+            const addPromises = addFaculties.map(faculty => {
+                return api.post(`/classes/${addClass.value}/faculties`, { facultyId: faculty.value });
+            });
+            await Promise.all(addPromises);
             setAddClass(null);
-            setAddFaculty(null);
-            setError("");
+            setAddFaculties([]);
+            refetchData(['classes']);
         } catch (err) {
-            setError("Failed to add assignment.");
+            console.log(`Error: ${err.message}`);
         }
     };
 
@@ -52,9 +30,9 @@ const ManageClassFaculty = () => {
         if (!window.confirm("Are you sure you want to delete this assignment?")) return;
         try {
             await api.delete(`/classes/${classId}/faculties/${facultyId}`);
-            fetchAssignments();
+            refetchData(['classes']);
         } catch (err) {
-            setError("Failed to delete assignment.");
+            console.log(`Error: ${err.message}`);
         }
     };
 
@@ -77,9 +55,10 @@ const ManageClassFaculty = () => {
                 />
                 <Select
                     options={facultyOptions}
-                    value={addFaculty}
-                    onChange={setAddFaculty}
-                    placeholder="Select Faculty"
+                    value={addFaculties}
+                    onChange={setAddFaculties}
+                    placeholder="Select Faculties"
+                    isMulti
                 />
                 <button type="submit" className="primary-btn">Add</button>
                 {error && <div className="error-message">{error}</div>}

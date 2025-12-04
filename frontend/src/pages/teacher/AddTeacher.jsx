@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import axios from "../../api/axios";
+import DataContext from "../../context/DataContext";
 
 const AddTeacher = () => {
+  const { refetchData } = useContext(DataContext);
   const [name, setName] = useState("");
   const [facultyId, setFacultyId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,7 +35,7 @@ const AddTeacher = () => {
 
     setLoading(true);
     try {
-      const res = await axios.post(`/faculties`, {
+      await axios.post(`/faculties`, {
         name: name,
         id: facultyId,
       });
@@ -41,6 +43,7 @@ const AddTeacher = () => {
       setSuccess("Teacher added successfully!");
       setName("");
       setFacultyId("");
+      refetchData();
     } catch (err) {
       if (err.response) {
         // console.error("[axios error response]", err.response);

@@ -1,44 +1,17 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useState } from "react";
 import api from "../../api/axios";
 import Select from 'react-select';
+import DataContext from "../../context/DataContext";
 
 const ManageClassSubject = () => {
-    const [assignments, setAssignments] = useState([]);
-    const [classes, setClasses] = useState([]);
-    const [subjects, setSubjects] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-
-    // Add states
+    const { assignments, classes, subjects, loading, error, refetchData } = useContext(DataContext);
     const [addClass, setAddClass] = useState(null);
     const [addSubject, setAddSubject] = useState(null);
     const [addHours, setAddHours] = useState(5); // Default to 5 hours
 
-    const fetchAssignments = async () => {
-        setLoading(true);
-        try {
-            const [assignmentRes, classRes, subjectRes] = await Promise.all([
-                api.get("/class-subjects"),
-                api.get("/classes"),
-                api.get("/subjects"),
-            ]);
-            setAssignments(assignmentRes.data);
-            setClasses(classRes.data);
-            setSubjects(subjectRes.data);
-        } catch (err) {
-            setError("Failed to fetch data.");
-        }
-        setLoading(false);
-    };
-
-    useEffect(() => {
-        fetchAssignments();
-    }, []);
-
     const handleAdd = async (e) => {
         e.preventDefault();
         if (!addClass || !addSubject || !addHours) {
-            setError("Please select a class, a subject, and enter the hours per week.");
             return;
         }
         try {
@@ -47,13 +20,12 @@ const ManageClassSubject = () => {
                 subjectId: addSubject.value,
                 hoursPerWeek: addHours
             });
-            fetchAssignments();
+            refetchData(['class-subjects']);
             setAddClass(null);
             setAddSubject(null);
             setAddHours(5);
-            setError("");
         } catch (err) {
-            setError("Failed to add assignment.");
+            console.log(`Error: ${err.message}`);
         }
     };
 
@@ -61,9 +33,9 @@ const ManageClassSubject = () => {
         if (!window.confirm("Are you sure you want to delete this assignment?")) return;
         try {
             await api.delete(`/class-subjects/${assignmentId}`);
-            fetchAssignments();
+            refetchData(['class-subjects']);
         } catch (err) {
-            setError("Failed to delete assignment.");
+            console.log(`Error: ${err.message}`);
         }
     };
 

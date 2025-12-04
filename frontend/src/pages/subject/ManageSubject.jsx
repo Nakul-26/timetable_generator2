@@ -1,14 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
+import DataContext from "../../context/DataContext";
 
 function ManageSubject() {
-  const [subjects, setSubjects] = useState([]);
-  const [teachers, setTeachers] = useState([]);
-  const [classes, setClasses] = useState([]);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { subjects, classes, faculties, assignments, combos, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
 
   // Edit states
@@ -30,34 +26,13 @@ function ManageSubject() {
     navigate("/subject/add");
   };
 
-  useEffect(() => {
-    const fetchSubjects = async () => {
-      setLoading(true);
-      try {
-        console.log("trying");
-        const facultyRes = await axios.get("/faculties");
-        const classRes = await axios.get("/classes");
-        const subjectRes = await axios.get("/subjects");
-        console.log("faculty res:",facultyRes);
-        setTeachers(facultyRes.data);
-        setClasses(classRes.data);
-        setSubjects(subjectRes.data);
-      } catch (err) {
-        console.log("fetch faculty error:",err);
-        setError("Failed to fetch teachers.");
-      }
-      setLoading(false);
-    };
-    fetchSubjects();
-  }, []);
-
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this subject?")) return;
     try {
       await axios.delete(`/subjects/${id}`);
-      setSubjects(subjects.filter((s) => s._id !== id));
+      refetchData(['subjects']);
     } catch (err) {
-      setError("Failed to delete subject.");
+      console.log(`Error: ${err.message}`);
     }
   };
 
@@ -90,28 +65,24 @@ function ManageSubject() {
         combined_classes: editCombinedClasses,
       };
       await axios.put(`/subjects/${editId}`, updatedSubject);
-      setSubjects(
-        subjects.map((s) =>
-          s._id === editId ? { ...s, ...updatedSubject } : s
-        )
-      );
       setEditId(null);
       setEditName("");
       setEditCode("");
       setEditSem("");
       setEditType("theory");
       setEditCombinedClasses([]);
+      refetchData(['subjects']);
     } catch (err) {
-      setError("Failed to update subject.");
+      console.log(`Error: ${err.message}`);
     }
   };
 
   // 🔎 Filtered data
   const filteredSubjects = subjects.filter((s) => {
     return (
-      (!filterName || s.name.toLowerCase().includes(filterName.toLowerCase())) &&
-      (!filterCode || s.id.toLowerCase().includes(filterCode.toLowerCase())) &&
-      (!filterSem || String(s.sem) === filterSem)
+      (!filterName || (s.name && s.name.toLowerCase().includes(filterName.toLowerCase()))) &&
+      (!filterCode || (s.id && s.id.toLowerCase().includes(filterCode.toLowerCase()))) &&
+      (!filterSem || (s.sem && String(s.sem) === filterSem))
     );
   });
 
@@ -167,7 +138,8 @@ function ManageSubject() {
               <th>Semester</th>
               <th>Subject Type</th>
               <th>Combined Classes</th>
-              <th>Assigned Classes & Faculties</th>
+              <th>Assigned Classes</th>
+              <th>Assigned Faculties</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -197,7 +169,7 @@ function ManageSubject() {
                       subject.id
                     )}
                   </td>
-<td>
+                  <td>
                     {editId === subject._id ? (
                       <input
                         type="text"
@@ -247,14 +219,18 @@ function ManageSubject() {
                     )}
                   </td>
                   <td>
-                    {classes
-                      .filter(cls => cls.subjects?.some(s => s._id === subject._id))
-                      .map(cls => (
-                        <div key={cls._id}>
-                          <strong>{cls.name}:</strong>{" "}
-                          {(cls.faculties || []).map(f => f.name).join(", ")}
-                        </div>
+                    {assignments
+                      .filter(a => a.subject?._id === subject._id)
+                      .map(a => (
+                        <div key={a._id}>{a.class?.name}</div>
                       ))}
+                  </td>
+                  <td>
+                    {combos
+                        .filter(c => c.subject?._id === subject._id)
+                        .map(c => (
+                            <div key={c._id}>{c.faculty?.name}</div>
+                        ))}
                   </td>
                   <td>
                     {editId === subject._id ? (

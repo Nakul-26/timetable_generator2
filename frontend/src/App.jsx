@@ -9,7 +9,7 @@ import AddSubject from './pages/subject/AddSubject';
 import AddClass from './pages/Class/AddClass';
 import ManageClassSubject from './pages/assignments/ManageClassSubject';
 import ManageClassFaculty from './pages/assignments/ManageClassFaculty';
-import ManageTeacherSubject from './pages/combo/ManageTeacherSubject';
+import ManageTeacherSubject from './pages/assignments/ManageTeacherSubject';
 import Navbar from './components/Navbar2';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
@@ -65,39 +65,26 @@ const HomePage = () => (
 
 function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <div className="app-container">
+      <Navbar />
+      <main className="main-content">
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route element={<PrivateRoute />}>
-            <Route
-              path="/*"
-              element={
-                <div className="app-container">
-                  <Navbar />
-                  <main className="main-content">
-                    <Routes>
-                      <Route path="/" element={ <HomePage /> } />
-                      <Route path="/home" element={<HomePage />} />
-                      <Route path="/faculties" element={<FacultyManager />} />
-                      <Route path="/subjects" element={<SubjectManager />} />
-                      <Route path="/classes" element={<ClassManager />} />
-                      <Route path="/class-subjects" element={<ManageClassSubject />} />
-                      <Route path="/class-faculties" element={<ManageClassFaculty />} />
-                      <Route path="/timetable" element={<Timetable />} />
-                      <Route path="/teacher/add" element={<AddTeacher />} />
-                      <Route path="/subject/add" element={<AddSubject />} />
-                      <Route path="/class/add" element={<AddClass />} />
-                      <Route path="/teacher-subject-combos" element={<ManageTeacherSubject />} />
-                    </Routes>
-                  </main>
-                </div>
-              }
-            />
-          </Route>
+          <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />
+          <Route path="/home" element={<PrivateRoute><HomePage /></PrivateRoute>} />
+          <Route path="/faculties" element={<PrivateRoute><FacultyManager /></PrivateRoute>} />
+          <Route path="/subjects" element={<PrivateRoute><SubjectManager /></PrivateRoute>} />
+          <Route path="/classes" element={<PrivateRoute><ClassManager /></PrivateRoute>} />
+          <Route path="/class-subjects" element={<PrivateRoute><ManageClassSubject /></PrivateRoute>} />
+          <Route path="/class-faculties" element={<PrivateRoute><ManageClassFaculty /></PrivateRoute>} />
+          <Route path="/timetable" element={<PrivateRoute><Timetable /></PrivateRoute>} />
+          <Route path="/teacher/add" element={<PrivateRoute><AddTeacher /></PrivateRoute>} />
+          <Route path="/subject/add" element={<PrivateRoute><AddSubject /></PrivateRoute>} />
+          <Route path="/class/add" element={<PrivateRoute><AddClass /></PrivateRoute>} />
+          <Route path="/teacher-subject-combos" element={<PrivateRoute><ManageTeacherSubject /></PrivateRoute>} />
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+      </main>
+    </div>
   );
 }
 

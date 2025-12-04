@@ -18,12 +18,21 @@ export function convertNewCollegeInput({
   classTeachers,          // { classId, teacherId }
   teacherSubjectCombos = []
 }) {
+  console.log('--- Input Data ---');
+  console.log('Classes:', JSON.stringify(classes, null, 2));
+  console.log('Subjects:', JSON.stringify(subjects, null, 2));
+  console.log('Teachers:', JSON.stringify(teachers, null, 2));
+  console.log('Class-Subjects:', JSON.stringify(classSubjects, null, 2));
+  console.log('Class-Teachers:', JSON.stringify(classTeachers, null, 2));
+  console.log('Teacher-Subject Combos:', JSON.stringify(teacherSubjectCombos, null, 2));
+  console.log('--------------------');
+
   //------------------------------------------------------------
   // Normalize IDs
   //------------------------------------------------------------
-  classes = classes.map(c => ({ ...c, _id: String(c.id || c._id) }));
-  subjects = subjects.map(s => ({ ...s, _id: String(s.id || s._id) }));
-  teachers = teachers.map(t => ({ ...t, _id: String(t.id || t._id) }));
+  classes = classes.map(c => ({ ...c, _id: String(c._id) }));
+  subjects = subjects.map(s => ({ ...s, _id: String(s._id) }));
+  teachers = teachers.map(t => ({ ...t, _id: String(t._id) }));
 
   classSubjects = classSubjects.map(cs => ({
     classId: String(cs.classId),
@@ -40,6 +49,12 @@ export function convertNewCollegeInput({
     teacherId: String(x.teacherId),
     subjectId: String(x.subjectId)
   }));
+
+  console.log('--- Normalized Data ---');
+  console.log('Normalized Class-Subjects:', JSON.stringify(classSubjects, null, 2));
+  console.log('Normalized Class-Teachers:', JSON.stringify(classTeachers, null, 2));
+  console.log('Normalized Teacher-Subject Combos:', JSON.stringify(teacherSubjectCombos, null, 2));
+  console.log('-----------------------');
 
   //------------------------------------------------------------
   // Faculties
@@ -133,8 +148,15 @@ export function convertNewCollegeInput({
         for (const cid of subj.combined_classes) {
           (teachersPerClass[cid] || []).forEach(t => unionTeachers.add(t));
         }
+        
+        const eligibleTeachers = [...unionTeachers].filter(teacherId => teacherCanTeach(teacherId, subjectId));
+        const teacherCount = eligibleTeachers.length;
+        if (teacherCount === 0) continue;
 
-        for (const teacherId of unionTeachers) {
+        const hoursPerTeacher = Math.floor((hours / teacherCount) * 100) / 100;
+
+
+        for (const teacherId of eligibleTeachers) {
           if (!teacherCanTeach(teacherId, subjectId)) continue;
 
           combos.push({
@@ -142,7 +164,7 @@ export function convertNewCollegeInput({
             faculty_id: teacherId,
             subject_id: subjectId,
             class_ids: subj.combined_classes.map(String),
-            hours_per_week: hours,               // hours apply to each class
+            hours_per_week: hoursPerTeacher,               // hours apply to each class
             hours_per_class: Object.fromEntries(
               subj.combined_classes.map(c => [
                 c,
@@ -159,21 +181,29 @@ export function convertNewCollegeInput({
       //------------------------------------------------------------
       // NORMAL SUBJECT
       //------------------------------------------------------------
-      for (const teacherId of classTeach) {
-        if (!teacherCanTeach(teacherId, subjectId)) continue;
+      const eligibleTeachers = classTeach.filter(teacherId => teacherCanTeach(teacherId, subjectId));
+      const teacherCount = eligibleTeachers.length;
+      if (teacherCount === 0) continue;
 
+      const hoursPerTeacher = Math.floor((hours / teacherCount) * 100) / 100;
+
+      for (const teacherId of eligibleTeachers) {
         combos.push({
           _id: "C" + comboIndex++,
           faculty_id: teacherId,
           subject_id: subjectId,
           class_ids: [classId],
-          hours_per_week: hours,
-          hours_per_class: { [classId]: hours },
+          hours_per_week: hoursPerTeacher,
+          hours_per_class: { [classId]: hoursPerTeacher },
           combo_name: `T${teacherId}_S${subjectId}_C${classId}`
         });
       }
     }
   }
+  
+  console.log('--- Generated Combos ---');
+  console.log(JSON.stringify(combos, null, 2));
+  console.log('------------------------');
 
   //------------------------------------------------------------
   // Attach combos to classes
@@ -183,13 +213,17 @@ export function convertNewCollegeInput({
       .filter(c => c.class_ids.includes(cls._id))
       .map(c => c._id);
 
-    // Total hours for class
-    cls.total_class_hours = cls.assigned_teacher_subject_combos.reduce((sum, cbid) => {
-      const cb = combos.find(x => x._id === cbid);
-      if (!cb) return sum;
-      return sum + (cb.hours_per_class[cls._id] || 0);
-    }, 0);
+    cls.total_class_hours = combos
+      .filter(c => c.class_ids.includes(cls._id))
+      .reduce((sum, c) => sum + (c.hours_per_class[cls._id] || 0), 0);
   }
+
+  console.log('--- Final Output ---');
+  console.log('Faculties:', JSON.stringify(faculties, null, 2));
+  console.log('Subjects:', JSON.stringify(subjectsOut, null, 2));
+  console.log('Classes:', JSON.stringify(classesOut, null, 2));
+  console.log('Combos:', JSON.stringify(combos, null, 2));
+  console.log('--------------------');
 
   //------------------------------------------------------------
   // Export final dataset

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api/axios';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import '../styles/Login.css';
 
@@ -11,6 +12,7 @@ const Login = () => {
     const [showPassword, setShowPassword] = useState(false); // New state for password visibility
     const navigate = useNavigate();
     const { login } = useAuth();
+    const queryClient = useQueryClient();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -18,6 +20,7 @@ const Login = () => {
             const response = await API.post('/login', { email, password });
             if (response.data.success) {
                 login(response.data.user);
+                queryClient.invalidateQueries();
                 navigate('/timetable');
             } else {
                 setError(response.data.message);

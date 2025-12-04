@@ -12,7 +12,6 @@ function Timetable() {
   const [classes, setClasses] = useState([]);
   const [faculties, setFaculties] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [classCombos, setClassCombos] = useState([]);
 
   // Filters
   const [showFilters, setShowFilters] = useState(false);
@@ -28,13 +27,11 @@ function Timetable() {
 
   const fetchAll = async () => {
     try {
-      const [comboRes, classRes, facRes, subRes] = await Promise.all([
-        axios.get("/teacher-subject-combos"),
+      const [classRes, facRes, subRes] = await Promise.all([
         axios.get("/classes"),
         axios.get("/faculties"),
         axios.get("/subjects"),
       ]);
-      setClassCombos(comboRes.data);
       setClasses(classRes.data);
       setFaculties(facRes.data);
       setSubjects(subRes.data);
@@ -45,6 +42,7 @@ function Timetable() {
 
   useEffect(() => {
     fetchAll();
+    fetchLatest();
   }, []);
 
   // Handle dropdown change in empty timetable
@@ -96,13 +94,13 @@ function Timetable() {
                         <option value="">
                           --Select faculty-subject--
                         </option>
-                        {classCombos
+                        {timetable && timetable.combos
                       .map((c) => {
-                        const fac = c.faculty;
-                        const sub = c.subject;
+                        const fac = faculties.find(f => f._id === c.faculty_id);
+                        const sub = subjects.find(s => s._id === c.subject_id);
                         return (
                           <option key={c._id} value={c._id}>
-                            {fac ? `${fac.name} (${fac.id})` : "-none-"} : {sub ? `${sub.name} (${sub.id})` : "-none-"}
+                            {fac ? `${fac.name}` : "-none-"} : {sub ? `${sub.name}` : "-none-"}
                           </option>
                         );
                       })}
@@ -168,6 +166,7 @@ function Timetable() {
       setTimetable(res.data);
       setBestScore(res.data?.score || null);
       setFacultyDailyHours(res.data?.faculty_daily_hours || null);
+      await fetchAll();
     } catch (e) {
       setError("Failed to fetch timetable");
     }
@@ -237,6 +236,9 @@ function Timetable() {
   };
 
   const renderClassTable = (classId, slots) => {
+    if (!timetable || !timetable.combos) {
+      return null;
+    }
     return (
       <div key={classId} style={{ marginBottom: "40px" }}>
         <h3 style={{ marginBottom: "10px" }}>
@@ -262,30 +264,27 @@ function Timetable() {
                     return <td key={p}>-</td>;
                   }
 
-                  let combo = classCombos.find((c) => c._id === slotId);
-                  let isCombined = false;
-
-                  // Heuristic to handle in-memory combined-class combos from the backend
-                  if (!combo && typeof slotId === 'string' && slotId.endsWith('-combined')) {
-                    const originalComboId = slotId.replace('-combined', '');
-                    const originalCombo = classCombos.find(c => c._id === originalComboId);
-                    if (originalCombo) {
-                      combo = originalCombo;
-                      isCombined = true;
-                    }
-                  }
+                  const combo = timetable.combos.find((c) => c._id === slotId);
 
                   if (!combo) {
                     return <td key={p}>{slotId}</td>;
                   }
+                  
+                  const subject = subjects.find(
+                    (s) => String(s._id) === String(combo.subject_id)
+                  );
+                  const faculty = faculties.find(
+                    (f) => String(f._id) === String(combo.faculty_id)
+                  );
+
 
                   if (
                     (selectedFaculty &&
-                      (!combo.faculty ||
-                        String(combo.faculty._id) !== selectedFaculty)) ||
+                      (!faculty ||
+                        String(faculty._id) !== selectedFaculty)) ||
                     (selectedSubject &&
-                      (!combo.subject ||
-                        String(combo.subject._id) !== selectedSubject))
+                      (!subject ||
+                        String(subject._id) !== selectedSubject))
                   ) {
                     return <td key={p}>-</td>;
                   }
@@ -307,10 +306,9 @@ function Timetable() {
                       }
                     >
                       <div>
-                        <b>{combo.subject ? combo.subject.name : 'N/A'}</b>
-                        {isCombined && <span style={{fontSize: '0.8em', color: 'blue'}}> (Combined)</span>}
+                        <b>{subject ? subject.name : "N/A"}</b>
                       </div>
-                      <div>{combo.faculty ? `${combo.faculty.name} (${combo.faculty.id})` : 'N/A'}</div>
+                      <div>{faculty ? `${faculty.name}` : "N/A"}</div>
                       {isFixed && (
                         <div style={{ fontSize: "0.8em" }}>📌 Fixed</div>
                       )}

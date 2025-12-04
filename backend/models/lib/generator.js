@@ -18,6 +18,13 @@ function generate({
   BREAK_HOURS = [], // configurable
   fixed_slots = [],
 }) {
+  console.log('--- Generator Input ---');
+  console.log('Faculties:', JSON.stringify(faculties, null, 2));
+  console.log('Subjects:', JSON.stringify(subjects, null, 2));
+  console.log('Classes:', JSON.stringify(classes, null, 2));
+  console.log('Combos:', JSON.stringify(combos, null, 2));
+  console.log('-----------------------');
+
   const EMPTY_SLOT = -1;
   const BREAK_SLOT = "BREAK";
 
@@ -51,6 +58,10 @@ function generate({
     class_ids: Array.isArray(c.class_ids) ? c.class_ids.map((x) => String(x)) : [],
   }));
   classes = classes.map((c) => ({ ...c, _id: String(c._id || c.id) }));
+
+  console.log('--- Normalized Generator Data ---');
+  console.log('Normalized Combos:', JSON.stringify(combos, null, 2));
+  console.log('---------------------------------');
 
   // --- Maps ---
   const comboByMongoId = new Map(combos.map((c) => [c._id, c]));
@@ -188,24 +199,13 @@ function generate({
     }
 
     let tot = 0;
-    const subjectSet = new Set();
-
     for (const cbid of cls.assigned_teacher_subject_combos) {
       const cb = comboByMongoId.get(String(cbid));
       if (!cb) continue;
-      const subjId = cb.subject_id;
-
-      // Only add each subject ONCE
-      if (!subjectSet.has(subjId)) {
-        subjectSet.add(subjId);
-
-        const subj = subjectById.get(subjId);
-        if (subj && typeof subj.no_of_hours_per_week === "number") {
-          tot += subj.no_of_hours_per_week;
-        }
+      if (cb.hours_per_class && typeof cb.hours_per_class[cls._id] === "number") {
+        tot += cb.hours_per_class[cls._id];
       }
     }
-
     cls.total_class_hours = tot;
 
     classById.set(cls._id, cls);
@@ -218,6 +218,7 @@ function generate({
     const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
     const availableSlots = daysPerWeek * (HOURS_PER_DAY - BREAK_HOURS.length);
     if (cls.total_class_hours > availableSlots) {
+      console.error(`Class ${cls.name} has more required hours (${cls.total_class_hours}) than available slots (${availableSlots}).`);
       return {
         ok: false,
         error: `Class ${cls.name} has more required hours (${cls.total_class_hours}) than available slots (${availableSlots}).`,
@@ -346,16 +347,11 @@ function generate({
     for (const cls of classes) {
       const classId = cls._id;
       // Only consider subjects that are relevant to this class (present in assigned combos)
-      const subjSet = new Set();
       for (const cbid of cls.assigned_teacher_subject_combos || []) {
         const cb = comboByMongoId.get(String(cbid));
-        if (cb) subjSet.add(cb.subject_id);
-      }
-      for (const subjId of subjSet) {
-        const subj = subjectById.get(subjId);
-        if (!subj) continue;
-        const required = subj.no_of_hours_per_week || 0;
-        const assigned = subject_hours_assigned_per_class[classId][subjId] || 0;
+        if (!cb) continue;
+        const required = cb.hours_per_week || 0;
+        const assigned = subject_hours_assigned_per_class[classId][cb.subject_id] || 0;
         if (required > assigned) total += required - assigned;
       }
     }
@@ -382,6 +378,9 @@ function generate({
   function optimistic_feasible() {
     const rem = total_remaining_required_hours();
     const avail = total_available_empty_slots();
+    if (avail < rem) {
+      console.log(`Pruning: Not enough available slots (${avail}) for remaining hours (${rem})`);
+    }
     return avail >= rem;
   }
 
@@ -390,17 +389,15 @@ function generate({
     for (const cls of classes) {
       const classId = cls._id;
       // determine subjects relevant to the class
-      const subjSet = new Set();
       for (const cbid of cls.assigned_teacher_subject_combos || []) {
         const cb = comboByMongoId.get(String(cbid));
-        if (cb) subjSet.add(cb.subject_id);
-      }
-      for (const subjId of subjSet) {
-        const subj = subjectById.get(subjId);
-        if (!subj) continue;
-        const required = subj.no_of_hours_per_week || 0;
-        const assigned = subject_hours_assigned_per_class[classId][subjId] || 0;
-        if (required !== assigned) return false;
+        if (!cb) continue;
+        const required = cb.hours_per_week || 0;
+        const assigned = subject_hours_assigned_per_class[classId][cb.subject_id] || 0;
+        if (required !== assigned) {
+          console.log(`Exactness check failed for class ${classId}, subject ${cb.subject_id}: required ${required}, assigned ${assigned}`);
+          return false;
+        }
       }
     }
     return true;
@@ -423,7 +420,7 @@ function generate({
       // subject hours for class shouldn't exceed subject's weekly limit
       if (
         subject_hours_assigned_per_class[otherClass][subj._id] + blockSize >
-        subj.no_of_hours_per_week
+        (combos.find(c => c.subject_id === subj._id && c.class_ids.includes(otherClass))?.hours_per_week || 0)
       )
         return false;
       // the class should have this combo assigned (or at least a combo for the subject)
@@ -473,7 +470,7 @@ function generate({
       if (!check_continuous_hours(combo.faculty_id, day, hour, blockSize)) return false;
       if (
         subject_hours_assigned_per_class[classId][subj._id] + blockSize >
-        subj.no_of_hours_per_week
+        (combos.find(c => c.subject_id === subj._id && c.class_ids.includes(classId))?.hours_per_week || 0)
       )
         return false;
       return true;
@@ -495,7 +492,7 @@ function generate({
 
     if (
       subject_hours_assigned_per_class[classId][subj._id] >=
-      subj.no_of_hours_per_week
+      (combos.find(c => c.subject_id === subj._id && c.class_ids.includes(classId))?.hours_per_week || 0)
     )
       return false;
 
@@ -563,7 +560,7 @@ function generate({
       const subj = subjectById.get(combo.subject_id);
       if (!subj) continue;
       const rem =
-        subj.no_of_hours_per_week -
+        (combos.find(c => c.subject_id === subj._id && c.class_ids.includes(classId))?.hours_per_week || 0) -
         (subject_hours_assigned_per_class[classId][subj._id] || 0);
       if (rem > 0)
         candidates.push({
@@ -604,7 +601,7 @@ function generate({
       const isStrictCombined = combinedGroup.length > 1; // strict combined-only if true
 
       if (subj.type === "lab") {
-        const blockSize = subj.no_of_hours_per_week;
+        const blockSize = (combos.find(c => c.subject_id === subj._id && c.class_ids.includes(classId))?.hours_per_week || 0);
 
         // skip if any of the block hours are fixed to another combo
         let conflictFixed = false;
@@ -751,6 +748,33 @@ function generate({
     );
   }
 
+
+
+  // ############################################################################################                                                                                      │
+
+  // Log the generated timetables for debugging                                                                                                                                        │
+ console.log("\n--- Generated Class Timetables ---");                                                                                                                                  
+ for (const classId in out_class_timetables) {                                                                                                                                        
+   printTimetable(classId, out_class_timetables[classId], classById);                                                                                                                  
+ }                                                                                                                                                                                   
+
+ console.log("\n--- Generated Faculty Timetables ---");                                                                                                                         
+ for (const facultyId in out_faculty_timetables) {                                                                                                            
+   console.log(`\n📅 Timetable for ${facultyById.get(facultyId).name}`);                                                                                             
+   out_faculty_timetables[facultyId].forEach((row, d) => {                                                                                                      
+     console.log(                                                                                                                                          
+       `Day ${d + 1}:`,                                                                                                                                                 
+       row.map((slot) => (slot === -1 ? "—" : slot === "BREAK" ? "B" : slot)).join(" | ")                                                                           
+     );                                                                                                                                                                          
+  });                                                                                                                                                                        
+}                                                                                                                                                                           
+
+console.log("\n--- Faculty Daily Hours ---");                                                                                                                             
+for (const facultyId in faculty_daily_hours) {                                                                                                                               
+   console.log(`\n${facultyById.get(facultyId).name} Daily Hours:`, faculty_daily_hours[facultyId]);                                                                   
+}                                                                                                                                                                     
+// ############################################################################################                                                                
+      
   return {
     ok: true,
     class_timetables: out_class_timetables,
@@ -758,6 +782,9 @@ function generate({
     faculty_daily_hours,
   };
 }
+
+
+
 
 // export
 export default { generate };

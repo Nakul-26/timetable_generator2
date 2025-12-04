@@ -1,17 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import Select from 'react-select';
 import api from '../../api/axios';
+import DataContext from '../../context/DataContext';
 
-const AssignModal = ({ klass, subjects, faculties, onClose, onSave }) => {
+const AssignModal = ({ klass, onClose, onSave }) => {
+    const { subjects, faculties, refetchData } = useContext(DataContext);
     const [selectedSubjects, setSelectedSubjects] = useState([]);
     const [selectedFaculties, setSelectedFaculties] = useState([]);
 
     useEffect(() => {
         if (klass) {
-            setSelectedSubjects(klass.subjects.map(s => ({ value: s._id, label: `${s.name} (${s.id})` })));
-            setSelectedFaculties(klass.faculties.map(f => ({ value: f._id, label: `${f.name} (${f.id})` })));
+            const assignedSubjects = klass.subjects.map(subjectId => {
+                const subject = subjects.find(s => s._id === subjectId);
+                return subject ? { value: subject._id, label: `${subject.name} (${subject.id})` } : null;
+            }).filter(s => s !== null);
+            setSelectedSubjects(assignedSubjects);
+
+            const assignedFaculties = klass.faculties.map(f => ({ value: f._id, label: `${f.name} (${f.id})` }));
+            setSelectedFaculties(assignedFaculties);
         }
-    }, [klass]);
+    }, [klass, subjects, faculties]);
 
     const subjectOptions = subjects.map(s => ({ value: s._id, label: `${s.name} (${s.id})` }));
     const facultyOptions = faculties.map(f => ({ value: f._id, label: `${f.name} (${f.id})` }));
@@ -37,6 +45,8 @@ const AssignModal = ({ klass, subjects, faculties, onClose, onSave }) => {
             facultiesToRemove.forEach(facultyId => promises.push(api.delete(`/classes/${klass._id}/faculties/${facultyId}`)));
             
             await Promise.all(promises);
+
+            refetchData(['classes']);
             onSave();
         } catch (error) {
             console.error("Failed to save assignments", error);
@@ -44,6 +54,7 @@ const AssignModal = ({ klass, subjects, faculties, onClose, onSave }) => {
     };
 
     if (!klass) return null;
+
 
     return (
         <div className="modal-overlay">

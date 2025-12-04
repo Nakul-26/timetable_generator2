@@ -1,15 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import AssignModal from "./AssignModal";
+import DataContext from "../../context/DataContext";
 
 function ManageClass() {
-  const [classes, setClasses] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [teachers, setTeachers] = useState([]);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { classes, subjects, faculties, assignments, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
 
   // State for the assignment modal
@@ -36,25 +32,6 @@ function ManageClass() {
     navigate("/class/add");
   };
 
-  const fetchClasses = async () => {
-    setLoading(true);
-    try {
-      const classRes = await api.get("/classes");
-      const facultyRes = await api.get("/faculties");
-      const subjectRes = await api.get("/subjects");
-      setTeachers(facultyRes.data);
-      setSubjects(subjectRes.data);
-      setClasses(classRes.data);
-    } catch (err) {
-      setError("Failed to fetch initial data.");
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchClasses();
-  }, []);
-
   const handleOpenModal = (klass) => {
     setSelectedClass(klass);
     setIsModalOpen(true);
@@ -64,9 +41,9 @@ function ManageClass() {
     if (!window.confirm("Are you sure you want to delete this class?")) return;
     try {
       await api.delete(`/classes/${id}`);
-      setClasses(classes.filter((c) => c._id !== id));
+      refetchData(['classes']);
     } catch (err) {
-      setError("Failed to delete class.");
+      console.log(`Error: ${err.message}`);
     }
   };
 
@@ -90,23 +67,20 @@ function ManageClass() {
         days_per_week: editDaysPerWeek,
       };
       await api.put(`/classes/${editId}`, updatedData);
-      setClasses(
-        classes.map((c) => (c._id === editId ? { ...c, ...updatedData } : c))
-      );
       setEditId(null);
-      setError("");
+      refetchData(['classes']);
     } catch (err) {
-      setError("Failed to update class.");
+      console.log(`Error: ${err.message}`);
     }
   };
 
   // 🔎 Apply filters
   const filteredClasses = classes.filter((c) => {
     return (
-      (!filterClassId || c.id.toLowerCase().includes(filterClassId.toLowerCase())) &&
-      (!filterName || c.name.toLowerCase().includes(filterName.toLowerCase())) &&
-      (!filterSection || c.section.toLowerCase().includes(filterSection.toLowerCase())) &&
-      (!filterSemester || String(c.sem).toLowerCase().includes(filterSemester.toLowerCase()))
+      (!filterClassId || (c.id && c.id.toLowerCase().includes(filterClassId.toLowerCase()))) &&
+      (!filterName || (c.name && c.name.toLowerCase().includes(filterName.toLowerCase()))) &&
+      (!filterSection || (c.section && c.section.toLowerCase().includes(filterSection.toLowerCase()))) &&
+      (!filterSemester || (c.sem && String(c.sem).toLowerCase().includes(filterSemester.toLowerCase())))
     );
   });
 
@@ -238,9 +212,11 @@ function ManageClass() {
                     )}
                   </td>
                   <td>
-                    {(classItem.subjects || []).map(s => (
-                        <div key={s._id}>{s.name}</div>
-                    ))}
+                    {assignments
+                      .filter(a => a.class?._id === classItem._id)
+                      .map(a => (
+                        <div key={a._id}>{a.subject?.name}</div>
+                      ))}
                   </td>
                   <td>
                       {(classItem.faculties || []).map(f => (
@@ -292,11 +268,10 @@ function ManageClass() {
         <AssignModal
             klass={selectedClass}
             subjects={subjects}
-            faculties={teachers}
+            faculties={faculties}
             onClose={() => setIsModalOpen(false)}
             onSave={() => {
                 setIsModalOpen(false);
-                fetchClasses();
             }}
         />
       )}

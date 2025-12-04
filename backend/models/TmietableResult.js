@@ -5,5 +5,6 @@ const ResultSchema = new Schema({
   class_timetables: Object,
   faculty_timetables: Object,
   faculty_daily_hours: Object,
+  combos: Object,
 });
 export default mongoose.model('TimetableResult', ResultSchema);

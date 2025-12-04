@@ -1,14 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../../api/axios";
+import DataContext from "../../context/DataContext";
 
 const ManageTeacher = () => {
-  const [teachers, setTeachers] = useState([]);
-  const [subjects, setSubjects] = useState([]);
-  const [classes, setClasses] = useState([]);
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { faculties, classes, subjects, combos, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
 
   // Edit form states
@@ -26,34 +22,13 @@ const ManageTeacher = () => {
     navigate("/teacher/add");
   };
 
-  useEffect(() => {
-    const fetchTeachers = async () => {
-      setLoading(true);
-      try {
-        console.log("trying");
-        const facultyRes = await API.get("/faculties");
-        const classRes = await API.get("/classes");
-        const subjectRes = await API.get("/subjects");
-        console.log("faculty res:",facultyRes);
-        setTeachers(facultyRes.data);
-        setClasses(classRes.data);
-        setSubjects(subjectRes.data);
-      } catch (err) {
-        console.log("fetch faculty error:",err);
-        setError("Failed to fetch teachers.");
-      }
-      setLoading(false);
-    };
-    fetchTeachers();
-  }, []);
-
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this teacher?")) return;
     try {
       await API.delete(`/faculties/${id}`);
-      setTeachers(teachers.filter((t) => t._id !== id));
+      refetchData(['faculties']);
     } catch (err) {
-      setError("Failed to delete teacher.");
+      console.log(`Error: ${err.message}`);
     }
   };
 
@@ -69,26 +44,21 @@ const ManageTeacher = () => {
       const updatedTeacher = { name: editName, id: editFacultyId };
       await API.put(`/faculties/${editId}`, updatedTeacher);
 
-      setTeachers(
-        teachers.map((t) =>
-          t._id === editId ? { ...t, ...updatedTeacher } : t
-        )
-      );
-
       setEditId(null);
       setEditName("");
       setEditFacultyId("");
+      refetchData(['faculties']);
     } catch (err) {
-      setError("Failed to update teacher.");
+      console.log(`Error: ${err.message}`);
     }
   };
 
   // 🔎 Apply filters
-  const filteredTeachers = teachers.filter((t) => {
+  const filteredTeachers = faculties.filter((t) => {
     return (
-      (!filterName || t.name.toLowerCase().includes(filterName.toLowerCase())) &&
+      (!filterName || (t.name && t.name.toLowerCase().includes(filterName.toLowerCase()))) &&
       (!filterFacultyId ||
-        t.id.toLowerCase().includes(filterFacultyId.toLowerCase()))
+        (t.id && t.id.toLowerCase().includes(filterFacultyId.toLowerCase())))
     );
   });
 
@@ -138,7 +108,8 @@ const ManageTeacher = () => {
             <tr>
               <th>Name</th>
               <th>Faculty ID</th>
-              <th>Assigned Classes & Subjects</th>
+              <th>Assigned Classes</th>
+              <th>Assigned Subjects</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -170,13 +141,17 @@ const ManageTeacher = () => {
                   </td>
                   <td>
                     {classes
-                      .filter(cls => cls.faculties?.some(f => f._id === teacher._id))
-                      .map(cls => (
-                        <div key={cls._id}>
-                          <strong>{cls.name}:</strong>{" "}
-                          {(cls.subjects || []).map(s => s.name).join(", ")}
-                        </div>
-                      ))}
+                        .filter(cls => cls.faculties?.some(f => f._id === teacher._id))
+                        .map(cls => (
+                            <div key={cls._id}><strong>{cls.name}</strong></div>
+                        ))}
+                  </td>
+                  <td>
+                    {combos
+                        .filter(c => c.faculty?._id === teacher._id)
+                        .map(c => (
+                            <div key={c._id}>{c.subject?.name}</div>
+                        ))}
                   </td>
                   <td>
                     {editId === teacher._id ? (
