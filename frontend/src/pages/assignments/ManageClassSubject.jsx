@@ -6,23 +6,26 @@ import DataContext from "../../context/DataContext";
 const ManageClassSubject = () => {
     const { assignments, classes, subjects, loading, error, refetchData } = useContext(DataContext);
     const [addClass, setAddClass] = useState(null);
-    const [addSubject, setAddSubject] = useState(null);
+    const [addSubjects, setAddSubjects] = useState([]);
     const [addHours, setAddHours] = useState(5); // Default to 5 hours
 
     const handleAdd = async (e) => {
         e.preventDefault();
-        if (!addClass || !addSubject || !addHours) {
+        if (!addClass || addSubjects.length === 0 || !addHours) {
             return;
         }
         try {
-            await api.post('/class-subjects', {
-                classId: addClass.value,
-                subjectId: addSubject.value,
-                hoursPerWeek: addHours
-            });
+            const promises = addSubjects.map(subject => 
+                api.post('/class-subjects', {
+                    classId: addClass.value,
+                    subjectId: subject.value,
+                    hoursPerWeek: addHours
+                })
+            );
+            await Promise.all(promises);
             refetchData(['class-subjects']);
             setAddClass(null);
-            setAddSubject(null);
+            setAddSubjects([]);
             setAddHours(5);
         } catch (err) {
             console.log(`Error: ${err.message}`);
@@ -56,9 +59,10 @@ const ManageClassSubject = () => {
                 />
                 <Select
                     options={subjectOptions}
-                    value={addSubject}
-                    onChange={setAddSubject}
-                    placeholder="Select Subject"
+                    isMulti
+                    value={addSubjects}
+                    onChange={setAddSubjects}
+                    placeholder="Select Subjects"
                 />
                 <input
                     type="number"
