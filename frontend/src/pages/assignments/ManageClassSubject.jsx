@@ -5,26 +5,34 @@ import DataContext from "../../context/DataContext";
 
 const ManageClassSubject = () => {
     const { assignments, classes, subjects, loading, error, refetchData } = useContext(DataContext);
-    const [addClass, setAddClass] = useState(null);
+    const [addClasses, setAddClasses] = useState([]);
     const [addSubjects, setAddSubjects] = useState([]);
     const [addHours, setAddHours] = useState(5); // Default to 5 hours
+    const [filterClass, setFilterClass] = useState(null);
+    const [filterSubject, setFilterSubject] = useState(null);
 
     const handleAdd = async (e) => {
         e.preventDefault();
-        if (!addClass || addSubjects.length === 0 || !addHours) {
+        if (addClasses.length === 0 || addSubjects.length === 0 || !addHours) {
             return;
         }
         try {
-            const promises = addSubjects.map(subject => 
-                api.post('/class-subjects', {
-                    classId: addClass.value,
-                    subjectId: subject.value,
-                    hoursPerWeek: addHours
-                })
-            );
+            const promises = [];
+            addClasses.forEach(classItem => {
+                addSubjects.forEach(subject => {
+                    promises.push(
+                        api.post('/class-subjects', {
+                            classId: classItem.value,
+                            subjectId: subject.value,
+                            hoursPerWeek: addHours
+                        })
+                    );
+                });
+            });
+            
             await Promise.all(promises);
             refetchData(['class-subjects']);
-            setAddClass(null);
+            setAddClasses([]);
             setAddSubjects([]);
             setAddHours(5);
         } catch (err) {
@@ -45,6 +53,12 @@ const ManageClassSubject = () => {
     const classOptions = classes.map(c => ({ value: c._id, label: c.name }));
     const subjectOptions = subjects.map(s => ({ value: s._id, label: s.name }));
 
+    const filteredAssignments = assignments.filter(assignment => {
+        const classMatch = !filterClass || (assignment.class?._id === filterClass.value);
+        const subjectMatch = !filterSubject || (assignment.subject?._id === filterSubject.value);
+        return classMatch && subjectMatch;
+    });
+
     return (
         <div className="manage-container">
             <h2>Manage Class-Subject Assignments</h2>
@@ -53,9 +67,10 @@ const ManageClassSubject = () => {
                 <h3>Add New Assignment</h3>
                 <Select
                     options={classOptions}
-                    value={addClass}
-                    onChange={setAddClass}
-                    placeholder="Select Class"
+                    isMulti
+                    value={addClasses}
+                    onChange={setAddClasses}
+                    placeholder="Select Classes"
                 />
                 <Select
                     options={subjectOptions}
@@ -74,6 +89,24 @@ const ManageClassSubject = () => {
                 {error && <div className="error-message">{error}</div>}
             </form>
 
+            <h3>Filter Assignments</h3>
+            <div className="filters-container">
+                <Select
+                    options={classOptions}
+                    value={filterClass}
+                    onChange={setFilterClass}
+                    placeholder="Filter by Class"
+                    isClearable
+                />
+                <Select
+                    options={subjectOptions}
+                    value={filterSubject}
+                    onChange={setFilterSubject}
+                    placeholder="Filter by Subject"
+                    isClearable
+                />
+            </div>
+
             {loading ? (
                 <div>Loading...</div>
             ) : (
@@ -87,7 +120,7 @@ const ManageClassSubject = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {assignments.map((assignment) => (
+                        {filteredAssignments.map((assignment) => (
                             <tr key={assignment._id}>
                                 <td>{assignment.class?.name}</td>
                                 <td>{assignment.subject?.name}</td>

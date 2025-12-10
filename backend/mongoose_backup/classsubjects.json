@@ -1,0 +1,695 @@
+[
+  {
+    "_id": "69342048d4a29e95630dfa51",
+    "class": "69341fcc1025dbd2e3dbf0c0",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342048d4a29e95630dfa53",
+    "class": "69341fcc1025dbd2e3dbf0c0",
+    "subject": "69341fdb4c8e2d934a1a7b3d",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342048d4a29e95630dfa55",
+    "class": "69341fcc1025dbd2e3dbf0c0",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342048d4a29e95630dfa57",
+    "class": "69341fcc1025dbd2e3dbf0c0",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342050d4a29e95630dfa73",
+    "class": "69341fcc1025dbd2e3dbf0c0",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342050d4a29e95630dfa75",
+    "class": "69341fcc1025dbd2e3dbf0c0",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342066d4a29e95630dfaab",
+    "class": "69341fcc1025dbd2e3dbf0c3",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342066d4a29e95630dfaad",
+    "class": "69341fcc1025dbd2e3dbf0c3",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342066d4a29e95630dfab1",
+    "class": "69341fcc1025dbd2e3dbf0c3",
+    "subject": "69341fdb4c8e2d934a1a7b3d",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342078d4a29e95630dfaf1",
+    "class": "69341fcc1025dbd2e3dbf0c3",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342078d4a29e95630dfaef",
+    "class": "69341fcc1025dbd2e3dbf0c3",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342094d4a29e95630dfb26",
+    "class": "69341fcc1025dbd2e3dbf0c3",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfb90",
+    "class": "69341fcc1025dbd2e3dbf0c6",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfb98",
+    "class": "69341fcc1025dbd2e3dbf0c9",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfb92",
+    "class": "69341fcc1025dbd2e3dbf0c9",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfb94",
+    "class": "69341fcc1025dbd2e3dbf0c9",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfb96",
+    "class": "69341fcc1025dbd2e3dbf0c9",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfb9a",
+    "class": "69341fcc1025dbd2e3dbf0cc",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfba2",
+    "class": "69341fcc1025dbd2e3dbf0cc",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfba4",
+    "class": "69341fcc1025dbd2e3dbf0cc",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfba6",
+    "class": "69341fcc1025dbd2e3dbf0cc",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfba8",
+    "class": "69341fcc1025dbd2e3dbf0c6",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfbaa",
+    "class": "69341fcc1025dbd2e3dbf0c6",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342315d4a29e95630dfbac",
+    "class": "69341fcc1025dbd2e3dbf0c6",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342336d4a29e95630dfbcc",
+    "class": "69341fcc1025dbd2e3dbf0c6",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342336d4a29e95630dfbce",
+    "class": "69341fcc1025dbd2e3dbf0cc",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342336d4a29e95630dfbd0",
+    "class": "69341fcc1025dbd2e3dbf0c6",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342336d4a29e95630dfbd2",
+    "class": "69341fcc1025dbd2e3dbf0c9",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342336d4a29e95630dfbd4",
+    "class": "69341fcc1025dbd2e3dbf0c9",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342336d4a29e95630dfbd6",
+    "class": "69341fcc1025dbd2e3dbf0cc",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 4,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc0e",
+    "class": "69341fcc1025dbd2e3dbf0cf",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc10",
+    "class": "69341fcc1025dbd2e3dbf0cf",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc12",
+    "class": "69341fcc1025dbd2e3dbf0cf",
+    "subject": "69341fdb4c8e2d934a1a7b49",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc14",
+    "class": "69341fcc1025dbd2e3dbf0d2",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc16",
+    "class": "69341fcc1025dbd2e3dbf0d2",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc18",
+    "class": "69341fcc1025dbd2e3dbf0d2",
+    "subject": "69341fdb4c8e2d934a1a7b49",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc1e",
+    "class": "69341fcc1025dbd2e3dbf0d5",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc22",
+    "class": "69341fcc1025dbd2e3dbf0d5",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc24",
+    "class": "69341fcc1025dbd2e3dbf0d5",
+    "subject": "69341fdb4c8e2d934a1a7b49",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc26",
+    "class": "69341fcc1025dbd2e3dbf0d8",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc28",
+    "class": "69341fcc1025dbd2e3dbf0d8",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342358d4a29e95630dfc2a",
+    "class": "69341fcc1025dbd2e3dbf0d8",
+    "subject": "69341fdb4c8e2d934a1a7b49",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc6e",
+    "class": "69341fcc1025dbd2e3dbf0cf",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc70",
+    "class": "69341fcc1025dbd2e3dbf0cf",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc72",
+    "class": "69341fcc1025dbd2e3dbf0cf",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc74",
+    "class": "69341fcc1025dbd2e3dbf0d2",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc76",
+    "class": "69341fcc1025dbd2e3dbf0d5",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc78",
+    "class": "69341fcc1025dbd2e3dbf0d5",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc7f",
+    "class": "69341fcc1025dbd2e3dbf0d5",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc81",
+    "class": "69341fcc1025dbd2e3dbf0d8",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc84",
+    "class": "69341fcc1025dbd2e3dbf0d8",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc86",
+    "class": "69341fcc1025dbd2e3dbf0d8",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc88",
+    "class": "69341fcc1025dbd2e3dbf0d2",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "69342374d4a29e95630dfc8a",
+    "class": "69341fcc1025dbd2e3dbf0d2",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 6,
+    "__v": 0
+  },
+  {
+    "_id": "693423c9d4a29e95630dfccc",
+    "class": "69341fcc1025dbd2e3dbf0db",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "693423c9d4a29e95630dfcce",
+    "class": "69341fcc1025dbd2e3dbf0db",
+    "subject": "69341fdb4c8e2d934a1a7b3d",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "693423c9d4a29e95630dfcd2",
+    "class": "69341fcc1025dbd2e3dbf0de",
+    "subject": "69341fdb4c8e2d934a1a7b3d",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "693423c9d4a29e95630dfcd0",
+    "class": "69341fcc1025dbd2e3dbf0de",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "693423e2d4a29e95630dfd16",
+    "class": "69341fcc1025dbd2e3dbf0db",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693423e2d4a29e95630dfd18",
+    "class": "69341fcc1025dbd2e3dbf0db",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693423e2d4a29e95630dfd1a",
+    "class": "69341fcc1025dbd2e3dbf0db",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693423e2d4a29e95630dfd1c",
+    "class": "69341fcc1025dbd2e3dbf0de",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693423e2d4a29e95630dfd1e",
+    "class": "69341fcc1025dbd2e3dbf0de",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693423e2d4a29e95630dfd20",
+    "class": "69341fcc1025dbd2e3dbf0de",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693423f3d4a29e95630dfd4a",
+    "class": "69341fcc1025dbd2e3dbf0db",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "693423f3d4a29e95630dfd4c",
+    "class": "69341fcc1025dbd2e3dbf0db",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "693423f3d4a29e95630dfd4e",
+    "class": "69341fcc1025dbd2e3dbf0de",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "693423f3d4a29e95630dfd50",
+    "class": "69341fcc1025dbd2e3dbf0de",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "69342413d4a29e95630dfd90",
+    "class": "69341fcc1025dbd2e3dbf0e1",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342413d4a29e95630dfd92",
+    "class": "69341fcc1025dbd2e3dbf0e4",
+    "subject": "69341fda4c8e2d934a1a7b3a",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342424d4a29e95630dfdba",
+    "class": "69341fcc1025dbd2e3dbf0e1",
+    "subject": "69341fdb4c8e2d934a1a7b3d",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "69342424d4a29e95630dfdbc",
+    "class": "69341fcc1025dbd2e3dbf0e4",
+    "subject": "69341fdb4c8e2d934a1a7b3d",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "69342456d4a29e95630dfe0a",
+    "class": "69341fcc1025dbd2e3dbf0e1",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "69342456d4a29e95630dfe10",
+    "class": "69341fcc1025dbd2e3dbf0e1",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "69342456d4a29e95630dfe0c",
+    "class": "69341fcc1025dbd2e3dbf0e4",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "69342456d4a29e95630dfe0e",
+    "class": "69341fcc1025dbd2e3dbf0e4",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 3,
+    "__v": 0
+  },
+  {
+    "_id": "693428ffd4a29e95630dfe67",
+    "class": "69341fcc1025dbd2e3dbf0e1",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "69342912d4a29e95630dfe8e",
+    "class": "69341fcc1025dbd2e3dbf0e1",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342944d4a29e95630dfec1",
+    "class": "69341fcc1025dbd2e3dbf0e4",
+    "subject": "69341fdb4c8e2d934a1a7b40",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "6934295cd4a29e95630dfef5",
+    "class": "69341fcc1025dbd2e3dbf0e4",
+    "subject": "69341fdb4c8e2d934a1a7b43",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "6934295cd4a29e95630dfef7",
+    "class": "69341fcc1025dbd2e3dbf0e4",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693429b0d4a29e95630dff5f",
+    "class": "69341fcc1025dbd2e3dbf0e7",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 5,
+    "__v": 0
+  },
+  {
+    "_id": "693429b0d4a29e95630dff67",
+    "class": "69341fcc1025dbd2e3dbf0ea",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 5,
+    "__v": 0
+  },
+  {
+    "_id": "693429b0d4a29e95630dff61",
+    "class": "69341fcc1025dbd2e3dbf0e7",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 5,
+    "__v": 0
+  },
+  {
+    "_id": "693429b0d4a29e95630dff63",
+    "class": "69341fcc1025dbd2e3dbf0ea",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 5,
+    "__v": 0
+  },
+  {
+    "_id": "693429b0d4a29e95630dff69",
+    "class": "69341fcc1025dbd2e3dbf0ed",
+    "subject": "69341fda4c8e2d934a1a7b34",
+    "hoursPerWeek": 5,
+    "__v": 0
+  },
+  {
+    "_id": "693429b0d4a29e95630dff65",
+    "class": "69341fcc1025dbd2e3dbf0ed",
+    "subject": "69341fda4c8e2d934a1a7b37",
+    "hoursPerWeek": 5,
+    "__v": 0
+  },
+  {
+    "_id": "693429c3d4a29e95630dff9e",
+    "class": "69341fcc1025dbd2e3dbf0e7",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693429c3d4a29e95630dffa0",
+    "class": "69341fcc1025dbd2e3dbf0ea",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693429c3d4a29e95630dffa2",
+    "class": "69341fcc1025dbd2e3dbf0ed",
+    "subject": "69341fdb4c8e2d934a1a7b46",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "693429e2d4a29e95630dffe2",
+    "class": "69341fcc1025dbd2e3dbf0e7",
+    "subject": "69341fdb4c8e2d934a1a7b4c",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "693429e2d4a29e95630dffe4",
+    "class": "69341fcc1025dbd2e3dbf0ea",
+    "subject": "69341fdb4c8e2d934a1a7b4c",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "693429f9d4a29e95630e0018",
+    "class": "69341fcc1025dbd2e3dbf0ea",
+    "subject": "69341fdb4c8e2d934a1a7b4f",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "693429f9d4a29e95630e001a",
+    "class": "69341fcc1025dbd2e3dbf0ed",
+    "subject": "69341fdb4c8e2d934a1a7b4f",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342a0ed4a29e95630e004e",
+    "class": "69341fcc1025dbd2e3dbf0e7",
+    "subject": "69341fdb4c8e2d934a1a7b49",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342a0ed4a29e95630e0050",
+    "class": "69341fcc1025dbd2e3dbf0ed",
+    "subject": "69341fdb4c8e2d934a1a7b49",
+    "hoursPerWeek": 10,
+    "__v": 0
+  },
+  {
+    "_id": "69342a23d4a29e95630e0083",
+    "class": "69341fcc1025dbd2e3dbf0e7",
+    "subject": "69341fdb4c8e2d934a1a7b4f",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "69342a2ed4a29e95630e009e",
+    "class": "69341fcc1025dbd2e3dbf0ea",
+    "subject": "69341fdb4c8e2d934a1a7b49",
+    "hoursPerWeek": 9,
+    "__v": 0
+  },
+  {
+    "_id": "69342a43d4a29e95630e00dd",
+    "class": "69341fcc1025dbd2e3dbf0ed",
+    "subject": "69341fdb4c8e2d934a1a7b4c",
+    "hoursPerWeek": 9,
+    "__v": 0
+  }
+]

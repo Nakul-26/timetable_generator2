@@ -238,12 +238,12 @@ function ManageClass() {
                       </>
                     ) : (
                       <>
-                        <button
+                        {/* <button
                           onClick={() => handleOpenModal(classItem)}
                           className="secondary-btn"
                         >
                           Assignments
-                        </button>
+                        </button> */}
                         <button
                           onClick={() => handleEdit(classItem)}
                           className="primary-btn"

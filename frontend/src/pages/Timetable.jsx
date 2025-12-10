@@ -9,9 +9,15 @@ function Timetable() {
   const [bestScore, setBestScore] = useState(null);
   const [facultyDailyHours, setFacultyDailyHours] = useState(null);
 
+  // New state for async generation
+  const [taskId, setTaskId] = useState(null);
+  const [progress, setProgress] = useState(0);
+
   const [classes, setClasses] = useState([]);
   const [faculties, setFaculties] = useState([]);
   const [subjects, setSubjects] = useState([]);
+
+  const [combos, setCombos] = useState([]);
 
   // Filters
   const [showFilters, setShowFilters] = useState(false);
@@ -27,14 +33,16 @@ function Timetable() {
 
   const fetchAll = async () => {
     try {
-      const [classRes, facRes, subRes] = await Promise.all([
+      const [classRes, facRes, subRes, comboRes] = await Promise.all([
         axios.get("/classes"),
         axios.get("/faculties"),
         axios.get("/subjects"),
+        axios.get("/teacher-subject-combos") // New fetch
       ]);
       setClasses(classRes.data);
       setFaculties(facRes.data);
       setSubjects(subRes.data);
+      setCombos(comboRes.data); // New state update
     } catch (err) {
       setError("Failed to fetch data.");
     }
@@ -44,6 +52,53 @@ function Timetable() {
     fetchAll();
     fetchLatest();
   }, []);
+
+  useEffect(() => {
+    if (!taskId) return;
+
+    const poll = setInterval(async () => {
+      try {
+        const res = await api.get(`/generation-status/${taskId}`);
+        const { status, progress, result, error, partialData } = res.data;
+
+        if (status === 'running') {
+          setProgress(progress);
+          if(partialData) {
+            setTimetable(partialData);
+          }
+
+        } else { // status is 'completed' or 'error'
+          if (status === 'error') {
+            setError(error);
+          }
+          // Always try to set the timetable if available, regardless of final status
+          if (result) {
+            setTimetable(result);
+            setBestScore(result?.score || null);
+            setFacultyDailyHours(result?.faculty_daily_hours || null);
+          } else if (partialData) { // Fallback to partialData if no full result
+            setTimetable(partialData);
+            // bestScore and facultyDailyHours are not part of partialData from progressCallback, clear them.
+            setBestScore(null); 
+            setFacultyDailyHours(null);
+          } else {
+             setTimetable(null); // Clear if absolutely no data available
+          }
+
+          setLoading(false);
+          setTaskId(null);
+          clearInterval(poll);
+        }
+      } catch (e) {
+        setError("Failed to get generation status.");
+        setLoading(false);
+        setTaskId(null);
+        clearInterval(poll);
+      }
+    }, 2000); // poll every 2 seconds
+
+    return () => clearInterval(poll);
+  }, [taskId]);
 
   // Handle dropdown change in empty timetable
   const handleSlotChange = (classId, day, hour, comboId) => {
@@ -94,7 +149,7 @@ function Timetable() {
                         <option value="">
                           --Select faculty-subject--
                         </option>
-                        {timetable && timetable.combos
+                        {combos
                       .map((c) => {
                         const fac = faculties.find(f => f._id === c.faculty_id);
                         const sub = subjects.find(s => s._id === c.subject_id);
@@ -146,16 +201,29 @@ function Timetable() {
 
   const generateTimetable = async () => {
     setLoading(true);
-    deleteAllTimetables();
     setError("");
+    setTimetable(null);
+    setProgress(0);
+    setTaskId(null);
+
     try {
       const payload = transformFixedSlots(fixedSlots);
-      await api.post("/generate", { fixedSlots: payload }); // ✅ include fixed slots
-      await fetchLatest();
+      const classElectiveGroups = JSON.parse(localStorage.getItem('classElectiveGroups')) || [];
+      const res = await api.post("/generate", { fixedSlots: payload, classElectiveGroups });
+      setTaskId(res.data.taskId);
     } catch (e) {
-      setError(e.response?.data?.error || "Failed to generate timetable");
+      setError(e.response?.data?.error || "Failed to start timetable generation");
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const stopGeneration = async () => {
+    if (!taskId) return;
+    try {
+      await api.post(`/stop-generator/${taskId}`);
+    } catch (e) {
+      console.error("Failed to send stop signal", e);
+    }
   };
 
   const fetchLatest = async () => {
@@ -179,7 +247,8 @@ function Timetable() {
     setError("");
     try {
       const payload = transformFixedSlots(fixedSlots);
-      const res = await api.post("/result/regenerate", { fixedSlots: payload }); // ✅ include fixed slots
+      const classElectiveGroups = JSON.parse(localStorage.getItem('classElectiveGroups')) || [];
+      const res = await api.post("/result/regenerate", { fixedSlots: payload, classElectiveGroups }); // ✅ include fixed slots and elective groups
       if (res.data?.ok) {
         setTimetable(res.data);
         setBestScore(res.data.score || null);
@@ -236,7 +305,7 @@ function Timetable() {
   };
 
   const renderClassTable = (classId, slots) => {
-    if (!timetable || !timetable.combos) {
+    if (!timetable || !timetable.class_timetables) {
       return null;
     }
     return (
@@ -264,7 +333,7 @@ function Timetable() {
                     return <td key={p}>-</td>;
                   }
 
-                  const combo = timetable.combos.find((c) => c._id === slotId);
+                  const combo = combos.find((c) => String(c._id) === String(slotId));
 
                   if (!combo) {
                     return <td key={p}>{slotId}</td>;
@@ -373,9 +442,18 @@ function Timetable() {
     <div className="manage-container">
       <h2>Timetable Generator</h2>
 
+      {loading && (
+        <div style={{margin: "10px 0"}}>
+          <progress value={progress} max="100" style={{width: "100%"}} />
+          <span>  {progress}%</span>
+        </div>
+      )}
       <div className="actions-bar">
         <button className="primary-btn" onClick={generateTimetable} disabled={loading}>
           {loading ? "Generating..." : "Generate Timetable"}
+        </button>
+        <button className="danger-btn" onClick={stopGeneration} disabled={!loading}>
+          Stop
         </button>
         <button className="secondary-btn" onClick={fetchLatest} disabled={loading}>
           Fetch Latest

@@ -1,0 +1,101 @@
+[
+  {
+    "_id": "69341fda4c8e2d934a1a7b34",
+    "id": "ENGLISH",
+    "name": "ENGLISH",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fda4c8e2d934a1a7b37",
+    "id": "KANNADA",
+    "name": "KANNADA",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fda4c8e2d934a1a7b3a",
+    "id": "PHYSICS",
+    "name": "PHYSICS",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b3d",
+    "id": "CHEMISTRY",
+    "name": "CHEMISTRY",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b40",
+    "id": "MATHS",
+    "name": "MATHS",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b43",
+    "id": "BIOLOGY",
+    "name": "BIOLOGY",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b46",
+    "id": "COMPUTER",
+    "name": "COMPUTER",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b49",
+    "id": "ACCOUNTS",
+    "name": "ACCOUNTS",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b4c",
+    "id": "ECONOMICS",
+    "name": "ECONOMICS",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b4f",
+    "id": "BUS STD",
+    "name": "BUS STD",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  },
+  {
+    "_id": "69341fdb4c8e2d934a1a7b52",
+    "id": "HINDI",
+    "name": "HINDI",
+    "sem": 1,
+    "type": "theory",
+    "combined_classes": [],
+    "__v": 0
+  }
+]

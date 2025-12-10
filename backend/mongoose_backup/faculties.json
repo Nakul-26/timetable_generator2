@@ -1,0 +1,224 @@
+[
+  {
+    "_id": "69341faa7ad3ed3887b8a833",
+    "id": "ARD",
+    "name": "ARD",
+    "__v": 0
+  },
+  {
+    "_id": "69341faa7ad3ed3887b8a836",
+    "id": "ML",
+    "name": "ML",
+    "__v": 0
+  },
+  {
+    "_id": "69341faa7ad3ed3887b8a839",
+    "id": "SPN",
+    "name": "SPN",
+    "__v": 0
+  },
+  {
+    "_id": "69341faa7ad3ed3887b8a83c",
+    "id": "NK",
+    "name": "NK",
+    "__v": 0
+  },
+  {
+    "_id": "69341faa7ad3ed3887b8a83f",
+    "id": "KSG",
+    "name": "KSG",
+    "__v": 0
+  },
+  {
+    "_id": "69341faa7ad3ed3887b8a842",
+    "id": "MN",
+    "name": "MN",
+    "__v": 0
+  },
+  {
+    "_id": "69341faa7ad3ed3887b8a845",
+    "id": "ASK",
+    "name": "ASK",
+    "__v": 0
+  },
+  {
+    "_id": "69341faa7ad3ed3887b8a848",
+    "id": "BRV",
+    "name": "BRV",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a84b",
+    "id": "SN",
+    "name": "SN",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a84e",
+    "id": "MS",
+    "name": "MS",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a851",
+    "id": "USA",
+    "name": "USA",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a854",
+    "id": "VM",
+    "name": "VM",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a857",
+    "id": "VV",
+    "name": "VV",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a85a",
+    "id": "SG",
+    "name": "SG",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a85d",
+    "id": "JK",
+    "name": "JK",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a860",
+    "id": "NNK",
+    "name": "NNK",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a863",
+    "id": "YPN",
+    "name": "YPN",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a866",
+    "id": "RM",
+    "name": "RM",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a869",
+    "id": "RSK",
+    "name": "RSK",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a86c",
+    "id": "SMS",
+    "name": "SMS",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a86f",
+    "id": "MHK",
+    "name": "MHK",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a872",
+    "id": "HN",
+    "name": "HN",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a875",
+    "id": "SRP",
+    "name": "SRP",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a878",
+    "id": "ANB",
+    "name": "ANB",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a87b",
+    "id": "TNR",
+    "name": "TNR",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a87e",
+    "id": "ATP",
+    "name": "ATP",
+    "__v": 0
+  },
+  {
+    "_id": "69341fab7ad3ed3887b8a881",
+    "id": "SJ",
+    "name": "SJ",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a884",
+    "id": "SPB",
+    "name": "SPB",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a887",
+    "id": "GCS",
+    "name": "GCS",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a88a",
+    "id": "RNK",
+    "name": "RNK",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a88d",
+    "id": "SRK",
+    "name": "SRK",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a890",
+    "id": "NM",
+    "name": "NM",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a893",
+    "id": "GS",
+    "name": "GS",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a896",
+    "id": "GCV",
+    "name": "GCV",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a899",
+    "id": "RP",
+    "name": "RP",
+    "__v": 0
+  },
+  {
+    "_id": "69341fac7ad3ed3887b8a89c",
+    "id": "KLG",
+    "name": "KLG",
+    "__v": 0
+  },
+  {
+    "_id": "69341fc0d4a29e95630df99d",
+    "id": "RM(HIN)",
+    "name": "RM(HIN)",
+    "__v": 0
+  }
+]

@@ -1,3 +1,18 @@
+
+
+
+
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// THIS IS OUT DATED
+// 
+// 
+// WARNING: Running this script will DELETE existing data in
+// the Subject, Faculty, Class, and Combo collections!
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';

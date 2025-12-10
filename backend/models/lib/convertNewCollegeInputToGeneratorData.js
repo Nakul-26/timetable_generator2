@@ -1,30 +1,21 @@
 // convertNewCollegeInputToGeneratorData.js
-//
-// FINAL UPDATED VERSION
-// ✔ class-specific required hours -> class.subject_hours
-// ✔ subjects have fallback no_of_hours_per_week
-// ✔ combo-hours used only for teacher splitting
-// --------------------------------------------------------------
+// FINAL UPDATED VERSION WITH ELECTIVE GROUP STRUCTURE SUPPORT
+//-------------------------------------------------------------
 
 export function convertNewCollegeInput({
   classes,
   subjects,
   teachers,
-  classSubjects,          // { classId, subjectId, hoursPerWeek }
-  classTeachers,          // { classId, teacherId }
-  teacherSubjectCombos = []
+  classSubjects,
+  classTeachers,
+  teacherSubjectCombos = [],
+  classElectiveGroups = []  // 🔹 NEW
 }) {
-  console.log('--- Input Data ---');
-  console.log('Classes:', JSON.stringify(classes, null, 2));
-  console.log('Subjects:', JSON.stringify(subjects, null, 2));
-  console.log('Teachers:', JSON.stringify(teachers, null, 2));
-  console.log('Class-Subjects:', JSON.stringify(classSubjects, null, 2));
-  console.log('Class-Teachers:', JSON.stringify(classTeachers, null, 2));
-  console.log('Teacher-Subject Combos:', JSON.stringify(teacherSubjectCombos, null, 2));
-  console.log('--------------------');
+
+  console.log("Electives:", JSON.stringify(classElectiveGroups, null, 2));
 
   //------------------------------------------------------------
-  // Normalize IDs
+  // Normalize
   //------------------------------------------------------------
   classes = classes.map(c => ({ ...c, _id: String(c._id) }));
   subjects = subjects.map(s => ({ ...s, _id: String(s._id) }));
@@ -46,22 +37,9 @@ export function convertNewCollegeInput({
     subjectId: String(x.subjectId)
   }));
 
-  console.log('--- Normalized Data ---');
-  console.log('Normalized Class-Subjects:', JSON.stringify(classSubjects, null, 2));
-  console.log('Normalized Class-Teachers:', JSON.stringify(classTeachers, null, 2));
-  console.log('Normalized Teacher-Subject Combos:', JSON.stringify(teacherSubjectCombos, null, 2));
-  console.log('-----------------------');
 
   //------------------------------------------------------------
-  // Faculties
-  //------------------------------------------------------------
-  const faculties = teachers.map(t => ({
-    _id: t._id,
-    name: t.name || ""
-  }));
-
-  //------------------------------------------------------------
-  // Build lookup maps
+  // Lookup maps
   //------------------------------------------------------------
   const subjectsPerClass = {};
   const teachersPerClass = {};
@@ -79,23 +57,20 @@ export function convertNewCollegeInput({
     teachersPerClass[ct.classId].push(ct.teacherId);
   }
 
-  function teacherCanTeach(teacherId, subjectId) {
-    return teacherSubjectCombos.some(
-      x => x.teacherId === teacherId && x.subjectId === subjectId
-    );
+  function teacherCanTeach(tid, sid) {
+    return teacherSubjectCombos.some(c => c.teacherId === tid && c.subjectId === sid);
   }
 
+
   //------------------------------------------------------------
-  // Subjects (fallback hours included)
+  // Subjects
   //------------------------------------------------------------
   const subjectsOut = subjects.map(s => {
     const hoursList = classSubjects
       .filter(cs => cs.subjectId === s._id)
       .map(cs => Number(cs.hoursPerWeek || 0));
 
-    const no_of_hours_per_week = hoursList.length
-      ? Math.max(...hoursList)
-      : 0;
+    const no_of_hours_per_week = hoursList.length ? Math.max(...hoursList) : 0;
 
     return {
       _id: s._id,
@@ -109,8 +84,9 @@ export function convertNewCollegeInput({
     };
   });
 
+
   //------------------------------------------------------------
-  // Classes - include subject_hours
+  // Classes
   //------------------------------------------------------------
   const classesOut = classes.map(c => {
     const classId = c._id;
@@ -132,12 +108,49 @@ export function convertNewCollegeInput({
       days_per_week: c.days_per_week || 6,
       assigned_teacher_subject_combos: [],
       total_class_hours: 0,
-      subject_hours
+      subject_hours,
+      elective_groups: [] // 🔹 NEW
     };
   });
 
+
   //------------------------------------------------------------
-  // COMBO GENERATION
+  // Electives processing
+  //------------------------------------------------------------
+  let electiveIndex = 1;
+
+  for (const eg of classElectiveGroups) {
+    const classId = String(eg.classId);
+    const classObj = classesOut.find(c => c._id === classId);
+    if (!classObj) continue;
+
+    const subjects = (eg.subjects || []).map(String).filter(id =>
+      subjectsOut.some(s => s._id === id)
+    );
+
+    if (subjects.length < 2) continue; // must be at least two subjects to be parallel electives
+
+    const teachers = [];
+    for (const subId of subjects) {
+      const tlist = teachersPerClass[classId] || [];
+      for (const tid of tlist) {
+        if (teacherCanTeach(tid, subId)) {
+          teachers.push(tid);
+          break;
+        }
+      }
+    }
+
+    classObj.elective_groups.push({
+      groupId: `E${electiveIndex++}`, // auto ID
+      subjects,
+      teachers: [...new Set(teachers)]
+    });
+  }
+
+
+  //------------------------------------------------------------
+  // Generate teacher/time combos (unchanged)
   //------------------------------------------------------------
   const combos = [];
   let comboIndex = 1;
@@ -154,33 +167,28 @@ export function convertNewCollegeInput({
       const hoursRequired = cls.subject_hours[subjectId] || 0;
       if (hoursRequired <= 0) continue;
 
-      const eligibleTeachers = classTeach.filter(tId =>
-        teacherCanTeach(tId, subjectId)
+      const eligibleTeachers = classTeach.filter(tid =>
+        teacherCanTeach(tid, subjectId)
       );
       if (eligibleTeachers.length === 0) continue;
 
-      const splitHours = hoursRequired / eligibleTeachers.length;
+      // SIMPLE VERSION: use first eligible teacher for that subject+class
+      const t = eligibleTeachers[0];
 
-      for (const teacherId of eligibleTeachers) {
-        combos.push({
-          _id: "C" + comboIndex++,
-          faculty_id: teacherId,
-          subject_id: subjectId,
-          class_ids: [classId],
-          hours_per_week: splitHours,
-          hours_per_class: { [classId]: splitHours },
-          combo_name: `T${teacherId}_S${subjectId}_C${classId}`
-        });
-      }
+      combos.push({
+        _id: "C" + comboIndex++,
+        faculty_id: t,
+        subject_id: subjectId,
+        class_ids: [classId],
+        hours_per_week: hoursRequired,
+        hours_per_class: { [classId]: hoursRequired },
+        combo_name: `T${t}_S${subjectId}_C${classId}`
+      });
     }
   }
 
-  console.log('--- Generated Combos (teacher splits) ---');
-  console.log(JSON.stringify(combos, null, 2));
-  console.log('----------------------------------------');
-
   //------------------------------------------------------------
-  // Attach combos + calculate total_class_hours from subject_hours
+  // Attach
   //------------------------------------------------------------
   for (const cls of classesOut) {
     cls.assigned_teacher_subject_combos = combos
@@ -191,15 +199,50 @@ export function convertNewCollegeInput({
       .reduce((a, b) => a + b, 0);
   }
 
-  console.log('--- Final Output ---');
-  console.log('Faculties:', JSON.stringify(faculties, null, 2));
-  console.log('Subjects:', JSON.stringify(subjectsOut, null, 2));
-  console.log('Classes:', JSON.stringify(classesOut, null, 2));
-  console.log('Combos:', JSON.stringify(combos, null, 2));
-  console.log('--------------------');
 
+  //------------------------------------------------------------
+  // Fix subject_hours for elective groups (avoid double-counting)
+  //------------------------------------------------------------
+  for (const cls of classesOut) {
+    let correctedHours = 0;
+    const seenSubjects = new Set();
+
+    // If no electives, keep original
+    if (!cls.elective_groups || cls.elective_groups.length === 0) {
+      cls.total_class_hours = Object.values(cls.subject_hours).reduce((a,b)=>a+b,0);
+      continue;
+    }
+
+    // Add non-elective subjects normally
+    for (const [subId, hrs] of Object.entries(cls.subject_hours)) {
+      const isInElective = cls.elective_groups.some(g =>
+        (g.subjects || []).map(String).includes(String(subId))
+      );
+      if (!isInElective) {
+        correctedHours += hrs;
+        seenSubjects.add(subId);
+      }
+    }
+
+    // Add each elective group ONLY ONCE
+    for (const eg of cls.elective_groups) {
+      const subs = eg.subjects || [];
+      if (subs.length === 0) continue;
+
+      // All electives in group share same hours — take first
+      const rep = subs[0];
+      const hrs = cls.subject_hours[rep] || 0;
+
+      correctedHours += hrs;
+    }
+
+    cls.total_class_hours = correctedHours;
+  }
+
+
+  //------------------------------------------------------------
   return {
-    faculties,
+    faculties: teachers.map(t => ({ _id: t._id, name: t.name || "" })),
     subjects: subjectsOut,
     classes: classesOut,
     combos

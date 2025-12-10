@@ -22,6 +22,7 @@ const Navbar = () => {
         <NavLink to="/classes" className="nav-item">Classes</NavLink>
         <NavLink to="/class-subjects" className="nav-item">Class-Subjects</NavLink>
         <NavLink to="/class-faculties" className="nav-item">Class-Faculties</NavLink>
+        <NavLink to="/class-elective-subjects" className="nav-item">Elective Subjects</NavLink>
         <NavLink to="/teacher-subject-combos" className="nav-item">Teacher-Subject Combos</NavLink>
         <NavLink to="/timetable" className="nav-item">Timetable</NavLink>
         {user && (

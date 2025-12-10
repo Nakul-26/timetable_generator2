@@ -10,6 +10,7 @@ import AddClass from './pages/Class/AddClass';
 import ManageClassSubject from './pages/assignments/ManageClassSubject';
 import ManageClassFaculty from './pages/assignments/ManageClassFaculty';
 import ManageTeacherSubject from './pages/assignments/ManageTeacherSubject';
+import ManageElectiveSubjects from './pages/assignments/ManageElectiveSubjects';
 import Navbar from './components/Navbar2';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
@@ -38,6 +39,7 @@ const HomePage = () => (
       <p>Once your core data is set up, you can manage assignments globally or per-class:</p>
       <ul>
         <li><strong>Global View:</strong> Use the <a href="/class-subjects">Class-Subjects</a> and <a href="/class-faculties">Class-Faculties</a> pages to manage all assignments in one place.</li>
+        <li><strong>Elective Subjects:</strong> Use the <a href="/class-elective-subjects">Elective Subjects</a> page to define elective subject groups for classes.</li>
         <li><strong>Per-Class View:</strong> Go to the <a href="/classes">Classes</a> page and use the `Assignments` button for a specific class.</li>
       </ul>
     </div>
@@ -77,6 +79,7 @@ function App() {
           <Route path="/classes" element={<PrivateRoute><ClassManager /></PrivateRoute>} />
           <Route path="/class-subjects" element={<PrivateRoute><ManageClassSubject /></PrivateRoute>} />
           <Route path="/class-faculties" element={<PrivateRoute><ManageClassFaculty /></PrivateRoute>} />
+          <Route path="/class-elective-subjects" element={<PrivateRoute><ManageElectiveSubjects /></PrivateRoute>} />
           <Route path="/timetable" element={<PrivateRoute><Timetable /></PrivateRoute>} />
           <Route path="/teacher/add" element={<PrivateRoute><AddTeacher /></PrivateRoute>} />
           <Route path="/subject/add" element={<PrivateRoute><AddSubject /></PrivateRoute>} />

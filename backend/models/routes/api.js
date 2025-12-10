@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import { Worker } from 'worker_threads';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import Faculty from '../Faculty.js';
 import Admin from '../Admin.js';
 import Subject from '../Subject.js';
@@ -15,6 +18,13 @@ import jwt from 'jsonwebtoken';
 import adminAuth from '../../middleware/adminAuth.js';
 import rateLimit from 'express-rate-limit';
 import auth from '../../middleware/auth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const workers = new Map();
+const taskResults = new Map();
+let nextTaskId = 1;
 
 const router = Router();
 const protectedRouter = Router();
@@ -450,11 +460,13 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
 
 
 
+
 // --- Timetable ---
 protectedRouter.post('/generate', async (req, res) => {
   console.log("[POST /generate] Generating timetable using the new college model.");
   try {
-    const { fixedSlots } = req.body;
+    const taskId = nextTaskId++;
+    const { fixedSlots, classElectiveGroups } = req.body;
 
     const allFaculties = await Faculty.find().lean();
     const allSubjects = await Subject.find().lean();
@@ -491,7 +503,8 @@ protectedRouter.post('/generate', async (req, res) => {
         teachers: allFaculties,
         classSubjects,
         classTeachers,
-        teacherSubjectCombos: teacherSubjectMap
+        teacherSubjectCombos: teacherSubjectMap,
+        classElectiveGroups
     });
     
     const { faculties, subjects, classes, combos } = generatorData;
@@ -503,31 +516,83 @@ protectedRouter.post('/generate', async (req, res) => {
       combos: combos.length
     });
 
-    const result = generator.generate({
-      faculties, subjects, classes, combos,
-      DAYS_PER_WEEK: 6, HOURS_PER_DAY: 8,
-      fixed_slots: fixedSlots
+    const worker = new Worker(path.resolve(__dirname, '..', '..', 'workers', 'worker.js'));
+    worker.stdout.pipe(process.stdout);
+    worker.stderr.pipe(process.stderr);
+    workers.set(taskId, worker);
+    taskResults.set(taskId, { status: 'running', progress: 0 });
+
+    worker.postMessage({
+      action: 'GENERATE',
+      payload: {
+        faculties, subjects, classes, combos,
+        DAYS_PER_WEEK: 6, HOURS_PER_DAY: 8,
+        fixed_slots: fixedSlots,
+        taskId
+      }
     });
 
-    if (!result.ok) {
-      console.warn("[POST /generate] Generation failed:", result);
-      return res.status(400).json(result);
-    }
-
-    const rec = new TimetableResult({
-      class_timetables: result.class_timetables,
-      faculty_timetables: result.faculty_timetables,
-      faculty_daily_hours: result.faculty_daily_hours,
-      combos,
+    worker.on('message', (message) => {
+      if (message.type === 'PROGRESS') {
+        taskResults.set(taskId, { status: 'running', progress: message.progress, partialData: message.partialData });
+      } else if (message.type === 'RESULT') {
+        taskResults.set(taskId, { status: 'completed', result: message.data });
+        workers.delete(taskId);
+      } else if (message.type === 'ERROR') {
+        taskResults.set(taskId, { status: 'error', error: message.error });
+        workers.delete(taskId);
+      }
     });
-    await rec.save();
-    console.log("[POST /generate] Saved timetable result");
-    res.json({ ok: true, result });
+
+    worker.on('error', (error) => {
+      console.error(`Worker error for task #${taskId}:`, error);
+      taskResults.set(taskId, { status: 'error', error: error.message });
+      workers.delete(taskId);
+    });
+
+    worker.on('exit', (code) => {
+      if (code !== 0) {
+        console.error(`Worker for task #${taskId} stopped with exit code ${code}`);
+        if (!taskResults.has(taskId) || taskResults.get(taskId).status === 'running') {
+          taskResults.set(taskId, { status: 'error', error: `Worker stopped with exit code ${code}` });
+        }
+      }
+      workers.delete(taskId);
+    });
+
+    res.json({ taskId });
+
   } catch (e) {
-    console.error("Error during timetable generation:", e);
+    console.error("Error during timetable generation setup:", e);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+protectedRouter.post('/stop-generator/:taskId', (req, res) => {
+    const { taskId } = req.params;
+    const worker = workers.get(parseInt(taskId));
+    if (worker) {
+        worker.postMessage({ action: 'STOP' });
+        res.status(200).send({ message: `Stop signal sent to task #${taskId}.` });
+    } else {
+        res.status(404).send({ message: `Task #${taskId} not found or already completed.` });
+    }
+});
+
+protectedRouter.get('/generation-status/:taskId', (req, res) => {
+    const { taskId } = req.params;
+    const result = taskResults.get(parseInt(taskId));
+    if (result) {
+        res.json(result);
+        if (result.status === 'completed' || result.status === 'error') {
+            // Clean up old task results after some time
+            setTimeout(() => taskResults.delete(parseInt(taskId)), 60000);
+        }
+    } else {
+        res.status(404).send({ message: `Task #${taskId} not found.` });
+    }
+});
+
 
 protectedRouter.get('/result/latest', async (req, res) => {
   console.log("[GET /result/latest] Fetching latest timetable result");
@@ -542,7 +607,7 @@ protectedRouter.get('/result/latest', async (req, res) => {
 
 protectedRouter.post("/result/regenerate", async (req, res) => {
   try {
-    const { fixedSlots } = req.body;
+    const { fixedSlots, classElectiveGroups } = req.body;
 
     const allFaculties = await Faculty.find().lean();
     const allSubjects = await Subject.find().lean();
@@ -577,7 +642,8 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
         teachers: allFaculties,
         classSubjects,
         classTeachers,
-        teacherSubjectCombos: teacherSubjectMap
+        teacherSubjectCombos: teacherSubjectMap,
+        classElectiveGroups
     });
     
     const { faculties, subjects, classes, combos } = generatorData;
@@ -636,4 +702,3 @@ protectedRouter.delete("/timetables", async (req, res) => {
 router.use(protectedRouter);
 
 export default router;
-

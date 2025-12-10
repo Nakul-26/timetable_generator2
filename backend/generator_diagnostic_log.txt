@@ -1,0 +1,436 @@
+
+--- INITIAL DIAGNOSTIC DUMP ---
+
+### Class: I PU - Science (PCMCs) - J1 (ID: 69341fcc1025dbd2e3dbf0c0) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: CHEMISTRY (ID: 69341fdb4c8e2d934a1a7b3d)
+    - Required: 10
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 10
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 4
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 4
+    - Type: theory
+
+### Class: I PU - Science (PCMCs) - J2 (ID: 69341fcc1025dbd2e3dbf0c3) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 10
+    - Type: theory
+  - Subject: CHEMISTRY (ID: 69341fdb4c8e2d934a1a7b3d)
+    - Required: 10
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 4
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 4
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 10
+    - Type: theory
+
+### Class: I PU - Science (PCMB) - J3 (ID: 69341fcc1025dbd2e3dbf0c6) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 10
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 10
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 4
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 4
+    - Type: theory
+
+### Class: I PU - Science (PCMB) - J4 (ID: 69341fcc1025dbd2e3dbf0c9) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 10
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 10
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 4
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 4
+    - Type: theory
+
+### Class: I PU - Science (PCMB) - J5 (ID: 69341fcc1025dbd2e3dbf0cc) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 10
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 10
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 4
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 4
+    - Type: theory
+
+### Class: I PU - Commerce - J6 (ID: 69341fcc1025dbd2e3dbf0cf) ###
+- Configured total_class_hours (from preprocess): 38
+- Recalculated total required hours: 38
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 6
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+  - Subject: ACCOUNTS (ID: 69341fdb4c8e2d934a1a7b49)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 6
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 6
+    - Type: theory
+
+### Class: I PU - Commerce - J7 (ID: 69341fcc1025dbd2e3dbf0d2) ###
+- Configured total_class_hours (from preprocess): 38
+- Recalculated total required hours: 38
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 6
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+  - Subject: ACCOUNTS (ID: 69341fdb4c8e2d934a1a7b49)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 6
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 6
+    - Type: theory
+
+### Class: I PU - Commerce - J8 (ID: 69341fcc1025dbd2e3dbf0d5) ###
+- Configured total_class_hours (from preprocess): 38
+- Recalculated total required hours: 38
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 6
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+  - Subject: ACCOUNTS (ID: 69341fdb4c8e2d934a1a7b49)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 6
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 6
+    - Type: theory
+
+### Class: I PU - Commerce (Implied) - J9 (ID: 69341fcc1025dbd2e3dbf0d8) ###
+- Configured total_class_hours (from preprocess): 38
+- Recalculated total required hours: 38
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 6
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+  - Subject: ACCOUNTS (ID: 69341fdb4c8e2d934a1a7b49)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 6
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 6
+    - Type: theory
+
+### Class: II PU - Science (PCMB & Cs) - S1 (ID: 69341fcc1025dbd2e3dbf0db) ###
+- Configured total_class_hours (from preprocess): 44
+- Recalculated total required hours: 44
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): [
+  {
+    "groupId": "E1",
+    "subjects": [
+      "69341fdb4c8e2d934a1a7b43",
+      "69341fdb4c8e2d934a1a7b46"
+    ],
+    "teachers": [
+      "69341fab7ad3ed3887b8a86f",
+      "69341fab7ad3ed3887b8a878"
+    ]
+  }
+]
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: CHEMISTRY (ID: 69341fdb4c8e2d934a1a7b3d)
+    - Required: 10
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 9
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 9
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 9
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 3
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 3
+    - Type: theory
+
+### Class: II PU - Science (PCMB & Cs) - S2 (ID: 69341fcc1025dbd2e3dbf0de) ###
+- Configured total_class_hours (from preprocess): 44
+- Recalculated total required hours: 44
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): [
+  {
+    "groupId": "E2",
+    "subjects": [
+      "69341fdb4c8e2d934a1a7b43",
+      "69341fdb4c8e2d934a1a7b46"
+    ],
+    "teachers": [
+      "69341fab7ad3ed3887b8a86f",
+      "69341fab7ad3ed3887b8a878"
+    ]
+  }
+]
+  - Subject: CHEMISTRY (ID: 69341fdb4c8e2d934a1a7b3d)
+    - Required: 10
+    - Type: theory
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 9
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 9
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 9
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 3
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 3
+    - Type: theory
+
+### Class: II PU - Science (PCMB only) - S3 (ID: 69341fcc1025dbd2e3dbf0e1) ###
+- Configured total_class_hours (from preprocess): 44
+- Recalculated total required hours: 44
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: CHEMISTRY (ID: 69341fdb4c8e2d934a1a7b3d)
+    - Required: 9
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 3
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 3
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 9
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 10
+    - Type: theory
+
+### Class: II PU - Science (PCMB & Cs) - S4 (ID: 69341fcc1025dbd2e3dbf0e4) ###
+- Configured total_class_hours (from preprocess): 44
+- Recalculated total required hours: 44
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): [
+  {
+    "groupId": "E3",
+    "subjects": [
+      "69341fdb4c8e2d934a1a7b43",
+      "69341fdb4c8e2d934a1a7b46"
+    ],
+    "teachers": [
+      "69341fab7ad3ed3887b8a86f",
+      "69341fab7ad3ed3887b8a878"
+    ]
+  }
+]
+  - Subject: PHYSICS (ID: 69341fda4c8e2d934a1a7b3a)
+    - Required: 10
+    - Type: theory
+  - Subject: CHEMISTRY (ID: 69341fdb4c8e2d934a1a7b3d)
+    - Required: 9
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 3
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 3
+    - Type: theory
+  - Subject: MATHS (ID: 69341fdb4c8e2d934a1a7b40)
+    - Required: 10
+    - Type: theory
+  - Subject: BIOLOGY (ID: 69341fdb4c8e2d934a1a7b43)
+    - Required: 9
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 9
+    - Type: theory
+
+### Class: II PU - Commerce - S5 (ID: 69341fcc1025dbd2e3dbf0e7) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 5
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 5
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 9
+    - Type: theory
+  - Subject: ECONOMICS (ID: 69341fdb4c8e2d934a1a7b4c)
+    - Required: 10
+    - Type: theory
+  - Subject: ACCOUNTS (ID: 69341fdb4c8e2d934a1a7b49)
+    - Required: 10
+    - Type: theory
+  - Subject: BUS STD (ID: 69341fdb4c8e2d934a1a7b4f)
+    - Required: 9
+    - Type: theory
+
+### Class: II PU - Commerce - S6 (ID: 69341fcc1025dbd2e3dbf0ea) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 5
+    - Type: theory
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 5
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 9
+    - Type: theory
+  - Subject: ECONOMICS (ID: 69341fdb4c8e2d934a1a7b4c)
+    - Required: 10
+    - Type: theory
+  - Subject: BUS STD (ID: 69341fdb4c8e2d934a1a7b4f)
+    - Required: 10
+    - Type: theory
+  - Subject: ACCOUNTS (ID: 69341fdb4c8e2d934a1a7b49)
+    - Required: 9
+    - Type: theory
+
+### Class: II PU - Commerce - S7 (ID: 69341fcc1025dbd2e3dbf0ed) ###
+- Configured total_class_hours (from preprocess): 48
+- Recalculated total required hours: 48
+- Available slots (actual empty in table): 48
+- Days per week: 6
+- Elective Groups (from class object): []
+  - Subject: ENGLISH (ID: 69341fda4c8e2d934a1a7b34)
+    - Required: 5
+    - Type: theory
+  - Subject: KANNADA (ID: 69341fda4c8e2d934a1a7b37)
+    - Required: 5
+    - Type: theory
+  - Subject: COMPUTER (ID: 69341fdb4c8e2d934a1a7b46)
+    - Required: 9
+    - Type: theory
+  - Subject: BUS STD (ID: 69341fdb4c8e2d934a1a7b4f)
+    - Required: 10
+    - Type: theory
+  - Subject: ACCOUNTS (ID: 69341fdb4c8e2d934a1a7b49)
+    - Required: 10
+    - Type: theory
+  - Subject: ECONOMICS (ID: 69341fdb4c8e2d934a1a7b4c)
+    - Required: 9
+    - Type: theory
+--- END INITIAL DIAGNOSTIC DUMP ---
