@@ -11,6 +11,8 @@ import ManageClassSubject from './pages/assignments/ManageClassSubject';
 import ManageClassFaculty from './pages/assignments/ManageClassFaculty';
 import ManageTeacherSubject from './pages/assignments/ManageTeacherSubject';
 import ManageElectiveSubjects from './pages/assignments/ManageElectiveSubjects';
+import ManualTimetable from './pages/manual/ManualTimetable.jsx';
+import ProcessInputs from './pages/assignments/ProcessInputs.jsx';
 import Navbar from './components/Navbar2';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
@@ -85,6 +87,8 @@ function App() {
           <Route path="/subject/add" element={<PrivateRoute><AddSubject /></PrivateRoute>} />
           <Route path="/class/add" element={<PrivateRoute><AddClass /></PrivateRoute>} />
           <Route path="/teacher-subject-combos" element={<PrivateRoute><ManageTeacherSubject /></PrivateRoute>} />
+          <Route path="/manual-timetable" element={<PrivateRoute><ManualTimetable /></PrivateRoute>} />
+          <Route path="/process-inputs" element={<PrivateRoute><ProcessInputs /></PrivateRoute>} />
         </Routes>
       </main>
     </div>

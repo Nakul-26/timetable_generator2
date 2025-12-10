@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { MongoClient, ServerApiVersion } from "mongodb";
 import cookieParser from "cookie-parser";
 import API from "./models/routes/api.js"; // ensure this uses ESM too
+import ManualAPI from "./routes/timetableManual.js";
 import mongoose from "mongoose";
 import rateLimit from 'express-rate-limit';
 
@@ -95,6 +96,7 @@ app.use((req, res, next) => {
 
 
 app.use("/api", API);
+app.use("/api/manual", ManualAPI);
 app.get("/", (req, res) => {
   res.send("API is working 2");
 });

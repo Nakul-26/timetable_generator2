@@ -462,6 +462,101 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
 
 
 // --- Timetable ---
+protectedRouter.post('/process-new-input', async (req, res) => {
+    try {
+        console.log("[POST /process-new-input] Starting data processing...");
+
+        // 1. Fetch all necessary data from the database
+        const allFaculties = await Faculty.find().lean();
+        const allSubjects = await Subject.find().lean();
+        const allClasses = await ClassModel.find().lean();
+        const allClassSubjects = await ClassSubject.find().lean();
+        const allTeacherSubjectCombos = await TeacherSubjectCombination.find().populate('faculty subject').lean();
+
+        // 2. Prepare data for the converter function
+        const classSubjectsForConverter = allClassSubjects.map(cs => ({
+            classId: cs.class.toString(),
+            subjectId: cs.subject.toString(),
+            hoursPerWeek: cs.hoursPerWeek
+        }));
+
+        const teacherSubjectMap = allTeacherSubjectCombos.map(combo => ({
+            teacherId: combo.faculty._id.toString(),
+            subjectId: combo.subject._id.toString()
+        }));
+
+        const classTeachers = [];
+        for (const c of allClasses) {
+            if (c.faculties) {
+                for (const f of c.faculties) {
+                    classTeachers.push({ classId: c._id.toString(), teacherId: f.toString() });
+                }
+            }
+        }
+        
+        // 3. Call the converter function
+        const generatorData = converter.convertNewCollegeInput({
+            classes: allClasses,
+            subjects: allSubjects,
+            teachers: allFaculties,
+            classSubjects: classSubjectsForConverter,
+            classTeachers: classTeachers,
+            teacherSubjectCombos: teacherSubjectMap,
+            classElectiveGroups: [] // Assuming no elective groups for now
+        });
+
+        const { classes: classesOut, combos: generatedCombos } = generatorData;
+
+        // 4. Create a map of generated combos for easy lookup
+        const comboNameToIdMap = {};
+        for(const combo of allTeacherSubjectCombos){
+            const comboName = `T${combo.faculty._id.toString()}_S${combo.subject._id.toString()}`;
+            // This is a simplification, we need a way to link generated combos to real combo IDs.
+            // The generatorData.combos are not real database combos.
+            // For now, I will proceed with an imperfect mapping.
+            // A better approach would be to have the generator return the actual TeacherSubjectCombination IDs.
+        }
+
+        // For now, let's find the combo from the database based on teacher and subject
+        const findComboId = (teacherId, subjectId) => {
+            const found = allTeacherSubjectCombos.find(c => 
+                c.faculty._id.toString() === teacherId.toString() && 
+                c.subject._id.toString() === subjectId.toString()
+            );
+            return found ? found._id : null;
+        }
+
+        // 5. Update each class in the database
+        let updatedCount = 0;
+        for (const classData of classesOut) {
+            
+            const classCombos = generatedCombos.filter(c => c.class_ids.includes(classData._id));
+            
+            const comboIdsToAssign = classCombos.map(c => findComboId(c.faculty_id, c.subject_id)).filter(id => id !== null);
+
+            // Populate subject_hours
+            const subjectHours = {};
+            const classSubjectsForThisClass = allClassSubjects.filter(cs => cs.class.toString() === classData._id);
+            for (const cs of classSubjectsForThisClass) {
+                subjectHours[cs.subject.toString()] = cs.hoursPerWeek;
+            }
+
+            await ClassModel.findByIdAndUpdate(classData._id, {
+                assigned_teacher_subject_combos: comboIdsToAssign,
+                subject_hours: subjectHours
+            });
+            updatedCount++;
+        }
+
+        console.log(`[POST /process-new-input] Successfully updated ${updatedCount} classes.`);
+        res.json({ ok: true, message: `Successfully processed inputs and updated ${updatedCount} classes.` });
+
+    } catch (err) {
+        console.error("[POST /process-new-input] Error:", err);
+        res.status(500).json({ ok: false, error: 'Internal Server Error' });
+    }
+});
+
 protectedRouter.post('/generate', async (req, res) => {
   console.log("[POST /generate] Generating timetable using the new college model.");
   try {

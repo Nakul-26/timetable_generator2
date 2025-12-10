@@ -24,7 +24,9 @@ const Navbar = () => {
         <NavLink to="/class-faculties" className="nav-item">Class-Faculties</NavLink>
         <NavLink to="/class-elective-subjects" className="nav-item">Elective Subjects</NavLink>
         <NavLink to="/teacher-subject-combos" className="nav-item">Teacher-Subject Combos</NavLink>
+        <NavLink to="/process-inputs" className="nav-item">Process Inputs</NavLink>
         <NavLink to="/timetable" className="nav-item">Timetable</NavLink>
+        <NavLink to="/manual-timetable" className="nav-item">Manual Timetable</NavLink>
         {user && (
           <button onClick={handleLogout} className="nav-item-logout">
             Logout
