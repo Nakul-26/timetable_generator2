@@ -1,0 +1,130 @@
+// In-memory store for timetable data, designed for multi-user and multi-timetable support.
+const timetables = new Map();
+const locks = new Map(); // Changed from Set to Map to store timeout IDs for auto-expiring locks
+
+/**
+ * Retrieves the state for a specific timetable.
+ * @param {string} timetableId - The ID of the timetable to retrieve.
+ * @returns {object | undefined} The state object or undefined if not found.
+ */
+export const getState = (timetableId) => {
+  return timetables.get(timetableId);
+};
+
+/**
+ * Updates the state for a specific timetable. Merges with previous state.
+ * Increments version and updates timestamp.
+ * @param {string} timetableId - The ID of the timetable to update.
+ * @param {object} newState - The new state properties to merge in.
+ */
+export const setState = (timetableId, newState) => {
+  const prev = timetables.get(timetableId) || {};
+  const newVersion = (prev.version || 0) + 1;
+  timetables.set(timetableId, { ...prev, ...newState, version: newVersion, updatedAt: Date.now() });
+};
+
+/**
+ * Initializes a new, empty state for a given timetable ID.
+ * Throws an error if the timetableId already exists.
+ * @param {string} timetableId - The unique ID for the new timetable.
+ * @param {Array} classes - List of class objects.
+ * @param {Array} faculties - List of faculty objects.
+ * @param {Array} subjects - List of subject objects.
+ * @param {object} config - Configuration object with optional days and hours.
+ * @param {number} config.days - Number of days in the timetable grid (default: 6).
+ * @param {number} config.hours - Number of hours in the timetable grid (default: 8).
+ */
+export const initializeState = (timetableId, classes, faculties, subjects, { days = 6, hours = 8 } = {}) => {
+    if (timetables.has(timetableId)) {
+        throw new Error(`Timetable with ID ${timetableId} already exists.`);
+    }
+
+    const classTimetable = {};
+    const teacherTimetable = {};
+    const subjectHoursAssigned = {};
+
+    classes.forEach(c => {
+        classTimetable[c._id] = Array(days).fill(null).map(() => Array(hours).fill(null));
+        // Initialize the per-class subject hour tracking
+        subjectHoursAssigned[c._id] = {};
+        subjects.forEach(s => {
+            subjectHoursAssigned[c._id][s._id] = 0;
+        });
+    });
+
+    faculties.forEach(f => {
+        teacherTimetable[f._id] = Array(days).fill(null).map(() => Array(hours).fill(null));
+    });
+  
+    timetables.set(timetableId, {
+        classTimetable,
+        teacherTimetable,
+        subjectHoursAssigned,
+        createdAt: Date.now(),
+        version: 1, // Initial version
+        updatedAt: Date.now(),
+        config: { days, hours }
+    });
+
+    console.log(`Timetable ${timetableId} initialized.`);
+};
+
+/**
+ * Deletes a timetable's state.
+ * @param {string} timetableId - The ID of the timetable to delete.
+ * @returns {boolean} true if the timetable was deleted, false otherwise.
+ */
+export const deleteState = (timetableId) => {
+  return timetables.delete(timetableId);
+};
+
+/**
+ * Creates a deep copy (snapshot) of a timetable's state.
+ * Useful for undo, debugging, or durable storage.
+ * @param {string} timetableId - The ID of the timetable to snapshot.
+ * @returns {object | undefined} A JSON-serializable snapshot of the state.
+ */
+export const snapshotState = (timetableId) => {
+    const state = timetables.get(timetableId);
+    return state ? JSON.parse(JSON.stringify(state)) : undefined;
+};
+
+/**
+ * Attempts to acquire a lock for a specific resource key (e.g., a timetable slot).
+ * @param {string} key - A unique key representing the resource to lock.
+ * @param {number} ttl - Time to live for the lock in milliseconds (default: 3000ms).
+ * @returns {boolean} `true` if the lock was acquired, `false` if it was already held.
+ */
+export function lockSlot(key, ttl = 3000) {
+  if (locks.has(key)) return false;
+
+  const timeout = setTimeout(() => {
+    locks.delete(key);
+  }, ttl);
+
+  locks.set(key, timeout);
+  return true;
+}
+
+/**
+ * Releases a previously acquired lock.
+ * @param {string} key - The unique key of the lock to release.
+ */
+export function unlockSlot(key) {
+  const timeout = locks.get(key);
+  if (timeout) clearTimeout(timeout);
+  locks.delete(key);
+}
+
+/**
+ * Asserts that a timetable with the given ID exists.
+ * Throws an error if the timetable is not found.
+ * @param {string} timetableId - The ID of the timetable to check.
+ * @throws {Error} If the timetable with the given ID does not exist.
+ */
+export const assertState = (timetableId) => {
+    if (!timetables.has(timetableId)) {
+        throw new Error(`Timetable with ID ${timetableId} not found.`);
+    }
+};
+

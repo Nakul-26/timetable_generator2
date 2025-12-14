@@ -2,187 +2,309 @@ import express from "express";
 import ClassModel from "../models/Class.js";
 import TeacherSubjectCombination from "../models/TeacherSubjectCombination.js";
 import Faculty from "../models/Faculty.js";
+import Subject from "../models/Subject.js";
+import TimetableResult from "../models/TmietableResult.js";
+
 import {
   computeAvailableCombos,
   checkClassConstraints,
   checkTeacherConstraints,
-  computeRemainingHours
+  computeRemainingHours,
+  autoFillTimetable
 } from "../utils/timetableManualUtils.js";
+
+import {
+  getState,
+  setState,
+  initializeState,
+  lockSlot,
+  unlockSlot,
+  deleteState,
+  assertState
+} from "../state/timetableState.js";
 
 const router = express.Router();
 
-// API #1 — Get Valid Options for a Slot
+/* ------------------------------------------------------------------ */
+/* ------------------------- Helper Functions ------------------------ */
+/* ------------------------------------------------------------------ */
+
+async function clearSlot({ classId, day, hour, state }) {
+  const {
+    classTimetable,
+    teacherTimetable,
+    subjectHoursAssigned
+  } = state;
+
+  const comboId = classTimetable[classId]?.[day]?.[hour];
+  if (!comboId) return;
+
+  const combo = await TeacherSubjectCombination.findById(comboId).lean();
+  if (!combo) return;
+
+  const facultyId = combo.faculty.toString();
+  const subjectId = combo.subject.toString();
+
+  classTimetable[classId][day][hour] = null;
+
+  if (teacherTimetable[facultyId]?.[day]?.[hour] === comboId) {
+    teacherTimetable[facultyId][day][hour] = null;
+  }
+
+  if (subjectHoursAssigned[classId]?.[subjectId] > 0) {
+    subjectHoursAssigned[classId][subjectId]--;
+  }
+}
+
+async function withTempClearedState(timetableId, classId, day, hour, cb) {
+  const state = getState(timetableId);
+
+  const tempState = JSON.parse(JSON.stringify(state));
+  await clearSlot({ classId, day, hour, state: tempState });
+
+  return cb(tempState);
+}
+
+async function placeCombo({
+  timetableId,
+  classId,
+  day,
+  hour,
+  comboId
+}) {
+  const state = getState(timetableId);
+  const {
+    classTimetable,
+    teacherTimetable,
+    subjectHoursAssigned,
+    config
+  } = state;
+
+  const classObj = await ClassModel.findById(classId).lean();
+  if (!classObj) throw new Error("Class not found");
+
+  const newState = JSON.parse(JSON.stringify(state));
+
+  await clearSlot({
+    classId,
+    day,
+    hour,
+    state: newState
+  });
+
+  if (!comboId) return newState;
+
+  const combo = await TeacherSubjectCombination.findById(comboId).lean();
+  if (!combo) throw new Error("Combo not found");
+
+  const facultyId = combo.faculty.toString();
+  const subjectId = combo.subject.toString();
+
+  const remainingHours = computeRemainingHours(
+    classObj,
+    newState.subjectHoursAssigned
+  );
+
+  const c1 = checkClassConstraints(
+    newState.classTimetable,
+    classObj,
+    day,
+    hour,
+    subjectId,
+    remainingHours
+  );
+  if (!c1.ok) throw new Error(c1.error);
+
+  const c2 = checkTeacherConstraints(
+    newState.teacherTimetable,
+    facultyId,
+    day,
+    hour
+  );
+  if (!c2.ok) throw new Error(c2.error);
+
+  newState.classTimetable[classId][day][hour] = comboId;
+
+  if (!newState.teacherTimetable[facultyId]) {
+    const { days, hours } = config;
+    newState.teacherTimetable[facultyId] =
+      Array(days).fill(null).map(() => Array(hours).fill(null));
+  }
+
+  newState.teacherTimetable[facultyId][day][hour] = comboId;
+
+  newState.subjectHoursAssigned[classId][subjectId] =
+    (newState.subjectHoursAssigned[classId][subjectId] || 0) + 1;
+
+  return newState;
+}
+
+/* ------------------------------------------------------------------ */
+/* ---------------------------- Endpoints ---------------------------- */
+/* ------------------------------------------------------------------ */
+
+// Initialize
+router.post("/initialize", async (req, res) => {
+  try {
+    const { timetableId, classes, faculties, subjects, config } = req.body;
+    if (!timetableId) return res.status(400).json({ ok: false, error: "timetableId required" });
+
+    initializeState(timetableId, classes, faculties, subjects, config);
+    return res.json({ ok: true, ...getState(timetableId) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Valid options
 router.post("/valid-options", async (req, res) => {
   try {
-    const { classId, day, hour, classTimetable, teacherTimetable, subjectHoursAssigned } = req.body;
+    const { timetableId, classId, day, hour } = req.body;
+    assertState(timetableId);
 
     const classObj = await ClassModel.findById(classId).lean();
     if (!classObj) return res.status(404).json({ ok: false, error: "Class not found" });
 
-    // --- Temporarily Clear Slot for accurate validation ---
-    const tempClassTimetable = JSON.parse(JSON.stringify(classTimetable));
-    const tempTeacherTimetable = JSON.parse(JSON.stringify(teacherTimetable));
-    const tempSubjectHours = { ...subjectHoursAssigned };
-
-    const previouslyPlacedComboId = tempClassTimetable[classId]?.[day]?.[hour];
-    if (previouslyPlacedComboId) {
-        // Clear the class slot
-        tempClassTimetable[classId][day][hour] = null;
-        
-        // Find the teacher for the old combo and clear their slot
-        const oldCombo = await TeacherSubjectCombination.findById(previouslyPlacedComboId).lean();
-        if (oldCombo) {
-            const oldFacultyId = oldCombo.faculty.toString();
-            const oldSubjectId = oldCombo.subject.toString();
-            
-            if (tempTeacherTimetable[oldFacultyId]?.[day]?.[hour] === previouslyPlacedComboId) {
-                tempTeacherTimetable[oldFacultyId][day][hour] = null;
-            }
-            // Decrement the hours for the subject that was there
-            tempSubjectHours[oldSubjectId] = (tempSubjectHours[oldSubjectId] || 1) - 1;
-        }
-    }
-    // --- End of Temporary Clear ---
-
-    // Fetch all combos that are assigned to this class
-    const combos = await TeacherSubjectCombination.find({
-      '_id': { $in: classObj.assigned_teacher_subject_combos }
-    }).populate('faculty subject').lean();
-    
-    const validCombos = computeAvailableCombos({
-      classObj,
-      combos,
-      classTimetable: tempClassTimetable,
-      teacherTimetable: tempTeacherTimetable,
+    const result = await withTempClearedState(
+      timetableId,
+      classId,
       day,
       hour,
-      subjectHoursAssigned: tempSubjectHours
-    });
+      async (state) => {
+        const combos = await TeacherSubjectCombination.find({
+          _id: { $in: classObj.assigned_teacher_subject_combos }
+        }).populate("faculty subject").lean();
 
-    const validOptions = validCombos.map(combo => ({
-        comboId: combo._id,
-        faculty: combo.faculty.name,
-        subject: combo.subject.name
-    }));
-
-    return res.json({ ok: true, validOptions });
-  } catch (error) {
-    console.error("Valid Options Error:", error);
-    return res.status(500).json({ ok: false, error: "Internal error" });
-  }
-});
-
-// API #2 — Validate a Potential Placement
-router.post("/validate", async (req, res) => {
-  try {
-    const { classId, day, hour, comboId, classTimetable, teacherTimetable, subjectHoursAssigned } = req.body;
-
-    const classObj = await ClassModel.findById(classId).lean();
-    const combo = await TeacherSubjectCombination.findById(comboId).lean();
-
-    const remainingHours = computeRemainingHours(classObj, subjectHoursAssigned);
-
-    const classCheck = checkClassConstraints(
-      classTimetable,
-      classObj,
-      day,
-      hour,
-      combo.subject.toString(),
-      remainingHours
+        return computeAvailableCombos({
+          classObj,
+          combos,
+          classTimetable: state.classTimetable,
+          teacherTimetable: state.teacherTimetable,
+          subjectHoursAssigned: state.subjectHoursAssigned,
+          day,
+          hour
+        });
+      }
     );
-    if (!classCheck.ok) return res.json(classCheck);
-
-    const teacherCheck = checkTeacherConstraints(
-      teacherTimetable,
-      combo.faculty.toString(),
-      day,
-      hour
-    );
-    if (!teacherCheck.ok) return res.json(teacherCheck);
-
-    return res.json({ ok: true });
-  } catch (error) {
-    console.error("Validate Error:", error);
-    return res.status(500).json({ ok: false, error: "Internal error" });
-  }
-});
-
-// API #3 — Place a Combo into a Slot
-router.post("/place", async (req, res) => {
-  try {
-    const { classId, day, hour, comboId, classTimetable, teacherTimetable, subjectHoursAssigned } = req.body;
-
-    const classObj = await ClassModel.findById(classId).lean();
-    const comboToPlace = await TeacherSubjectCombination.findById(comboId).lean();
-    
-    if (!comboToPlace) {
-        return res.status(404).json({ ok: false, error: "Combo to place not found" });
-    }
-
-    // --- Temporarily Clear Slot for accurate validation ---
-    const tempClassTimetable = JSON.parse(JSON.stringify(classTimetable));
-    const tempTeacherTimetable = JSON.parse(JSON.stringify(teacherTimetable));
-    const tempSubjectHours = { ...subjectHoursAssigned };
-
-    const previouslyPlacedComboId = tempClassTimetable[classId]?.[day]?.[hour];
-    if (previouslyPlacedComboId) {
-        tempClassTimetable[classId][day][hour] = null;
-        const oldCombo = await TeacherSubjectCombination.findById(previouslyPlacedComboId).lean();
-        if (oldCombo) {
-            const oldFacultyId = oldCombo.faculty.toString();
-            const oldSubjectId = oldCombo.subject.toString();
-            if (tempTeacherTimetable[oldFacultyId]?.[day]?.[hour] === previouslyPlacedComboId) {
-                tempTeacherTimetable[oldFacultyId][day][hour] = null;
-            }
-            tempSubjectHours[oldSubjectId] = (tempSubjectHours[oldSubjectId] || 1) - 1;
-        }
-    }
-    // --- End of Temporary Clear ---
-
-    // Validation is now performed on the temporary, cleared state
-    const remainingHours = computeRemainingHours(classObj, tempSubjectHours);
-    const c1 = checkClassConstraints(tempClassTimetable, classObj, day, hour, comboToPlace.subject.toString(), remainingHours);
-    if (!c1.ok) return res.json(c1);
-
-    const c2 = checkTeacherConstraints(tempTeacherTimetable, comboToPlace.faculty.toString(), day, hour);
-    if (!c2.ok) return res.json(c2);
-    
-    // --- If validation passes, apply changes to the original state objects ---
-    // Note: We use the original objects passed in the request, not the temp ones.
-    const newClassTimetable = JSON.parse(JSON.stringify(classTimetable));
-    const newTeacherTimetable = JSON.parse(JSON.stringify(teacherTimetable));
-    const newSubjectHoursAssigned = { ...subjectHoursAssigned };
-
-    // Clear old data from original state
-    const originalOldComboId = newClassTimetable[classId]?.[day]?.[hour];
-    if (originalOldComboId) {
-        const oldCombo = await TeacherSubjectCombination.findById(originalOldComboId).lean();
-        if (oldCombo) {
-            newSubjectHoursAssigned[oldCombo.subject.toString()] = (newSubjectHoursAssigned[oldCombo.subject.toString()] || 1) - 1;
-        }
-    }
-
-    // Add new data to original state
-    newClassTimetable[classId][day][hour] = comboId;
-    
-    const facultyId = comboToPlace.faculty.toString();
-    if (!newTeacherTimetable[facultyId]) newTeacherTimetable[facultyId] = [];
-    if (!newTeacherTimetable[facultyId][day]) newTeacherTimetable[facultyId][day] = [];
-    newTeacherTimetable[facultyId][day][hour] = comboId;
-
-    const subjectId = comboToPlace.subject.toString();
-    newSubjectHoursAssigned[subjectId] = (newSubjectHoursAssigned[subjectId] || 0) + 1;
 
     return res.json({
       ok: true,
-      classTimetable: newClassTimetable,
-      teacherTimetable: newTeacherTimetable,
-      subjectHoursAssigned: newSubjectHoursAssigned
+      validOptions: result.map(c => ({
+        comboId: c._id,
+        faculty: c.faculty.name,
+        subject: c.subject.name
+      }))
     });
-  } catch (error) {
-    console.error("Place Error:", error);
-    return res.status(500).json({ ok: false, error: "Internal error" });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
   }
+});
+
+// Place
+router.post("/place", async (req, res) => {
+  const { timetableId, classId, day, hour, comboId } = req.body;
+  assertState(timetableId);
+
+  const lockKey = `${timetableId}|${classId}|${day}|${hour}`;
+  if (!lockSlot(lockKey)) {
+    return res.status(409).json({ ok: false, error: "Slot busy" });
+  }
+
+  try {
+    const newState = await placeCombo({
+      timetableId,
+      classId,
+      day,
+      hour,
+      comboId
+    });
+
+    setState(timetableId, newState);
+    return res.json({ ok: true, ...newState });
+  } catch (e) {
+    return res.json({ ok: false, error: e.message });
+  } finally {
+    unlockSlot(lockKey);
+  }
+});
+
+// Auto-fill
+router.post("/auto-fill", async (req, res) => {
+  const { timetableId, classId } = req.body;
+  assertState(timetableId);
+
+  const lockKey = `${timetableId}|autofill|${classId}`;
+  if (!lockSlot(lockKey)) {
+    return res.status(409).json({ ok: false, error: "Auto-fill busy" });
+  }
+
+  try {
+    const result = await autoFillTimetable(classId, getState(timetableId));
+    if (!result.ok) return res.json(result);
+
+    setState(timetableId, result.newState);
+    return res.json({ ok: true, ...result.newState });
+  } finally {
+    unlockSlot(lockKey);
+  }
+});
+
+// Clear all
+router.post("/clear-all", async (req, res) => {
+  const { timetableId, config } = req.body;
+  assertState(timetableId);
+
+  const [classes, faculties, subjects] = await Promise.all([
+    ClassModel.find().lean(),
+    Faculty.find().lean(),
+    Subject.find().lean()
+  ]);
+
+  initializeState(timetableId, classes, faculties, subjects, config);
+  return res.json({ ok: true, ...getState(timetableId) });
+});
+
+// Save
+router.post("/save", async (req, res) => {
+    try {
+        const { timetableId, name } = req.body;
+        if (!name) {
+            return res.status(400).json({ ok: false, error: "A name is required to save the timetable." });
+        }
+        assertState(timetableId);
+
+        const existing = await TimetableResult.findOne({ name });
+        if (existing) {
+            return res.status(409).json({ ok: false, error: `A timetable with the name "${name}" already exists.` });
+        }
+
+        const state = getState(timetableId);
+
+        const newTimetable = new TimetableResult({
+            name,
+            source: 'manual',
+            class_timetables: state.classTimetable,
+            teacher_timetables: state.teacherTimetable,
+            subject_hours_assigned: state.subjectHoursAssigned,
+            config: state.config,
+            version: state.version,
+        });
+
+        const saved = await newTimetable.save();
+        return res.status(201).json({ ok: true, message: "Timetable saved successfully!", id: saved._id });
+
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Delete
+router.post("/delete", async (req, res) => {
+  const { timetableId } = req.body;
+  assertState(timetableId);
+
+  deleteState(timetableId);
+  return res.json({ ok: true });
 });
 
 export default router;

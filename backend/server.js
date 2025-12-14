@@ -102,15 +102,45 @@ app.get("/", (req, res) => {
 });
 
 
+const PORT = process.env.PORT;
 
+const server = app.listen(PORT, () =>
+  console.log(`🚀 Server running on port ${PORT}`)
+);
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-    console.log(`Error: ${err.message}`);
-    // Close server & exit process
-    server.close(() => process.exit(1));
-});
+const gracefulShutdown = async (reason, err) => {
+  console.error(`❌ ${reason}`);
+  if (err) console.error(err);
+
+  server.close(async () => {
+    try {
+      await mongoose.connection.close(false);
+      await client.close();
+      console.log("🛑 Clean shutdown complete");
+    } catch (e) {
+      console.error("Shutdown error:", e);
+    } finally {
+      process.exit(1);
+    }
+  });
+};
+
+process.on("unhandledRejection", (err) =>
+  gracefulShutdown("UNHANDLED PROMISE REJECTION", err)
+);
+
+process.on("uncaughtException", (err) =>
+  gracefulShutdown("UNCAUGHT EXCEPTION", err)
+);
+
+process.on("SIGTERM", () =>
+  gracefulShutdown("SIGTERM RECEIVED")
+);
+
+process.on("SIGINT", () =>
+  gracefulShutdown("SIGINT RECEIVED")
+);
 
 // --- Start Server ---
-const PORT = process.env.PORT;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// const PORT = process.env.PORT;
+// app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
