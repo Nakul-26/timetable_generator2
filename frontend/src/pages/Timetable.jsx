@@ -151,11 +151,9 @@ function Timetable() {
                         </option>
                         {combos
                       .map((c) => {
-                        const fac = faculties.find(f => f._id === c.faculty_id);
-                        const sub = subjects.find(s => s._id === c.subject_id);
                         return (
                           <option key={c._id} value={c._id}>
-                            {fac ? `${fac.name}` : "-none-"} : {sub ? `${sub.name}` : "-none-"}
+                            {c.faculty ? `${c.faculty.name}` : "-none-"} : {c.subject ? `${c.subject.name}` : "-none-"}
                           </option>
                         );
                       })}
@@ -333,27 +331,24 @@ function Timetable() {
                     return <td key={p}>-</td>;
                   }
 
-                  const combo = combos.find((c) => String(c._id) === String(slotId));
+                  const combo = combos.find(
+                    (c) => String(c._id) === String(slotId) || (c.id && String(c.id) === String(slotId))
+                  );
 
                   if (!combo) {
                     return <td key={p}>{slotId}</td>;
                   }
                   
-                  const subject = subjects.find(
-                    (s) => String(s._id) === String(combo.subject_id)
-                  );
-                  const faculty = faculties.find(
-                    (f) => String(f._id) === String(combo.faculty_id)
-                  );
-
+                  const subjectName = combo.subject ? combo.subject.name : "N/A";
+                  const facultyName = combo.faculty ? combo.faculty.name : "N/A";
 
                   if (
                     (selectedFaculty &&
-                      (!faculty ||
-                        String(faculty._id) !== selectedFaculty)) ||
+                      (!combo.faculty ||
+                        String(combo.faculty._id) !== selectedFaculty)) ||
                     (selectedSubject &&
-                      (!subject ||
-                        String(subject._id) !== selectedSubject))
+                      (!combo.subject ||
+                        String(combo.subject._id) !== selectedSubject))
                   ) {
                     return <td key={p}>-</td>;
                   }
@@ -375,9 +370,9 @@ function Timetable() {
                       }
                     >
                       <div>
-                        <b>{subject ? subject.name : "N/A"}</b>
+                        <b>{subjectName}</b>
                       </div>
-                      <div>{faculty ? `${faculty.name}` : "N/A"}</div>
+                      <div>{facultyName}</div>
                       {isFixed && (
                         <div style={{ fontSize: "0.8em" }}>📌 Fixed</div>
                       )}

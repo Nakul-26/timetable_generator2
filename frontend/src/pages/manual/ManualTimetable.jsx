@@ -225,7 +225,7 @@ const ManualTimetable = () => {
                 <div>
                     <button
                         onClick={handleSave}
-                        style={{ backgroundColor: 'green', color: 'white', marginRight: '10px' }}
+                        style={{ backgroundColor: 'red', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
                         disabled={isSaving || isDeleting}
                     >
                         {isSaving ? 'Saving...' : 'Save Timetable'}

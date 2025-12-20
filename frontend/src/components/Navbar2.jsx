@@ -27,6 +27,7 @@ const Navbar = () => {
         <NavLink to="/process-inputs" className="nav-item">Process Inputs</NavLink>
         <NavLink to="/timetable" className="nav-item">Timetable</NavLink>
         <NavLink to="/manual-timetable" className="nav-item">Manual Timetable</NavLink>
+        <NavLink to="/saved-timetables" className="nav-item">Saved Timetables</NavLink>
         {user && (
           <button onClick={handleLogout} className="nav-item-logout">
             Logout

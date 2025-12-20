@@ -13,6 +13,8 @@ import ManageTeacherSubject from './pages/assignments/ManageTeacherSubject';
 import ManageElectiveSubjects from './pages/assignments/ManageElectiveSubjects';
 import ManualTimetable from './pages/manual/ManualTimetable.jsx';
 import ProcessInputs from './pages/assignments/ProcessInputs.jsx';
+import SavedTimetables from './pages/SavedTimetables.jsx';
+import ViewTimetable from './pages/ViewTimetable.jsx';
 import Navbar from './components/Navbar2';
 import Login from './pages/Login';
 import { AuthProvider } from './context/AuthContext';
@@ -83,11 +85,13 @@ function App() {
           <Route path="/class-faculties" element={<PrivateRoute><ManageClassFaculty /></PrivateRoute>} />
           <Route path="/class-elective-subjects" element={<PrivateRoute><ManageElectiveSubjects /></PrivateRoute>} />
           <Route path="/timetable" element={<PrivateRoute><Timetable /></PrivateRoute>} />
+          <Route path="/timetable/:id" element={<PrivateRoute><ViewTimetable /></PrivateRoute>} />
           <Route path="/teacher/add" element={<PrivateRoute><AddTeacher /></PrivateRoute>} />
           <Route path="/subject/add" element={<PrivateRoute><AddSubject /></PrivateRoute>} />
           <Route path="/class/add" element={<PrivateRoute><AddClass /></PrivateRoute>} />
           <Route path="/teacher-subject-combos" element={<PrivateRoute><ManageTeacherSubject /></PrivateRoute>} />
           <Route path="/manual-timetable" element={<PrivateRoute><ManualTimetable /></PrivateRoute>} />
+          <Route path="/saved-timetables" element={<PrivateRoute><SavedTimetables /></PrivateRoute>} />
           <Route path="/process-inputs" element={<PrivateRoute><ProcessInputs /></PrivateRoute>} />
         </Routes>
       </main>

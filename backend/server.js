@@ -22,9 +22,6 @@ const limiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 
-
-
-
 // --- MongoDB Client ---
 const uri = process.env.MONGO_URI;
 if (!uri) {
@@ -65,7 +62,6 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
-
 mongoose.connect(uri, {
   dbName: 'timetable_jayanth',
   serverSelectionTimeoutMS: 20000 // Increase timeout for stability
@@ -76,7 +72,6 @@ mongoose.connect(uri, {
     .catch((err) => {
         console.error("❌ Mongoose connection error:", err);
     });
-
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -93,14 +88,11 @@ app.use((req, res, next) => {
 });
 
 // --- Routes ---
-
-
 app.use("/api", API);
 app.use("/api/manual", ManualAPI);
 app.get("/", (req, res) => {
   res.send("API is working 2");
 });
-
 
 const PORT = process.env.PORT;
 

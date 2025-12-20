@@ -700,6 +700,31 @@ protectedRouter.get('/result/latest', async (req, res) => {
   }
 });
 
+protectedRouter.get('/timetables', async (req, res) => {
+    console.log("[GET /timetables] Fetching all saved timetables");
+    try {
+        const timetables = await TimetableResult.find({ source: 'manual' }).sort({ createdAt: -1 }).lean();
+        console.log("[GET /timetables] Found:", timetables.length, "records");
+        res.json(timetables);
+    } catch (e) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+protectedRouter.get('/timetable/:id', async (req, res) => {
+    console.log("[GET /timetable/:id] Fetching timetable with id:", req.params.id);
+    try {
+        const timetable = await TimetableResult.findById(req.params.id).lean();
+        if (!timetable) {
+            return res.status(404).json({ error: 'Timetable not found.' });
+        }
+        console.log("[GET /timetable/:id] Found timetable:", timetable.name);
+        res.json(timetable);
+    } catch (e) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 protectedRouter.post("/result/regenerate", async (req, res) => {
   try {
     const { fixedSlots, classElectiveGroups } = req.body;
