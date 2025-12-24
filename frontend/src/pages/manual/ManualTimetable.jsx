@@ -17,7 +17,9 @@ const ManualTimetable = () => {
     const [isAutoFilling, setIsAutoFilling] = useState({});
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSaving, setIsSaving] = useState(false); // New state for save loading
-    const [timetableId, setTimetableId] = useState(null); // New state for timetableId
+        const [timetableId, setTimetableId] = useState(null); // New state for timetableId
+    const [comboIdToDetails, setComboIdToDetails] = useState({});
+
 
     const [validOptions, setValidOptions] = useState({}); // { "classId-dayIndex-hourIndex": [options] }
 
@@ -71,7 +73,7 @@ const ManualTimetable = () => {
         fetchAndInitialize();
     }, []); // Empty dependency array means this runs once on mount
 
-    const handleGetOptions = async (classId, dayIndex, hourIndex) => {
+        const handleGetOptions = async (classId, dayIndex, hourIndex) => {
         if (!timetableId) return; // Ensure timetableId is set
 
         try {
@@ -81,7 +83,15 @@ const ManualTimetable = () => {
                 day: dayIndex,
                 hour: hourIndex
             });
-            setValidOptions(prev => ({ ...prev, [`${classId}-${dayIndex}-${hourIndex}`]: response.data.validOptions }));
+            const options = response.data.validOptions;
+            setValidOptions(prev => ({ ...prev, [`${classId}-${dayIndex}-${hourIndex}`]: options }));
+            
+            const newDetails = {};
+            options.forEach(opt => {
+                newDetails[opt.comboId] = { subject: opt.subject, faculty: opt.faculty };
+            });
+            setComboIdToDetails(prev => ({ ...prev, ...newDetails }));
+
         } catch (error) {
             console.error('Error fetching valid options:', error);
             alert(`Error fetching options: ${error.response?.data?.error || error.message}`);
@@ -117,7 +127,7 @@ const ManualTimetable = () => {
         }
     };
 
-    const handleAutoFill = async (classId) => {
+        const handleAutoFill = async (classId) => {
         if (!timetableId) return; // Ensure timetableId is set
 
         setIsAutoFilling(prev => ({ ...prev, [classId]: true }));
@@ -130,6 +140,18 @@ const ManualTimetable = () => {
                 setClassTimetable(response.data.classTimetable);
                 setTeacherTimetable(response.data.teacherTimetable);
                 setSubjectHoursAssigned(response.data.subjectHoursAssigned);
+
+                const newTimetable = response.data.classTimetable;
+                if (newTimetable[classId]) {
+                    newTimetable[classId].forEach((row, dayIndex) => {
+                        row.forEach((comboId, hourIndex) => {
+                            if (comboId) {
+                                handleGetOptions(classId, dayIndex, hourIndex);
+                            }
+                        });
+                    });
+                }
+
             } else {
                 alert(`Auto-fill failed: ${response.data.error}`);
             }
@@ -278,11 +300,17 @@ const ManualTimetable = () => {
                                             >
                                                 <option value="">--Select--</option>
                                                 {/* Pre-populate the currently selected option if it's not in the validOptions list */}
-                                                {classTimetable[c._id]?.[dayIndex]?.[hourIndex] && 
-                                                 !validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.find(opt => opt.comboId === classTimetable[c._id]?.[dayIndex]?.[hourIndex]) &&
-                                                    <option value={classTimetable[c._id]?.[dayIndex]?.[hourIndex]}>
-                                                        Assigned
-                                                    </option>
+                                                {(classTimetable[c._id]?.[dayIndex]?.[hourIndex] && 
+                                                 !validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.find(opt => opt.comboId === classTimetable[c._id]?.[dayIndex]?.[hourIndex])) &&
+                                                    (() => {
+                                                        const comboId = classTimetable[c._id]?.[dayIndex]?.[hourIndex];
+                                                        const details = comboIdToDetails[comboId];
+                                                        return (
+                                                            <option value={comboId}>
+                                                                {details ? `${details.subject} - ${details.faculty}` : 'Loading...'}
+                                                            </option>
+                                                        );
+                                                    })()
                                                 }
                                                 {validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.map(option => (
                                                     <option key={option.comboId} value={option.comboId}>

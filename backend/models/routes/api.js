@@ -526,13 +526,27 @@ protectedRouter.post('/process-new-input', async (req, res) => {
             return found ? found._id : null;
         }
 
-        // 5. Update each class in the database
         let updatedCount = 0;
+        const classAssignments = [];
+
         for (const classData of classesOut) {
-            
             const classCombos = generatedCombos.filter(c => c.class_ids.includes(classData._id));
-            
             const comboIdsToAssign = classCombos.map(c => findComboId(c.faculty_id, c.subject_id)).filter(id => id !== null);
+
+            // Find details for the assigned combos for THIS class
+            const assignedCombosDetails = allTeacherSubjectCombos
+                .filter(c => comboIdsToAssign.map(id => id.toString()).includes(c._id.toString()))
+                .map(c => ({ // Send clean data to the frontend
+                    _id: c._id,
+                    faculty: { name: c.faculty.name },
+                    subject: { name: c.subject.name }
+                }));
+
+            classAssignments.push({
+                classId: classData._id,
+                className: classData.name,
+                combos: assignedCombosDetails
+            });
 
             // Populate subject_hours
             const subjectHours = {};
@@ -549,7 +563,11 @@ protectedRouter.post('/process-new-input', async (req, res) => {
         }
 
         console.log(`[POST /process-new-input] Successfully updated ${updatedCount} classes.`);
-        res.json({ ok: true, message: `Successfully processed inputs and updated ${updatedCount} classes.` });
+        res.json({ 
+            ok: true, 
+            message: `Successfully processed inputs and updated ${updatedCount} classes.`,
+            classAssignments: classAssignments 
+        });
 
     } catch (err) {
         console.error("[POST /process-new-input] Error:", err);

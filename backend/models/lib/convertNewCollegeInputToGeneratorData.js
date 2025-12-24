@@ -170,20 +170,19 @@ export function convertNewCollegeInput({
       const eligibleTeachers = classTeach.filter(tid =>
         teacherCanTeach(tid, subjectId)
       );
-      if (eligibleTeachers.length === 0) continue;
-
-      // SIMPLE VERSION: use first eligible teacher for that subject+class
-      const t = eligibleTeachers[0];
-
-      combos.push({
-        _id: "C" + comboIndex++,
-        faculty_id: t,
-        subject_id: subjectId,
-        class_ids: [classId],
-        hours_per_week: hoursRequired,
-        hours_per_class: { [classId]: hoursRequired },
-        combo_name: `T${t}_S${subjectId}_C${classId}`
-      });
+      
+      // Loop through all eligible teachers and create a combo for each
+      for (const t of eligibleTeachers) {
+        combos.push({
+          _id: "C" + comboIndex++,
+          faculty_id: t,
+          subject_id: subjectId,
+          class_ids: [classId],
+          hours_per_week: hoursRequired,
+          hours_per_class: { [classId]: hoursRequired },
+          combo_name: `T${t}_S${subjectId}_C${classId}`
+        });
+      }
     }
   }
 

@@ -126,7 +126,7 @@ export function computeAvailableCombos({
 }
 
 export async function autoFillTimetable(classId, currentState) {
-    const { classTimetable, teacherTimetable, subjectHoursAssigned } = currentState;
+    const { config, classTimetable, teacherTimetable, subjectHoursAssigned } = currentState;
 
     const classObj = await ClassModel.findById(classId).lean();
     if (!classObj) {
@@ -140,91 +140,95 @@ export async function autoFillTimetable(classId, currentState) {
     // Create deep copies to work with
     let newClassTimetable = JSON.parse(JSON.stringify(classTimetable));
     let newTeacherTimetable = JSON.parse(JSON.stringify(teacherTimetable));
-    let newSubjectHoursAssigned = JSON.parse(JSON.stringify(subjectHoursAssigned)); // Deep copy for nested object
+    let newSubjectHoursAssigned = JSON.parse(JSON.stringify(subjectHoursAssigned));
 
-    // `requiredHours` should track for this specific class.
-    // It's derived from classObj.subject_hours and newSubjectHoursAssigned for this class.
     const requiredHoursForClass = {};
-    for (const [subjId, required] of Object.entries(classObj.subject_hours)) {
-        const assigned = newSubjectHoursAssigned[classId]?.[subjId] || 0;
-        requiredHoursForClass[subjId] = required - assigned;
+    if (classObj.subject_hours) {
+        for (const [subjId, required] of Object.entries(classObj.subject_hours)) {
+            const assigned = newSubjectHoursAssigned[classId]?.[subjId] || 0;
+            requiredHoursForClass[subjId] = required - assigned;
+        }
     }
-    
-    const solver = (day, hour) => {
-        if (day >= 6) { // 6 days in a week (0-5)
-            // Check if all subjects for this class have their required hours met
-            for (const [subjId, required] of Object.entries(classObj.subject_hours)) {
-                if ((newSubjectHoursAssigned[classId]?.[subjId] || 0) < required) {
-                    return false; // Not all required hours are met for this class
+
+    const days = config.days || 6;
+    const hours = config.hours || 8;
+
+    // Simple greedy algorithm
+    for (let day = 0; day < days; day++) {
+        for (let hour = 0; hour < hours; hour++) {
+            // If slot is already filled, skip
+            if (newClassTimetable[classId]?.[day]?.[hour]) {
+                continue;
+            }
+
+            const availableCombos = computeAvailableCombos({
+                classObj,
+                combos,
+                classTimetable: newClassTimetable,
+                teacherTimetable: newTeacherTimetable,
+                day,
+                hour,
+                subjectHoursAssigned: newSubjectHoursAssigned
+            });
+
+            const preferredCombos = [];
+            const otherCombos = [];
+
+            // Prioritize combos that don't create a back-to-back slot
+            for (const combo of availableCombos) {
+                const facultyId = combo.faculty._id.toString();
+                if (hour > 0 && newTeacherTimetable[facultyId]?.[day]?.[hour - 1]) {
+                    otherCombos.push(combo);
+                } else {
+                    preferredCombos.push(combo);
                 }
             }
-            return true; // Solution found for this class
-        }
-
-        const nextHour = (hour + 1) % 8; // 8 hours in a day (0-7)
-        const nextDay = (hour + 1 === 8) ? day + 1 : day;
-
-        // If slot is already filled, move to the next one
-        if (newClassTimetable[classId]?.[day]?.[hour]) {
-            return solver(nextDay, nextHour);
-        }
-
-        const availableCombos = computeAvailableCombos({
-            classObj,
-            combos,
-            classTimetable: newClassTimetable,
-            teacherTimetable: newTeacherTimetable,
-            day,
-            hour,
-            subjectHoursAssigned: newSubjectHoursAssigned
-        });
-
-        for (const combo of availableCombos) {
-            const facultyId = combo.faculty._id.toString();
-            const subjectId = combo.subject._id.toString();
-
-            // Check if this subject still needs hours
-            if (requiredHoursForClass[subjectId] <= 0) {
-                continue; // This subject's hours are already fulfilled for this class
-            }
-
-            // Place combo
-            newClassTimetable[classId][day][hour] = combo._id.toString();
             
-            // Ensure teacher's timetable array exists for this faculty and day
-            if (!newTeacherTimetable[facultyId]) newTeacherTimetable[facultyId] = Array(6).fill(null).map(() => Array(8).fill(null));
-            newTeacherTimetable[facultyId][day][hour] = combo._id.toString();
-            
-            // Increment subject hours for this class
-            if (!newSubjectHoursAssigned[classId]) newSubjectHoursAssigned[classId] = {};
-            newSubjectHoursAssigned[classId][subjectId] = (newSubjectHoursAssigned[classId][subjectId] || 0) + 1;
-            requiredHoursForClass[subjectId]--; // Decrement local remaining hours tracker
+            // Define a function to attempt placing a combo from a given list
+            const tryPlaceFromList = (list) => {
+                for (const combo of list) {
+                    const facultyId = combo.faculty._id.toString();
+                    const subjectId = combo.subject._id.toString();
 
-            // Recurse
-            if (solver(nextDay, nextHour)) {
-                return true;
+                    if (requiredHoursForClass[subjectId] > 0) {
+                        // Place combo
+                        newClassTimetable[classId][day][hour] = combo._id.toString();
+                        
+                        if (!newTeacherTimetable[facultyId]) {
+                            newTeacherTimetable[facultyId] = Array(days).fill(null).map(() => Array(hours).fill(null));
+                        }
+                        newTeacherTimetable[facultyId][day][hour] = combo._id.toString();
+                        
+                        if (!newSubjectHoursAssigned[classId]) {
+                            newSubjectHoursAssigned[classId] = {};
+                        }
+                        newSubjectHoursAssigned[classId][subjectId] = (newSubjectHoursAssigned[classId][subjectId] || 0) + 1;
+                        requiredHoursForClass[subjectId]--;
+
+                        return true; // Placement successful
+                    }
+                }
+                return false; // No placement made
+            };
+
+            // First try preferred combos, then fall back to other valid ones
+            const placed = tryPlaceFromList(preferredCombos);
+            if (!placed) {
+                tryPlaceFromList(otherCombos);
             }
-
-            // Backtrack
-            newSubjectHoursAssigned[classId][subjectId]--; // Decrement for this class
-            requiredHoursForClass[subjectId]++; // Increment local remaining hours tracker
-            newTeacherTimetable[facultyId][day][hour] = null;
-            newClassTimetable[classId][day][hour] = null;
         }
-
-        return false; // No solution found from this path
-    };
-
-    if (solver(0, 0)) {
-        return { 
-            ok: true, 
-            newState: { 
-                classTimetable: newClassTimetable, 
-                teacherTimetable: newTeacherTimetable, 
-                subjectHoursAssigned: newSubjectHoursAssigned 
-            } 
-        };
-    } else {
-        return { ok: false, error: "Could not find a valid timetable solution for this class." };
     }
+
+    // With a greedy approach, we always return the result, even if it's partial.
+    return { 
+        ok: true, 
+        newState: { 
+            classTimetable: newClassTimetable, 
+            teacherTimetable: newTeacherTimetable, 
+            subjectHoursAssigned: newSubjectHoursAssigned,
+            // Ensure config and version are carried over if they exist
+            config: currentState.config,
+            version: currentState.version
+        } 
+    };
 }
