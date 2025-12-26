@@ -11,7 +11,7 @@ import Subject from './models/Subject.js';
 import ClassModel from './models/Class.js';
 import ClassSubject from './models/ClassSubject.js';
 import TeacherSubjectCombination from './models/TeacherSubjectCombination.js';
-import TimetableResult from './models/TmietableResult.js';
+import TimetableResult from './models/TimetableResult.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

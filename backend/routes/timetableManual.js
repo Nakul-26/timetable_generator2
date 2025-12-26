@@ -3,7 +3,7 @@ import ClassModel from "../models/Class.js";
 import TeacherSubjectCombination from "../models/TeacherSubjectCombination.js";
 import Faculty from "../models/Faculty.js";
 import Subject from "../models/Subject.js";
-import TimetableResult from "../models/TmietableResult.js";
+import TimetableResult from "../models/TimetableResult.js";
 
 import {
   computeAvailableCombos,
@@ -295,6 +295,69 @@ router.post("/save", async (req, res) => {
 
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Get all processed assignments (saved timetables or assignment lists)
+router.get("/processed-assignments", async (req, res) => {
+    try {
+        const results = await TimetableResult.find({}).sort({ createdAt: -1 }).lean();
+
+        // Populate TeacherSubjectCombination details for each result
+        const populatedResults = await Promise.all(results.map(async (result) => {
+            
+            // Helper to populate a list of combo IDs
+            const populateCombos = async (comboIds) => {
+                if (!comboIds || comboIds.length === 0) return [];
+                const uniqueComboIds = [...new Set(comboIds.filter(Boolean))]; // Filter null/undefined and get unique
+                return TeacherSubjectCombination.find({ '_id': { $in: uniqueComboIds } })
+                    .populate("faculty", "name")
+                    .populate("subject", "name")
+                    .lean();
+            };
+
+            if (result.source === 'assignments' && result.assignments_only) {
+                // Handle assignment-only records
+                const populatedAssignments = {};
+                for (const classId in result.assignments_only) {
+                    const comboIds = result.assignments_only[classId];
+                    populatedAssignments[classId] = await populateCombos(comboIds);
+                }
+                result.populated_assignments = populatedAssignments; // Add a new field with populated data
+
+            } else if (result.class_timetables) {
+                // Handle full timetable records
+                const allComboIds = Object.values(result.class_timetables).flatMap(classSchedule => 
+                    Object.values(classSchedule).flatMap(daySchedule => Object.values(daySchedule))
+                );
+                const populatedCombos = await populateCombos(allComboIds);
+                const comboMap = new Map(populatedCombos.map(c => [c._id.toString(), c]));
+
+                const populatedTimetables = {};
+                for (const classId in result.class_timetables) {
+                    populatedTimetables[classId] = {};
+                    for (const day in result.class_timetables[classId]) {
+                        populatedTimetables[classId][day] = {};
+                        for (const hour in result.class_timetables[classId][day]) {
+                            const comboId = result.class_timetables[classId][day][hour];
+                            if (comboId && comboMap.has(comboId.toString())) {
+                                populatedTimetables[classId][day][hour] = comboMap.get(comboId.toString());
+                            } else {
+                                populatedTimetables[classId][day][hour] = null;
+                            }
+                        }
+                    }
+                }
+                result.class_timetables = populatedTimetables; // Replace with populated timetables
+            }
+            return result;
+        }));
+
+        res.json({ ok: true, savedTimetables: populatedResults });
+
+    } catch (error) {
+        console.error("Error fetching processed assignments:", error);
+        res.status(500).json({ ok: false, error: "Failed to fetch processed assignments." });
     }
 });
 

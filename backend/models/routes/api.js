@@ -8,7 +8,7 @@ import Subject from '../Subject.js';
 import ClassModel from '../Class.js';
 import ClassSubject from '../ClassSubject.js';
 import TeacherSubjectCombination from '../TeacherSubjectCombination.js';
-import TimetableResult from '../TmietableResult.js';
+import TimetableResult from '../TimetableResult.js';
 import generator from '../lib/generator.js';
 import runGenerate from '../lib/runGenerator.js';
 import converter from '../lib/convertNewCollegeInputToGeneratorData.js';
@@ -464,7 +464,7 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
 // --- Timetable ---
 protectedRouter.post('/process-new-input', async (req, res) => {
     try {
-        console.log("[POST /process-new-input] Starting data processing...");
+        console.log("[POST /process-new-input] Starting data processing for assignments...");
 
         // 1. Fetch all necessary data from the database
         const allFaculties = await Faculty.find().lean();
@@ -479,12 +479,10 @@ protectedRouter.post('/process-new-input', async (req, res) => {
             subjectId: cs.subject.toString(),
             hoursPerWeek: cs.hoursPerWeek
         }));
-
         const teacherSubjectMap = allTeacherSubjectCombos.map(combo => ({
             teacherId: combo.faculty._id.toString(),
             subjectId: combo.subject._id.toString()
         }));
-
         const classTeachers = [];
         for (const c of allClasses) {
             if (c.faculties) {
@@ -494,7 +492,7 @@ protectedRouter.post('/process-new-input', async (req, res) => {
             }
         }
         
-        // 3. Call the converter function
+        // 3. Call the converter function to get theoretical assignments
         const generatorData = converter.convertNewCollegeInput({
             classes: allClasses,
             subjects: allSubjects,
@@ -502,22 +500,11 @@ protectedRouter.post('/process-new-input', async (req, res) => {
             classSubjects: classSubjectsForConverter,
             classTeachers: classTeachers,
             teacherSubjectCombos: teacherSubjectMap,
-            classElectiveGroups: [] // Assuming no elective groups for now
+            classElectiveGroups: [] 
         });
 
         const { classes: classesOut, combos: generatedCombos } = generatorData;
-
-        // 4. Create a map of generated combos for easy lookup
-        const comboNameToIdMap = {};
-        for(const combo of allTeacherSubjectCombos){
-            const comboName = `T${combo.faculty._id.toString()}_S${combo.subject._id.toString()}`;
-            // This is a simplification, we need a way to link generated combos to real combo IDs.
-            // The generatorData.combos are not real database combos.
-            // For now, I will proceed with an imperfect mapping.
-            // A better approach would be to have the generator return the actual TeacherSubjectCombination IDs.
-        }
-
-        // For now, let's find the combo from the database based on teacher and subject
+        
         const findComboId = (teacherId, subjectId) => {
             const found = allTeacherSubjectCombos.find(c => 
                 c.faculty._id.toString() === teacherId.toString() && 
@@ -526,47 +513,46 @@ protectedRouter.post('/process-new-input', async (req, res) => {
             return found ? found._id : null;
         }
 
-        let updatedCount = 0;
-        const classAssignments = [];
+        const assignmentsOnly = {};
+        const classAssignmentsForFrontend = [];
 
+        // 4. Process assignments for each class
         for (const classData of classesOut) {
             const classCombos = generatedCombos.filter(c => c.class_ids.includes(classData._id));
             const comboIdsToAssign = classCombos.map(c => findComboId(c.faculty_id, c.subject_id)).filter(id => id !== null);
+            
+            assignmentsOnly[classData._id] = comboIdsToAssign;
 
-            // Find details for the assigned combos for THIS class
             const assignedCombosDetails = allTeacherSubjectCombos
                 .filter(c => comboIdsToAssign.map(id => id.toString()).includes(c._id.toString()))
-                .map(c => ({ // Send clean data to the frontend
+                .map(c => ({
                     _id: c._id,
                     faculty: { name: c.faculty.name },
                     subject: { name: c.subject.name }
                 }));
 
-            classAssignments.push({
+            classAssignmentsForFrontend.push({
                 classId: classData._id,
                 className: classData.name,
                 combos: assignedCombosDetails
             });
-
-            // Populate subject_hours
-            const subjectHours = {};
-            const classSubjectsForThisClass = allClassSubjects.filter(cs => cs.class.toString() === classData._id);
-            for (const cs of classSubjectsForThisClass) {
-                subjectHours[cs.subject.toString()] = cs.hoursPerWeek;
-            }
-
-            await ClassModel.findByIdAndUpdate(classData._id, {
-                assigned_teacher_subject_combos: comboIdsToAssign,
-                subject_hours: subjectHours
-            });
-            updatedCount++;
         }
 
-        console.log(`[POST /process-new-input] Successfully updated ${updatedCount} classes.`);
+        // 5. Save the generated assignments as a new TimetableResult
+        const newAssignmentName = `Processed Assignments - ${new Date().toLocaleString()}`;
+        const newAssignmentResult = new TimetableResult({
+            name: newAssignmentName,
+            source: 'assignments', // Mark as assignment-only
+            assignments_only: assignmentsOnly,
+            class_timetables: null, // Explicitly null
+        });
+        await newAssignmentResult.save();
+        console.log(`[POST /process-new-input] Successfully saved assignments: ${newAssignmentName}`);
+        
         res.json({ 
             ok: true, 
-            message: `Successfully processed inputs and updated ${updatedCount} classes.`,
-            classAssignments: classAssignments 
+            message: `Successfully processed and saved new assignments: "${newAssignmentName}"`,
+            classAssignments: classAssignmentsForFrontend
         });
 
     } catch (err) {

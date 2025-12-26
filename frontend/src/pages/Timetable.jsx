@@ -417,7 +417,10 @@ function Timetable() {
   };
 
   const filteredTimetable = () => {
-    if (!timetable) return null;
+    // Defensive check to prevent crash if class_timetables is null or undefined
+    if (!timetable || !timetable.class_timetables) {
+      return [];
+    }
     let filteredEntries = Object.entries(timetable.class_timetables);
     if (selectedClass) {
       filteredEntries = filteredEntries.filter(
@@ -512,12 +515,20 @@ function Timetable() {
         classes.map((cls) => renderEmptyTable(cls._id))}
 
       {/* Generated timetable */}
-      {timetable && (
+      {timetable && timetable.class_timetables && (
         <div style={{ marginTop: "20px" }}>
           {filteredTimetable().map(([classId, slots]) =>
             renderClassTable(classId, slots)
           )}
           {renderFacultyDailyHours()}
+        </div>
+      )}
+
+      {/* Message for assignment-only records */}
+      {timetable && !timetable.class_timetables && (
+        <div className="info-message" style={{ marginTop: '20px' }}>
+          <p>The currently loaded data ('{timetable.name}') is an 'assignment-only' record and does not contain a full timetable schedule.</p>
+          <p>Please use the 'Generate Timetable' button to create and view a complete schedule.</p>
         </div>
       )}
     </div>
