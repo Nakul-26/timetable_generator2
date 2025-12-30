@@ -17,6 +17,7 @@ import {
   getState,
   setState,
   initializeState,
+  loadState,
   lockSlot,
   unlockSlot,
   deleteState,
@@ -264,35 +265,84 @@ router.post("/clear-all", async (req, res) => {
   return res.json({ ok: true, ...getState(timetableId) });
 });
 
+// Load a saved timetable
+router.post("/load", async (req, res) => {
+    try {
+        const { timetableId, savedTimetableId } = req.body;
+        if (!timetableId || !savedTimetableId) {
+            return res.status(400).json({ ok: false, error: "Both timetableId and savedTimetableId are required." });
+        }
+
+        const savedTimetable = await TimetableResult.findById(savedTimetableId).lean();
+        if (!savedTimetable) {
+            return res.status(404).json({ ok: false, error: "Saved timetable not found." });
+        }
+
+        // Prepare the state object from the saved data
+        const savedState = {
+            classTimetable: savedTimetable.class_timetables,
+            teacherTimetable: savedTimetable.teacher_timetables,
+            subjectHoursAssigned: savedTimetable.subject_hours_assigned,
+            config: savedTimetable.config,
+            version: savedTimetable.version,
+            createdAt: savedTimetable.createdAt,
+        };
+
+        loadState(timetableId, savedState);
+
+        return res.json({ ok: true, ...getState(timetableId) });
+    } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // Save
 router.post("/save", async (req, res) => {
     try {
-        const { timetableId, name } = req.body;
+        const { timetableId, name, savedTimetableId } = req.body;
         if (!name) {
             return res.status(400).json({ ok: false, error: "A name is required to save the timetable." });
         }
         assertState(timetableId);
 
-        const existing = await TimetableResult.findOne({ name });
-        if (existing) {
-            return res.status(409).json({ ok: false, error: `A timetable with the name "${name}" already exists.` });
-        }
-
         const state = getState(timetableId);
 
-        const newTimetable = new TimetableResult({
-            name,
-            source: 'manual',
-            class_timetables: state.classTimetable,
-            teacher_timetables: state.teacherTimetable,
-            subject_hours_assigned: state.subjectHoursAssigned,
-            config: state.config,
-            version: state.version,
-        });
+        if (savedTimetableId) {
+            // Update existing timetable
+            const updatedTimetable = await TimetableResult.findByIdAndUpdate(
+                savedTimetableId,
+                {
+                    name,
+                    source: 'manual',
+                    class_timetables: state.classTimetable,
+                    teacher_timetables: state.teacherTimetable,
+                    subject_hours_assigned: state.subjectHoursAssigned,
+                    config: state.config,
+                    version: state.version,
+                },
+                { new: true } // Return the updated document
+            );
 
-        const saved = await newTimetable.save();
-        return res.status(201).json({ ok: true, message: "Timetable saved successfully!", id: saved._id });
+            if (!updatedTimetable) {
+                return res.status(404).json({ ok: false, error: "Timetable to update not found." });
+            }
 
+            return res.status(200).json({ ok: true, message: "Timetable updated successfully!", id: updatedTimetable._id });
+        } else {
+            // Create new timetable
+            const newTimetable = new TimetableResult({
+                name,
+                source: 'manual',
+                class_timetables: state.classTimetable,
+                teacher_timetables: state.teacherTimetable,
+                subject_hours_assigned: state.subjectHoursAssigned,
+                config: state.config,
+                version: state.version,
+            });
+
+            const saved = await newTimetable.save();
+            return res.status(201).json({ ok: true, message: "Timetable saved successfully!", id: saved._id });
+        }
     } catch (e) {
         return res.status(500).json({ ok: false, error: e.message });
     }

@@ -7,6 +7,8 @@ const hours = ["1", "2", "3", "4", "5", "6", "7", "8"];
 const ManualTimetable = () => {
     // Core data
     const [classes, setClasses] = useState([]);
+    const [subjects, setSubjects] = useState([]);
+    const [subjectIdToDetails, setSubjectIdToDetails] = useState({});
     
     // Timetable states
     const [classTimetable, setClassTimetable] = useState({});
@@ -17,7 +19,8 @@ const ManualTimetable = () => {
     const [isAutoFilling, setIsAutoFilling] = useState({});
     const [isDeleting, setIsDeleting] = useState(false);
     const [isSaving, setIsSaving] = useState(false); // New state for save loading
-        const [timetableId, setTimetableId] = useState(null); // New state for timetableId
+    const [timetableId, setTimetableId] = useState(null); // New state for timetableId
+    const [savedTimetableId, setSavedTimetableId] = useState(null); // For tracking loaded timetable
     const [comboIdToDetails, setComboIdToDetails] = useState({});
 
 
@@ -40,6 +43,14 @@ const ManualTimetable = () => {
                 const fetchedSubjects = subjectsRes.data;
 
                 setClasses(fetchedClasses);
+                setSubjects(fetchedSubjects);
+
+                const subjectDetails = {};
+                fetchedSubjects.forEach(s => {
+                    subjectDetails[s._id] = s;
+                });
+                setSubjectIdToDetails(subjectDetails);
+
 
                 // Generate a unique timetableId for this session
                 const currentTimetableId = `manual-${Date.now()}`;
@@ -214,16 +225,24 @@ const ManualTimetable = () => {
         }
     };
 
-    const handleSave = async () => {
+    const handleSave = async (isSaveAs = false) => {
         if (!timetableId) return;
 
         const name = window.prompt("Enter a name for this timetable:");
         if (name) {
             setIsSaving(true);
             try {
-                const response = await api.post('/manual/save', { timetableId, name });
+                const payload = {
+                    timetableId,
+                    name,
+                    savedTimetableId: isSaveAs ? null : savedTimetableId,
+                };
+                const response = await api.post('/manual/save', payload);
                 if (response.data.ok) {
                     alert(response.data.message);
+                    if (response.data.id) {
+                        setSavedTimetableId(response.data.id);
+                    }
                 } else {
                     alert(`Failed to save timetable: ${response.data.error}`);
                 }
@@ -236,6 +255,68 @@ const ManualTimetable = () => {
         }
     };
     
+    const handleLoad = async () => {
+        try {
+            const response = await api.get('/manual/processed-assignments');
+            const savedTimetables = response.data.savedTimetables.filter(t => t.source === 'manual');
+
+            if (savedTimetables.length === 0) {
+                alert("No saved timetables found.");
+                return;
+            }
+
+            const selection = window.prompt(
+                "Select a timetable to load:\n\n" +
+                savedTimetables.map((t, i) => `${i + 1}. ${t.name}`).join("\n")
+            );
+
+            const selectedIndex = parseInt(selection, 10) - 1;
+
+            if (!isNaN(selectedIndex) && savedTimetables[selectedIndex]) {
+                const selectedTimetable = savedTimetables[selectedIndex];
+                
+                // Fron the populated data, create the comboIdToDetails map
+                const newComboIdToDetails = {};
+                const unpopulatedClassTimetable = {};
+
+                for (const classId in selectedTimetable.class_timetables) {
+                    unpopulatedClassTimetable[classId] = [];
+                    for (const day in selectedTimetable.class_timetables[classId]) {
+                        unpopulatedClassTimetable[classId][day] = [];
+                        for (const hour in selectedTimetable.class_timetables[classId][day]) {
+                            const combo = selectedTimetable.class_timetables[classId][day][hour];
+                            if (combo) {
+                                newComboIdToDetails[combo._id] = { subject: combo.subject.name, faculty: combo.faculty.name };
+                                unpopulatedClassTimetable[classId][day][hour] = combo._id;
+                            } else {
+                                unpopulatedClassTimetable[classId][day][hour] = null;
+                            }
+                        }
+                    }
+                }
+
+                const loadResponse = await api.post('/manual/load', {
+                    timetableId,
+                    savedTimetableId: selectedTimetable._id,
+                });
+
+                if (loadResponse.data.ok) {
+                    setComboIdToDetails(newComboIdToDetails);
+                    setClassTimetable(unpopulatedClassTimetable);
+                    setTeacherTimetable(loadResponse.data.teacherTimetable);
+                    setSubjectHoursAssigned(loadResponse.data.subjectHoursAssigned);
+                    setSavedTimetableId(selectedTimetable._id);
+                    alert(`Timetable "${selectedTimetable.name}" loaded successfully.`);
+                } else {
+                    alert(`Failed to load timetable: ${loadResponse.data.error}`);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading timetables:', error);
+            alert('Failed to fetch saved timetables.');
+        }
+    };
+
     if (isLoading || timetableId === null || isDeleting) { // Add isDeleting to loading check
         return <div>Loading...</div>;
     }
@@ -246,11 +327,25 @@ const ManualTimetable = () => {
                 <h1>Manual Timetable Generator</h1>
                 <div>
                     <button
-                        onClick={handleSave}
-                        style={{ backgroundColor: 'red', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
+                        onClick={handleLoad}
+                        style={{ backgroundColor: 'blue', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
+                        disabled={isSaving || isDeleting}
+                    >
+                        Load Timetable
+                    </button>
+                    <button
+                        onClick={() => handleSave()}
+                        style={{ backgroundColor: 'green', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
                         disabled={isSaving || isDeleting}
                     >
                         {isSaving ? 'Saving...' : 'Save Timetable'}
+                    </button>
+                    <button
+                        onClick={() => handleSave(true)}
+                        style={{ backgroundColor: 'purple', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
+                        disabled={isSaving || isDeleting}
+                    >
+                        Save As...
                     </button>
                     <button 
                         onClick={handleClearAll}
@@ -290,40 +385,68 @@ const ManualTimetable = () => {
                             {days.map((day, dayIndex) => (
                                 <tr key={day}>
                                     <td>{day}</td>
-                                    {hours.map((hour, hourIndex) => (
-                                        <td key={hourIndex}>
-                                            <select
-                                                onFocus={() => handleGetOptions(c._id, dayIndex, hourIndex)}
-                                                value={classTimetable[c._id]?.[dayIndex]?.[hourIndex] || ''}
-                                                onChange={(e) => handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value)}
-                                                disabled={isDeleting || isSaving} // Disable selects during save/delete
-                                            >
-                                                <option value="">--Select--</option>
-                                                {/* Pre-populate the currently selected option if it's not in the validOptions list */}
-                                                {(classTimetable[c._id]?.[dayIndex]?.[hourIndex] && 
-                                                 !validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.find(opt => opt.comboId === classTimetable[c._id]?.[dayIndex]?.[hourIndex])) &&
-                                                    (() => {
-                                                        const comboId = classTimetable[c._id]?.[dayIndex]?.[hourIndex];
-                                                        const details = comboIdToDetails[comboId];
-                                                        return (
-                                                            <option value={comboId}>
-                                                                {details ? `${details.subject} - ${details.faculty}` : 'Loading...'}
-                                                            </option>
-                                                        );
-                                                    })()
-                                                }
-                                                {validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.map(option => (
-                                                    <option key={option.comboId} value={option.comboId}>
-                                                        {option.subject} - {option.faculty}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </td>
-                                    ))}
+                                    {hours.map((hour, hourIndex) => {
+                                        const comboIdInSlot = classTimetable[c._id]?.[dayIndex]?.[hourIndex];
+                                        const tdStyle = {
+                                            backgroundColor: comboIdInSlot ? 'lightgreen' : 'lightcoral',
+                                            padding: '5px', // Add some padding for better visual
+                                        };
+                                        return (
+                                            <td key={hourIndex} style={tdStyle}>
+                                                <select
+                                                    onFocus={() => handleGetOptions(c._id, dayIndex, hourIndex)}
+                                                    value={comboIdInSlot || ''}
+                                                    onChange={(e) => handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value)}
+                                                    disabled={isDeleting || isSaving} // Disable selects during save/delete
+                                                    style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }} // Ensure select doesn't hide TD background
+                                                >
+                                                    <option value="">--Select--</option>
+                                                    {/* Pre-populate the currently selected option if it's not in the validOptions list */}
+                                                    {(comboIdInSlot && 
+                                                     !validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.find(opt => opt.comboId === comboIdInSlot)) &&
+                                                        (() => {
+                                                            const details = comboIdToDetails[comboIdInSlot];
+                                                            return (
+                                                                <option value={comboIdInSlot}>
+                                                                    {details ? `${details.subject} - ${details.faculty}` : 'Loading...'}
+                                                                </option>
+                                                            );
+                                                        })()
+                                                    }
+                                                    {validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.map(option => (
+                                                        <option key={option.comboId} value={option.comboId}>
+                                                            {option.subject} - {option.faculty}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             ))}
                         </tbody>
                     </table>
+                    <div style={{ marginTop: '20px' }}>
+                        <h3>Subject Allocation Summary</h3>
+                        <table style={{ width: '50%' }}>
+                            <thead>
+                                <tr>
+                                    <th>Subject</th>
+                                    <th>Assigned Hours</th>
+                                    <th>Required Hours</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {c.subject_hours && Object.keys(c.subject_hours).map(subjectId => (
+                                    <tr key={subjectId}>
+                                        <td>{subjectIdToDetails[subjectId]?.name || 'Unknown Subject'}</td>
+                                        <td>{subjectHoursAssigned[c._id]?.[subjectId] || 0}</td>
+                                        <td>{c.subject_hours[subjectId]}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             ))}
         </div>

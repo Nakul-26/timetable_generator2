@@ -79,6 +79,19 @@ export const deleteState = (timetableId) => {
 };
 
 /**
+ * Loads a saved state for a given timetable ID.
+ * @param {string} timetableId - The unique ID for the timetable session.
+ * @param {object} savedState - The saved state object to load.
+ */
+export const loadState = (timetableId, savedState) => {
+    timetables.set(timetableId, {
+        ...savedState,
+        updatedAt: Date.now(),
+    });
+    console.log(`Timetable ${timetableId} loaded with saved state.`);
+};
+
+/**
  * Creates a deep copy (snapshot) of a timetable's state.
  * Useful for undo, debugging, or durable storage.
  * @param {string} timetableId - The ID of the timetable to snapshot.
