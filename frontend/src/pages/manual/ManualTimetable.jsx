@@ -451,13 +451,13 @@ const ManualTimetable = () => {
                                                             handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value);
                                                         }
                                                     }}
-                                                    disabled={isDeleting || isSaving || (hasLoadedOptions && options.length === 0)}
+                                                    // disabled={isDeleting || isSaving || (hasLoadedOptions && options.length === 0)}
                                                     style={{ width: '100%', border: 'none', background: 'transparent' }}
                                                     defaultValue=""
                                                 >
                                                     <option value="">--Select--</option>
                                                     {hasLoadedOptions && options.length === 0 && (
-                                                        <option value="" disabled>-- No Options --</option>
+                                                        <option value="" >-- No Options --</option> //dashboard
                                                     )}
                                                     {options?.map(option => (
                                                         <option key={option.comboId} value={option.comboId}>
