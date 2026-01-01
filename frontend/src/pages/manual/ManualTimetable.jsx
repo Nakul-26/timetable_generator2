@@ -52,6 +52,8 @@ const ManualTimetable = () => {
                 setSubjectIdToDetails(subjectDetails);
 
 
+                const electiveGroups = JSON.parse(localStorage.getItem('classElectiveGroups')) || [];
+
                 // Generate a unique timetableId for this session
                 const currentTimetableId = `manual-${Date.now()}`;
                 setTimetableId(currentTimetableId);
@@ -63,6 +65,7 @@ const ManualTimetable = () => {
                     classes: fetchedClasses,
                     faculties: fetchedFaculties,
                     subjects: fetchedSubjects,
+                    electiveGroups: electiveGroups, // Pass elective groups to the backend
                     config: { days: days.length, hours: hours.length } // Pass config
                 });
                 
@@ -109,6 +112,28 @@ const ManualTimetable = () => {
         }
     };
 
+    const handleClearSlot = async (classId, dayIndex, hourIndex) => {
+        if (!timetableId) return;
+        try {
+            const response = await api.post('/manual/clear-slot', {
+                timetableId,
+                classId,
+                day: dayIndex,
+                hour: hourIndex
+            });
+            if (response.data.ok) {
+                setClassTimetable(response.data.classTimetable);
+                setTeacherTimetable(response.data.teacherTimetable);
+                setSubjectHoursAssigned(response.data.subjectHoursAssigned);
+            } else {
+                alert(`Error clearing slot: ${response.data.error}`);
+            }
+        } catch (error) {
+            console.error('Error clearing slot:', error);
+            alert('An unexpected error occurred while clearing the slot.');
+        }
+    };
+
     const handlePlaceCombo = async (classId, dayIndex, hourIndex, comboId) => {
         if (!timetableId) return; // Ensure timetableId is set
 
@@ -148,21 +173,14 @@ const ManualTimetable = () => {
                 classId 
             });
             if (response.data.ok) {
+                // The backend now sends back the details for the combos it placed.
+                if (response.data.comboIdToDetails) {
+                    setComboIdToDetails(prev => ({ ...prev, ...response.data.comboIdToDetails }));
+                }
+
                 setClassTimetable(response.data.classTimetable);
                 setTeacherTimetable(response.data.teacherTimetable);
                 setSubjectHoursAssigned(response.data.subjectHoursAssigned);
-
-                const newTimetable = response.data.classTimetable;
-                if (newTimetable[classId]) {
-                    newTimetable[classId].forEach((row, dayIndex) => {
-                        row.forEach((comboId, hourIndex) => {
-                            if (comboId) {
-                                handleGetOptions(classId, dayIndex, hourIndex);
-                            }
-                        });
-                    });
-                }
-
             } else {
                 alert(`Auto-fill failed: ${response.data.error}`);
             }
@@ -284,12 +302,19 @@ const ManualTimetable = () => {
                     for (const day in selectedTimetable.class_timetables[classId]) {
                         unpopulatedClassTimetable[classId][day] = [];
                         for (const hour in selectedTimetable.class_timetables[classId][day]) {
-                            const combo = selectedTimetable.class_timetables[classId][day][hour];
-                            if (combo) {
-                                newComboIdToDetails[combo._id] = { subject: combo.subject.name, faculty: combo.faculty.name };
-                                unpopulatedClassTimetable[classId][day][hour] = combo._id;
+                            const combos = selectedTimetable.class_timetables[classId][day][hour]; // It's an array of combos
+                            
+                            if (combos && Array.isArray(combos) && combos.length > 0) {
+                                const comboIds = [];
+                                combos.forEach(combo => {
+                                    if (combo && combo._id) {
+                                        newComboIdToDetails[combo._id] = { subject: combo.subject.name, faculty: combo.faculty.name };
+                                        comboIds.push(combo._id);
+                                    }
+                                });
+                                unpopulatedClassTimetable[classId][day][hour] = comboIds;
                             } else {
-                                unpopulatedClassTimetable[classId][day][hour] = null;
+                                unpopulatedClassTimetable[classId][day][hour] = []; // Ensure empty slots are arrays
                             }
                         }
                     }
@@ -301,8 +326,9 @@ const ManualTimetable = () => {
                 });
 
                 if (loadResponse.data.ok) {
-                    setComboIdToDetails(newComboIdToDetails);
-                    setClassTimetable(unpopulatedClassTimetable);
+                    setComboIdToDetails(prev => ({ ...prev, ...newComboIdToDetails }));
+                    // The state from the backend is now normalized and reliable
+                    setClassTimetable(loadResponse.data.classTimetable);
                     setTeacherTimetable(loadResponse.data.teacherTimetable);
                     setSubjectHoursAssigned(loadResponse.data.subjectHoursAssigned);
                     setSavedTimetableId(selectedTimetable._id);
@@ -386,34 +412,54 @@ const ManualTimetable = () => {
                                 <tr key={day}>
                                     <td>{day}</td>
                                     {hours.map((hour, hourIndex) => {
-                                        const comboIdInSlot = classTimetable[c._id]?.[dayIndex]?.[hourIndex];
+                                        const comboIdsInSlot = classTimetable[c._id]?.[dayIndex]?.[hourIndex];
+                                        const options = validOptions[`${c._id}-${dayIndex}-${hourIndex}`];
+                                        const hasLoadedOptions = options !== undefined;
                                         const tdStyle = {
-                                            backgroundColor: comboIdInSlot ? 'lightgreen' : 'lightcoral',
-                                            padding: '5px', // Add some padding for better visual
+                                            backgroundColor: comboIdsInSlot && comboIdsInSlot.length > 0 ? 'lightgreen' : 'lightcoral',
+                                            padding: '5px',
+                                            verticalAlign: 'top',
                                         };
+
                                         return (
                                             <td key={hourIndex} style={tdStyle}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: '40px' }}>
+                                                    <div>
+                                                        {comboIdsInSlot?.map(comboId => {
+                                                            const details = comboIdToDetails[comboId];
+                                                            return (
+                                                                <div key={comboId} style={{ marginBottom: '5px' }}>
+                                                                    {details ? `${details.subject} - ${details.faculty}` : 'Loading...'}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    {comboIdsInSlot && comboIdsInSlot.length > 0 && (
+                                                        <button 
+                                                            onClick={() => handleClearSlot(c._id, dayIndex, hourIndex)}
+                                                            style={{ border: 'none', background: 'transparent', color: 'red', cursor: 'pointer', padding: '0', fontSize: '16px' }}
+                                                            title="Clear slot"
+                                                        >
+                                                            X
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 <select
                                                     onFocus={() => handleGetOptions(c._id, dayIndex, hourIndex)}
-                                                    value={comboIdInSlot || ''}
-                                                    onChange={(e) => handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value)}
-                                                    disabled={isDeleting || isSaving} // Disable selects during save/delete
-                                                    style={{ width: '100%', height: '100%', border: 'none', background: 'transparent' }} // Ensure select doesn't hide TD background
+                                                    onChange={(e) => {
+                                                        if (e.target.value) { // Only place if a value is selected
+                                                            handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value);
+                                                        }
+                                                    }}
+                                                    disabled={isDeleting || isSaving || (hasLoadedOptions && options.length === 0)}
+                                                    style={{ width: '100%', border: 'none', background: 'transparent' }}
+                                                    defaultValue=""
                                                 >
                                                     <option value="">--Select--</option>
-                                                    {/* Pre-populate the currently selected option if it's not in the validOptions list */}
-                                                    {(comboIdInSlot && 
-                                                     !validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.find(opt => opt.comboId === comboIdInSlot)) &&
-                                                        (() => {
-                                                            const details = comboIdToDetails[comboIdInSlot];
-                                                            return (
-                                                                <option value={comboIdInSlot}>
-                                                                    {details ? `${details.subject} - ${details.faculty}` : 'Loading...'}
-                                                                </option>
-                                                            );
-                                                        })()
-                                                    }
-                                                    {validOptions[`${c._id}-${dayIndex}-${hourIndex}`]?.map(option => (
+                                                    {hasLoadedOptions && options.length === 0 && (
+                                                        <option value="" disabled>-- No Options --</option>
+                                                    )}
+                                                    {options?.map(option => (
                                                         <option key={option.comboId} value={option.comboId}>
                                                             {option.subject} - {option.faculty}
                                                         </option>

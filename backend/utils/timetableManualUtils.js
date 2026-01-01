@@ -60,7 +60,8 @@ export function checkTeacherConstraints(teacherTimetable, facultyId, day, hour) 
 export function checkClassConstraints(classTimetable, classObj, day, hour, subjId, remainingHours) {
 
   // Slot collision check
-  if (classTimetable[classObj._id.toString()]?.[day]?.[hour] !== undefined && classTimetable[classObj._id.toString()]?.[day]?.[hour] !== null) {
+  const slot = classTimetable[classObj._id.toString()]?.[day]?.[hour];
+  if (slot && slot.length > 0) {
     return { ok: false, error: "Class slot already filled." };
   }
 
@@ -137,10 +138,10 @@ export async function autoFillTimetable(classId, currentState) {
         '_id': { $in: classObj.assigned_teacher_subject_combos }
     }).populate('faculty subject').lean();
 
-    // Create deep copies to work with
     let newClassTimetable = JSON.parse(JSON.stringify(classTimetable));
     let newTeacherTimetable = JSON.parse(JSON.stringify(teacherTimetable));
     let newSubjectHoursAssigned = JSON.parse(JSON.stringify(subjectHoursAssigned));
+    const placedComboIds = [];
 
     const requiredHoursForClass = {};
     if (classObj.subject_hours) {
@@ -153,11 +154,9 @@ export async function autoFillTimetable(classId, currentState) {
     const days = config.days || 6;
     const hours = config.hours || 8;
 
-    // Simple greedy algorithm
     for (let day = 0; day < days; day++) {
         for (let hour = 0; hour < hours; hour++) {
-            // If slot is already filled, skip
-            if (newClassTimetable[classId]?.[day]?.[hour]) {
+            if (newClassTimetable[classId]?.[day]?.[hour]?.length > 0) {
                 continue;
             }
 
@@ -174,7 +173,6 @@ export async function autoFillTimetable(classId, currentState) {
             const preferredCombos = [];
             const otherCombos = [];
 
-            // Prioritize combos that don't create a back-to-back slot
             for (const combo of availableCombos) {
                 const facultyId = combo.faculty._id.toString();
                 if (hour > 0 && newTeacherTimetable[facultyId]?.[day]?.[hour - 1]) {
@@ -184,15 +182,14 @@ export async function autoFillTimetable(classId, currentState) {
                 }
             }
             
-            // Define a function to attempt placing a combo from a given list
             const tryPlaceFromList = (list) => {
                 for (const combo of list) {
                     const facultyId = combo.faculty._id.toString();
                     const subjectId = combo.subject._id.toString();
 
                     if (requiredHoursForClass[subjectId] > 0) {
-                        // Place combo
-                        newClassTimetable[classId][day][hour] = combo._id.toString();
+                        newClassTimetable[classId][day][hour].push(combo._id.toString());
+                        placedComboIds.push(combo._id.toString());
                         
                         if (!newTeacherTimetable[facultyId]) {
                             newTeacherTimetable[facultyId] = Array(days).fill(null).map(() => Array(hours).fill(null));
@@ -205,13 +202,12 @@ export async function autoFillTimetable(classId, currentState) {
                         newSubjectHoursAssigned[classId][subjectId] = (newSubjectHoursAssigned[classId][subjectId] || 0) + 1;
                         requiredHoursForClass[subjectId]--;
 
-                        return true; // Placement successful
+                        return true; 
                     }
                 }
-                return false; // No placement made
+                return false; 
             };
 
-            // First try preferred combos, then fall back to other valid ones
             const placed = tryPlaceFromList(preferredCombos);
             if (!placed) {
                 tryPlaceFromList(otherCombos);
@@ -219,16 +215,15 @@ export async function autoFillTimetable(classId, currentState) {
         }
     }
 
-    // With a greedy approach, we always return the result, even if it's partial.
     return { 
         ok: true, 
         newState: { 
             classTimetable: newClassTimetable, 
             teacherTimetable: newTeacherTimetable, 
             subjectHoursAssigned: newSubjectHoursAssigned,
-            // Ensure config and version are carried over if they exist
             config: currentState.config,
             version: currentState.version
-        } 
+        },
+        placedComboIds: [...new Set(placedComboIds)]
     };
 }

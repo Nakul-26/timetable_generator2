@@ -34,9 +34,10 @@ export const setState = (timetableId, newState) => {
  * @param {number} config.days - Number of days in the timetable grid (default: 6).
  * @param {number} config.hours - Number of hours in the timetable grid (default: 8).
  */
-export const initializeState = (timetableId, classes, faculties, subjects, { days = 6, hours = 8 } = {}) => {
+export const initializeState = (timetableId, classes, faculties, subjects, { days = 6, hours = 8 } = {}, electiveGroups = []) => {
     if (timetables.has(timetableId)) {
-        throw new Error(`Timetable with ID ${timetableId} already exists.`);
+        // Instead of throwing an error, let's just re-initialize the state.
+        // This is useful for "clear all" functionality.
     }
 
     const classTimetable = {};
@@ -44,8 +45,7 @@ export const initializeState = (timetableId, classes, faculties, subjects, { day
     const subjectHoursAssigned = {};
 
     classes.forEach(c => {
-        classTimetable[c._id] = Array(days).fill(null).map(() => Array(hours).fill(null));
-        // Initialize the per-class subject hour tracking
+        classTimetable[c._id] = Array(days).fill(null).map(() => Array.from({ length: hours }, () => []));
         subjectHoursAssigned[c._id] = {};
         subjects.forEach(s => {
             subjectHoursAssigned[c._id][s._id] = 0;
@@ -56,17 +56,21 @@ export const initializeState = (timetableId, classes, faculties, subjects, { day
         teacherTimetable[f._id] = Array(days).fill(null).map(() => Array(hours).fill(null));
     });
   
+    const existingState = timetables.get(timetableId) || {};
+
     timetables.set(timetableId, {
+        ...existingState, // Preserve existing properties like electiveGroups if not provided
         classTimetable,
         teacherTimetable,
         subjectHoursAssigned,
-        createdAt: Date.now(),
-        version: 1, // Initial version
+        createdAt: existingState.createdAt || Date.now(),
+        version: (existingState.version || 0) + 1,
         updatedAt: Date.now(),
-        config: { days, hours }
+        config: { days, hours },
+        ...(electiveGroups && { electiveGroups }) // Only update electiveGroups if provided
     });
 
-    console.log(`Timetable ${timetableId} initialized.`);
+    console.log(`Timetable ${timetableId} initialized or cleared.`);
 };
 
 /**
