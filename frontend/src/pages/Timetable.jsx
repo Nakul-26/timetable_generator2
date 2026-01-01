@@ -302,7 +302,7 @@ function Timetable() {
     });
   };
 
-  const renderClassTable = (classId, slots) => {
+  const renderClassTable = (classId, slots, allocationsReportForClass) => {
     if (!timetable || !timetable.class_timetables) {
       return null;
     }
@@ -383,6 +383,32 @@ function Timetable() {
             ))}
           </tbody>
         </table>
+
+        {allocationsReportForClass && allocationsReportForClass.subjects && (
+          <div style={{ marginTop: "20px", borderTop: "1px solid #eee", paddingTop: "15px" }}>
+            <h4>Allocation Summary for {allocationsReportForClass.className}</h4>
+            <table className="styled-table compact-table">
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Required</th>
+                  <th>Allocated</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allocationsReportForClass.subjects.map((subj, index) => (
+                  <tr key={index}>
+                    <td>{subj.subjectName}</td>
+                    <td>{subj.requiredHours}</td>
+                    <td>{subj.allocatedHours}</td>
+                    <td>{subj.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     );
   };

@@ -78,6 +78,9 @@ function generate({
   const subjectById = new Map(subjects.map((s) => [s._id, s]));
   const classById = new Map(classes.map((c) => [c._id, c]));
 
+  // --- Allocation Report Data Structure ---
+  const allocations_report = {};
+
   // ensure subjects have combined_classes array if present (deprecated if using combo.class_ids)
   for (const s of subjects) {
     if (s.combined_classes && !Array.isArray(s.combined_classes)) {
@@ -188,8 +191,8 @@ function generate({
     return true;
   }
 
-  // helper: check continuous hours for faculty (max 2 continuous, 3 in late stage)
-  function check_continuous_hours(faculty_id, day, hour, blockSize, is_late_stage = false) {
+  // helper: check continuous hours for faculty (max 2 continuous)
+  function check_continuous_hours(faculty_id, day, hour, blockSize) {
     const ft = faculty_timetables[faculty_id][day];
 
     // count continuous before
@@ -206,8 +209,7 @@ function generate({
       else break;
     }
 
-    const limit = is_late_stage ? 3 : 2;
-    return before + blockSize + after <= limit;
+    return before + blockSize + after <= 2;
   }
 
   // NEW: teacher/day feasibility
@@ -243,7 +245,7 @@ function generate({
   }
 
   // NEW: subject remaining-hours feasibility per class
-  function subject_feasible(classId, subjId, is_late_stage = false) {
+  function subject_feasible(classId, subjId) {
     const required = get_required_hours_for_class_subject(classId, subjId);
     const assigned = subject_hours_assigned_per_class[classId][subjId] || 0;
     const remaining = required - assigned;
@@ -255,11 +257,11 @@ function generate({
       for (let h = 0; h < HOURS_PER_DAY; h++) {
         if (!BREAK_HOURS.includes(h) && table[d][h] === EMPTY_SLOT) {
           free++;
+          if (free >= remaining) return true;
         }
       }
     }
-    const slack = is_late_stage ? 1 : 0;
-    return free >= remaining - slack;
+    return free >= remaining;
   }
 
   // --- Preprocess classes ---
@@ -521,13 +523,6 @@ function generate({
     return ordered;
   }
 
-  // --- Configuration for Late-Stage Relaxation ---
-  const REPAIR_THRESHOLD = 0.85; // 85%
-  let initial_total_required_hours = 0;
-  for (const cls of classes) {
-    initial_total_required_hours += cls.total_class_hours || 0;
-  }
-
   // --- Feasibility / exact-hour helpers ---
 
   // total remaining required hours across all classes and subjects
@@ -580,104 +575,42 @@ function generate({
     return avail >= rem;
   }
 
-  // --- Micro-Repair Helpers ---
-
-  function shuffle(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
-    }
-  }
-
-  function find_nearby_placed_slots(classId, facultyId, day) {
-    const candidates = [];
-    const checkedSlots = new Set(); // To avoid adding duplicates, key: 'd|h|class'
-
-    const days_to_check = [day];
-    if (day > 0) days_to_check.push(day - 1);
-
-    for (const d of days_to_check) {
-      // Find slots from the same faculty on the given day
-      if (faculty_timetables[facultyId] && faculty_timetables[facultyId][d]) {
-        for (let h = 0; h < HOURS_PER_DAY; h++) {
-          const comboId = faculty_timetables[facultyId][d][h];
-          if (comboId !== EMPTY_SLOT && comboId !== BREAK_SLOT) {
-            // This faculty is busy. Find which class they are teaching.
-            for (const cId of classIds) {
-              if (class_timetables[cId][d] && class_timetables[cId][d][h] === comboId) {
-                const slotKey = `${d}|${h}|${cId}`;
-                if (!checkedSlots.has(slotKey)) {
-                  candidates.push({ day: d, hour: h, classId: cId, comboId: comboId });
-                  checkedSlots.add(slotKey);
-                }
-                break; // Found the class for this slot
-              }
-            }
-          }
-        }
-      }
-      // Find slots from the same class on the given day
-      if (class_timetables[classId] && class_timetables[classId][d]) {
-        for (let h = 0; h < HOURS_PER_DAY; h++) {
-          const comboId = class_timetables[classId][d][h];
-          if (comboId !== EMPTY_SLOT && comboId !== BREAK_SLOT) {
-            const slotKey = `${d}|${h}|${classId}`;
-            if (!checkedSlots.has(slotKey)) {
-              candidates.push({ day: d, hour: h, classId: classId, comboId: comboId });
-              checkedSlots.add(slotKey);
-            }
-          }
-        }
-      }
-    }
-
-    shuffle(candidates);
-    return candidates.slice(0, 5); // Limit to 5 repair attempts to keep it "micro"
-  }
-
-  // --- Placement Helpers ---
-
-  function place_combo(classId, day, hour, combo, subj, blockSize) {
-    const combo_id = combo._id;
-    const comboDef = comboByMongoId.get(combo_id);
-    const isCombined = Array.isArray(comboDef.class_ids) && comboDef.class_ids.length > 1;
-
-    const classIdsToPlace = isCombined ? comboDef.class_ids : [classId];
-
-    for (const cId of classIdsToPlace) {
-      for (let h = hour; h < hour + blockSize; h++) {
-        class_timetables[cId][day][h] = combo_id;
-        subject_hours_assigned_per_class[cId][subj._id]++;
-        daily_hours_assigned[cId][day]++;
-      }
-    }
-    for (let h = hour; h < hour + blockSize; h++) {
-      faculty_timetables[combo.faculty_id][day][h] = combo_id;
-    }
-  }
-
-  function unplace_combo(classId, day, hour, combo, subj, blockSize) {
-    const combo_id = combo._id;
-    const comboDef = comboByMongoId.get(combo_id);
-    const isCombined = Array.isArray(comboDef.class_ids) && comboDef.class_ids.length > 1;
-
-    const classIdsToUnplace = isCombined ? comboDef.class_ids : [classId];
-
-    for (const cId of classIdsToUnplace) {
-      for (let h = hour; h < hour + blockSize; h++) {
-        daily_hours_assigned[cId][day]--;
-        subject_hours_assigned_per_class[cId][subj._id]--;
-        class_timetables[cId][day][h] = EMPTY_SLOT;
-      }
-    }
-    for (let h = hour; h < hour + blockSize; h++) {
-      faculty_timetables[combo.faculty_id][day][h] = EMPTY_SLOT;
-    }
-  }
-
   // checks exactness after full assignment:
   // 1) all class-subject hours exactly equal required
   // 2) each faculty per day has either 0 hours or exactly 4 hours
+
+  function get_class_allocation_report_data(classId) {
+    const cls = classById.get(classId);
+    if (!cls || !cls.total_class_hours || cls.total_class_hours <= 0) return null;
+
+    const class_report = {
+      className: cls.name,
+      classId: cls._id,
+      subjects: []
+    };
+    
+    const subjectIdsForClass = (cls.assigned_teacher_subject_combos || []).map(cbid => {
+      const cb = comboByMongoId.get(String(cbid));
+      return cb ? cb.subject_id : null;
+    }).filter(id => id);
+
+    for (const subjId of new Set(subjectIdsForClass)) {
+      const subj = subjectById.get(subjId);
+      if (!subj) continue;
+      const required = get_required_hours_for_class_subject(cls._id, subjId);
+      const assigned = subject_hours_assigned_per_class[cls._id][subjId] || 0;
+      
+      class_report.subjects.push({
+        subjectName: subj.name,
+        subjectId: subjId,
+        requiredHours: required,
+        allocatedHours: assigned,
+        status: required === assigned ? '✅' : `❌ (needs ${required - assigned > 0 ? '+' : ''}${required - assigned}h)`
+      });
+    }
+    return class_report;
+  }
+
   function all_subjects_exactly_assigned() {
     // subject exactness
     for (const cls of classes) {
@@ -769,7 +702,7 @@ function generate({
   }
 
   // Helper: check whether we can place a combined combo for a subject across its group
-  function can_place_combined(combo, subj, group, day, hour, blockSize, is_late_stage = false) {
+  function can_place_combined(combo, subj, group, day, hour, blockSize) {
     // group is array of classIds (strings)
     for (const otherClass of group) {
       // must be a valid class
@@ -813,25 +746,24 @@ function generate({
       (x) => x !== EMPTY_SLOT && x !== BREAK_SLOT
     ).length;
     
-    const daily_cap = is_late_stage ? 5 : 4;
-    if (facultyDayHours + blockSize > daily_cap) {
+    if (facultyDayHours + blockSize > 4) {
       return false;
     }
 
     // continuous hours check for faculty
-    if (!check_continuous_hours(combo.faculty_id, day, hour, blockSize, is_late_stage)) return false;
+    if (!check_continuous_hours(combo.faculty_id, day, hour, blockSize)) return false;
 
     // feasibility checks
     // if (!teacher_feasible(combo.faculty_id, day)) return false;
     for (const otherClass of group) {
     // if (!class_day_feasible(group[0], day)) return false; // Check for the first class in the group
-      if (!subject_feasible(otherClass, subj._id, is_late_stage)) return false;
+      if (!subject_feasible(otherClass, subj._id)) return false;
     }
 
     return true;
   }
 
-  function is_placement_valid(classId, day, hour, combo_id, blockSize = 1, is_late_stage = false) {
+  function is_placement_valid(classId, day, hour, combo_id, blockSize = 1) {
     const combo = comboByMongoId.get(String(combo_id));
     const subj = subjectById.get(combo.subject_id);
 
@@ -871,12 +803,11 @@ function generate({
     const facultyDayHours = faculty_timetables[combo.faculty_id][day].filter(
       (x) => x !== EMPTY_SLOT && x !== BREAK_SLOT
     ).length;
-    const daily_cap = is_late_stage ? 5 : 4;
-    if (facultyDayHours + blockSize > daily_cap) {
+    if (facultyDayHours + blockSize > 4) {
       return false;
     }
 
-    if (!check_continuous_hours(combo.faculty_id, day, hour, blockSize, is_late_stage)) {
+    if (!check_continuous_hours(combo.faculty_id, day, hour, blockSize)) {
       console.log(
         `[REJECT] Too many continuous hours: Faculty ${combo.faculty_id} D${day+1} H${hour+1}`
       );
@@ -888,7 +819,7 @@ function generate({
     // SKIP no-gap check during placement (final polish only)
     // if (!class_day_feasible(classId, day)) return false;
 
-    if (!subject_feasible(classId, subj._id, is_late_stage)) return false;
+    if (!subject_feasible(classId, subj._id)) return false;
 
     return true;
   }
@@ -917,14 +848,15 @@ function generate({
       return schedule_slot(day, hour + 1);
     }
 
-    // --- Progress & Late Stage Calculation ---
-    const rem = total_remaining_required_hours();
-    const progress = initial_total_required_hours > 0 ? ((initial_total_required_hours - rem) / initial_total_required_hours) : 0;
-    const is_late_stage = progress > REPAIR_THRESHOLD;
-
+    // --- Progress Reporting ---
     if (progressCallback) {
+      // A simple progress estimate based on slots processed
+      const total_slots = MAX_DAYS * HOURS_PER_DAY;
+      const current_slot = day * HOURS_PER_DAY + hour;
+      const progress = (current_slot / total_slots) * 100;
+      
       progressCallback({
-        progress: Math.min(99, Math.round(progress * 100)), // Report as percentage
+        progress: Math.min(99, Math.round(progress)), // Don't show 100 until verified
         partialData: {
           class_timetables,
           faculty_timetables,
@@ -939,126 +871,126 @@ function generate({
     }
 
     const classOrder = get_class_order_for_slot(day, hour);
-    return try_class_in_slot(day, hour, classOrder, 0, is_late_stage);
+    return try_class_in_slot(day, hour, classOrder, 0);
   }
 
-    function try_class_in_slot(day, hour, classOrder, classIndex, is_late_stage) {
-      // Base case for this recursion: we've considered all classes for the current slot.
-      // Time to move to the next time slot.
-      if (classIndex >= classOrder.length) {
-        return schedule_slot(day, hour + 1);
-      }
-  
-      const classId = classOrder[classIndex];
-      const cls = classById.get(classId);
-  
-      // Skip this class if the current day is outside its working days.
-      const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
-      if (day >= daysPerWeek) {
-        return try_class_in_slot(day, hour, classOrder, classIndex + 1, is_late_stage);
-      }
-  
-      // If the slot for this class is already occupied (e.g., by a fixed or combined class),
-      // we don't need to do anything for it, just move to the next class for this slot.
-      if (class_timetables[classId][day][hour] !== EMPTY_SLOT) {
-        return try_class_in_slot(day, hour, classOrder, classIndex + 1, is_late_stage);
-      }
-  
-      // --- Candidate Generation (logic from old schedule_class) ---
-      const candidates = [];
-      for (const cbid of cls.assigned_teacher_subject_combos) {
-        const combo = comboByMongoId.get(String(cbid));
-        if (!combo) continue;
-        const subj = subjectById.get(combo.subject_id);
-        if (!subj) continue;
-        candidates.push({ combo, subj });
-      }
-      
-      // Order candidates: combined, labs, then by remaining hours.
-      candidates.sort((a, b) => {
-          const aIsCombined = comboByMongoId.get(a.combo._id).class_ids.length > 1;
-          const bIsCombined = comboByMongoId.get(b.combo._id).class_ids.length > 1;
-          if (aIsCombined !== bIsCombined) return bIsCombined - aIsCombined;
-  
-          const aIsLab = a.subj.type === "lab";
-          const bIsLab = b.subj.type === "lab";
-          if (aIsLab !== bIsLab) return bIsLab - aIsLab;
-  
-          const remA = get_required_hours_for_class_subject(classId, a.subj._id) - (subject_hours_assigned_per_class[classId][a.subj._id] || 0);
-          const remB = get_required_hours_for_class_subject(classId, b.subj._id) - (subject_hours_assigned_per_class[classId][b.subj._id] || 0);
-          return remB - remA;
-      });
-  
-  
-      // --- CHOICE 1: Try to place each valid candidate subject ---
-      for (const { combo, subj } of candidates) {
-        const combo_id = String(combo._id);
-        const comboDef = comboByMongoId.get(combo_id);
-        const isCombined = Array.isArray(comboDef.class_ids) && comboDef.class_ids.length > 1;
-        const blockSize = subj.type === 'lab' ? 2 : 1;
-  
-        let isValid = false;
-        if (isCombined) {
-          if (String(comboDef.class_ids[0]) !== classId) continue;
-          isValid = can_place_combined(combo, subj, comboDef.class_ids, day, hour, blockSize, is_late_stage);
-        } else {
-          isValid = is_placement_valid(classId, day, hour, combo_id, blockSize, is_late_stage);
-          if (isValid && blockSize > 1) {
-            isValid = can_place_lab_block(classId, combo.faculty_id, day, hour, blockSize);
-          }
-        }
-  
-        if (isValid) {
-          place_combo(classId, day, hour, combo, subj, blockSize);
-          if (try_class_in_slot(day, hour, classOrder, classIndex + 1, is_late_stage)) return true;
-          unplace_combo(classId, day, hour, combo, subj, blockSize);
-        }
-        // --- MICRO-REPAIR LOGIC ---
-        else if (is_late_stage) {
-          const repair_candidates = find_nearby_placed_slots(classId, combo.faculty_id, day);
-  
-          for (const removed of repair_candidates) {
-            const removed_combo = comboByMongoId.get(removed.comboId);
-            const removed_subj = subjectById.get(removed_combo.subject_id);
-            const removed_blockSize = removed_subj.type === 'lab' ? 2 : 1;
-  
-            // 1. Unplace the candidate for removal
-            unplace_combo(removed.classId, removed.day, removed.hour, removed_combo, removed_subj, removed_blockSize);
-  
-            // 2. Check if the original placement is now valid
-            let isNowValid = false;
-            if (isCombined) {
-              if (String(comboDef.class_ids[0]) === classId) { // Check primary again
-                isNowValid = can_place_combined(combo, subj, comboDef.class_ids, day, hour, blockSize, is_late_stage);
-              }
-            } else {
-              isNowValid = is_placement_valid(classId, day, hour, combo_id, blockSize, is_late_stage);
-              if (isNowValid && blockSize > 1) {
-                isNowValid = can_place_lab_block(classId, combo.faculty_id, day, hour, blockSize);
-              }
-            }
-  
-            // 3. If it's valid, place it and recurse
-            if (isNowValid) {
-              place_combo(classId, day, hour, combo, subj, blockSize);
-  
-              if (try_class_in_slot(day, hour, classOrder, classIndex + 1, is_late_stage)) {
-                return true;
-              }
-              
-              // Backtrack the original placement
-              unplace_combo(classId, day, hour, combo, subj, blockSize);
-            }
-  
-            // 4. Backtrack: re-place the removed candidate
-            place_combo(removed.classId, removed.day, removed.hour, removed_combo, removed_subj, removed_blockSize);
-          }
-        }
-      }
-  
-      // --- CHOICE 2: Don't place any subject for this class in this slot. ---
-      return try_class_in_slot(day, hour, classOrder, classIndex + 1, is_late_stage);
+  function try_class_in_slot(day, hour, classOrder, classIndex) {
+    // Base case for this recursion: we've considered all classes for the current slot.
+    // Time to move to the next time slot.
+    if (classIndex >= classOrder.length) {
+      return schedule_slot(day, hour + 1);
     }
+
+    const classId = classOrder[classIndex];
+    const cls = classById.get(classId);
+
+    // Skip this class if the current day is outside its working days.
+    const daysPerWeek = Number(cls.days_per_week || DAYS_PER_WEEK);
+    if (day >= daysPerWeek) {
+      return try_class_in_slot(day, hour, classOrder, classIndex + 1);
+    }
+
+    // If the slot for this class is already occupied (e.g., by a fixed or combined class),
+    // we don't need to do anything for it, just move to the next class for this slot.
+    if (class_timetables[classId][day][hour] !== EMPTY_SLOT) {
+      return try_class_in_slot(day, hour, classOrder, classIndex + 1);
+    }
+
+    // --- Candidate Generation (logic from old schedule_class) ---
+    const candidates = [];
+    for (const cbid of cls.assigned_teacher_subject_combos) {
+      const combo = comboByMongoId.get(String(cbid));
+      if (!combo) continue;
+      const subj = subjectById.get(combo.subject_id);
+      if (!subj) continue;
+      candidates.push({ combo, subj });
+    }
+    
+    // Order candidates: combined, labs, then by remaining hours.
+    candidates.sort((a, b) => {
+        const aIsCombined = comboByMongoId.get(a.combo._id).class_ids.length > 1;
+        const bIsCombined = comboByMongoId.get(b.combo._id).class_ids.length > 1;
+        if (aIsCombined !== bIsCombined) return bIsCombined - aIsCombined;
+
+        const aIsLab = a.subj.type === "lab";
+        const bIsLab = b.subj.type === "lab";
+        if (aIsLab !== bIsLab) return bIsLab - aIsLab;
+
+        const remA = get_required_hours_for_class_subject(classId, a.subj._id) - (subject_hours_assigned_per_class[classId][a.subj._id] || 0);
+        const remB = get_required_hours_for_class_subject(classId, b.subj._id) - (subject_hours_assigned_per_class[classId][b.subj._id] || 0);
+        return remB - remA;
+    });
+
+
+    // --- CHOICE 1: Try to place each valid candidate subject ---
+    for (const { combo, subj } of candidates) {
+      const combo_id = String(combo._id);
+      const comboDef = comboByMongoId.get(combo_id);
+      const isCombined = Array.isArray(comboDef.class_ids) && comboDef.class_ids.length > 1;
+      const blockSize = subj.type === 'lab' ? 2 : 1;
+
+      if (isCombined) {
+        // For combined classes, only the "primary" class in the group can initiate the placement.
+        if (String(comboDef.class_ids[0]) !== classId) continue;
+
+        if (can_place_combined(combo, subj, comboDef.class_ids, day, hour, blockSize)) {
+          // --- Place Combined ---
+          for (const cId of comboDef.class_ids) {
+            for (let h = hour; h < hour + blockSize; h++) {
+              class_timetables[cId][day][h] = combo_id;
+              subject_hours_assigned_per_class[cId][subj._id]++;
+              daily_hours_assigned[cId][day]++;
+            }
+          }
+          for (let h = hour; h < hour + blockSize; h++) {
+            faculty_timetables[combo.faculty_id][day][h] = combo_id;
+          }
+
+          if (try_class_in_slot(day, hour, classOrder, classIndex + 1)) return true;
+
+          // --- Rollback Combined ---
+          for (let h = hour; h < hour + blockSize; h++) {
+            faculty_timetables[combo.faculty_id][day][h] = EMPTY_SLOT;
+          }
+          for (const cId of comboDef.class_ids) {
+            for (let h = hour; h < hour + blockSize; h++) {
+              daily_hours_assigned[cId][day]--;
+              subject_hours_assigned_per_class[cId][subj._id]--;
+              class_timetables[cId][day][h] = EMPTY_SLOT;
+            }
+          }
+        }
+      } else { // --- Regular (non-combined) placement ---
+        if (is_placement_valid(classId, day, hour, combo_id, blockSize)) {
+          if (blockSize > 1 && !can_place_lab_block(classId, combo.faculty_id, day, hour, blockSize)) {
+              continue;
+          }
+          
+          // --- Place Regular/Lab ---
+          for (let h = hour; h < hour + blockSize; h++) {
+            class_timetables[classId][day][h] = combo_id;
+            faculty_timetables[combo.faculty_id][day][h] = combo_id;
+            subject_hours_assigned_per_class[classId][subj._id]++;
+            daily_hours_assigned[classId][day]++;
+          }
+
+          if (try_class_in_slot(day, hour, classOrder, classIndex + 1)) return true;
+
+          // --- Rollback Regular/Lab ---
+          for (let h = hour; h < hour + blockSize; h++) {
+            daily_hours_assigned[classId][day]--;
+            subject_hours_assigned_per_class[classId][subj._id]--;
+            faculty_timetables[combo.faculty_id][day][h] = EMPTY_SLOT;
+            class_timetables[classId][day][h] = EMPTY_SLOT;
+          }
+        }
+      }
+    }
+
+    // --- CHOICE 2: Don't place any subject for this class in this slot. ---
+    // We try to find a solution by moving to the next class for this same slot.
+    return try_class_in_slot(day, hour, classOrder, classIndex + 1);
+  }
 // DIAGNOSTIC HELPERS - DO NOT MODIFY SOLVER LOGIC
 function countFreeSlots(classId) {
   let free = 0;
@@ -1123,8 +1055,16 @@ function countTotalRequiredHoursForClass(classId) {
 
 
   const ok = schedule_slot(0, 0);
-  
-  generate_allocation_report();
+
+  // Populate allocations_report for all classes
+  for (const cls of classes) {
+    if (cls.total_class_hours > 0) {
+      const report = get_class_allocation_report_data(cls._id);
+      if (report) {
+        allocations_report[cls._id] = report;
+      }
+    }
+  }
 
   if (!ok) {
     const errorMsg = stopFlag
@@ -1147,6 +1087,12 @@ function countTotalRequiredHoursForClass(classId) {
     console.log("\n--- Partial Class Timetables ---");
     for (const classId in partial_class_timetables) {
       printTimetable(classId, partial_class_timetables[classId], classById);
+      if (allocations_report[classId]) {
+        console.log("  Allocation Summary (Partial):");
+        allocations_report[classId].subjects.forEach(subj => {
+          console.log(`    - ${subj.subjectName.padEnd(15)} | Required: ${subj.requiredHours}, Allocated: ${subj.allocatedHours} | ${subj.status}`);
+        });
+      }
     }
   
     console.log("\n--- Partial Faculty Timetables ---");
@@ -1170,6 +1116,7 @@ function countTotalRequiredHoursForClass(classId) {
       class_timetables: partial_class_timetables,
       faculty_timetables: partial_faculty_timetables,
       subject_hours_assigned_per_class,
+      allocations_report, // Include in return
     };
   }
 
@@ -1195,6 +1142,12 @@ function countTotalRequiredHoursForClass(classId) {
   console.log("\n--- Generated Class Timetables ---");
   for (const classId in out_class_timetables) {
     printTimetable(classId, out_class_timetables[classId], classById);
+    if (allocations_report[classId]) {
+      console.log("  Allocation Summary:");
+      allocations_report[classId].subjects.forEach(subj => {
+        console.log(`    - ${subj.subjectName.padEnd(15)} | Required: ${subj.requiredHours}, Allocated: ${subj.allocatedHours} | ${subj.status}`);
+      });
+    }
   }
 
   console.log("\n--- Generated Faculty Timetables ---");
@@ -1219,44 +1172,15 @@ function countTotalRequiredHoursForClass(classId) {
     class_timetables: out_class_timetables,
     faculty_timetables: out_faculty_timetables,
     faculty_daily_hours,
+    allocations_report, // Include in return
   };
 }
+
 
 // export
 export default { generate };
 
 // Debug helpers kept below (not duplicated into export)
-function generate_allocation_report() {
-  console.log("\n\n📊 --- Subject Allocation Report --- 📊");
-  let report_lines = [];
-  
-  for (const cls of classes) {
-    if (cls.total_class_hours <= 0) continue;
-
-    report_lines.push(`\n📋 Class: ${cls.name}`);
-    const subjectSet = new Set();
-    
-    // Use a set to handle unique subjects, as combos might have duplicates
-    const subjectIdsForClass = (cls.assigned_teacher_subject_combos || []).map(cbid => {
-      const cb = comboByMongoId.get(String(cbid));
-      return cb ? cb.subject_id : null;
-    }).filter(id => id);
-
-    for (const subjId of new Set(subjectIdsForClass)) {
-      const subj = subjectById.get(subjId);
-      const required = get_required_hours_for_class_subject(cls._id, subjId);
-      const assigned = subject_hours_assigned_per_class[cls._id][subjId] || 0;
-      
-      const status = required === assigned ? '✅' : `❌ (needs ${required - assigned > 0 ? '+' : ''}${required - assigned}h)`;
-      
-      report_lines.push(`  - ${subj.name.padEnd(20)} | Required: ${required}, Allocated: ${assigned} | ${status}`);
-    }
-  }
-  console.log(report_lines.join('\n'));
-  console.log("\n-------------------------------------\n");
-}
-
-
 function printTimetable(classId, timetable, classById) {
   console.log(`\n📅 Timetable for ${classById.get(classId).name}`);
   timetable.forEach((row, d) => {
