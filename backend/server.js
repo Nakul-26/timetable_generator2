@@ -7,22 +7,24 @@ import cookieParser from "cookie-parser";
 import API from "./models/routes/api.js"; // ensure this uses ESM too
 import ManualAPI from "./routes/timetableManual.js";
 import mongoose from "mongoose";
-import rateLimit from 'express-rate-limit';
+// import rateLimit from 'express-rate-limit';
 
 // const mongoose = require('mongoose');
 
 dotenv.config();
 const app = express();
 
-// --- Rate Limiter ---
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-});
+// // --- Rate Limiter ---
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 100, // limit each IP to 100 requests per windowMs
+//   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+//   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+// });
 
 // --- MongoDB Client ---
+// MongoClient: used for admin / low-level access
+// Mongoose: used for application models
 const uri = process.env.MONGO_URI;
 if (!uri) {
   throw new Error("❌ MONGO_URI is not defined in .env");
@@ -58,6 +60,14 @@ const corsOptions = {
   optionsSuccessStatus: 200,
   credentials: true
 };
+
+// const corsOptions = {
+//   origin: process.env.CORS_ORIGINS?.split(",") || [
+//     "http://localhost:5173"
+//   ],
+//   credentials: true
+// };
+
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
@@ -78,7 +88,9 @@ app.use((req, res, next) => {
   console.log(`📥 Incoming request: ${req.method} ${req.url}`);
   console.log("👉 Headers:", req.headers.origin);
   if (req.body && Object.keys(req.body).length > 0) {
-    console.log("👉 Body:", req.body);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("👉 Body:", req.body);
+    }
   }
   console.log("👉 Query:", req.query);
   console.log("👉 Params:", req.params);
@@ -94,7 +106,7 @@ app.get("/", (req, res) => {
   res.send("API is working 2");
 });
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () =>
   console.log(`🚀 Server running on port ${PORT}`)

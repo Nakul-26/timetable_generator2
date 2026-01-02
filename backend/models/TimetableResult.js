@@ -12,6 +12,8 @@ const ResultSchema = new Schema({
   config: Object, // Stores configuration like { days, hours }
   version: Number, // The version number from the in-memory state
   score: Number,
+  combos: Object,
+  allocations_report: Object,
 });
 
 export default mongoose.model('TimetableResult', ResultSchema);

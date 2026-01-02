@@ -5,9 +5,25 @@ import jwt from 'jsonwebtoken';
 const { Schema } = mongoose;
 
 const AdminSchema = new Schema({
-  email: { type: String, unique: true, required: true },
-  password: { type: String, required: true },
-});
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+    index: true
+  },
+  role: {
+    type: String,
+    default: "admin",
+    immutable: true,
+  },
+  password: { type: String, required: true, minlength: 8 },
+}, { timestamps: true });
+
+// if (!process.env.JWT_SECRET) {
+//   throw new Error("JWT_SECRET not defined");
+// }
 
 // Hash password before saving
 AdminSchema.pre('save', async function (next) {
@@ -26,7 +42,7 @@ AdminSchema.methods.matchPassword = async function (enteredPassword) {
 
 // Method to generate auth token
 AdminSchema.methods.generateAuthToken = function () {
-  return jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
+  return jwt.sign({ id: this._id, role: "admin" }, process.env.JWT_SECRET, {
     expiresIn: '1h',
   });
 };

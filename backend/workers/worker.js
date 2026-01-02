@@ -48,6 +48,8 @@ parentPort.on("message", async (message) => {
         stopFlag: stopRequested // Pass the stopRequested flag
       });
 
+      result.combos = combos;
+
       // Whether success or partial, always send a final result message
       parentPort.postMessage({
         taskId,

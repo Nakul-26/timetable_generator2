@@ -14,5 +14,12 @@ const ClassSchema = new Schema({
     type: Map,
     of: Number
   },
+  ownerId: {
+    type: Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true
+  }
+
 });
 export default mongoose.model('Class', ClassSchema);

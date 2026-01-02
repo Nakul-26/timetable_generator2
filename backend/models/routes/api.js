@@ -631,12 +631,30 @@ protectedRouter.post('/generate', async (req, res) => {
       }
     });
 
-    worker.on('message', (message) => {
+    worker.on('message', async (message) => {
       if (message.type === 'PROGRESS') {
         taskResults.set(taskId, { status: 'running', progress: message.progress, partialData: message.partialData });
       } else if (message.type === 'RESULT') {
-        taskResults.set(taskId, { status: 'completed', result: message.data });
-        workers.delete(taskId);
+        try {
+          const resultWithCombos = message.data;
+          const rec = new TimetableResult({
+            name: `Generated Timetable - ${new Date().toLocaleString()}`,
+            source: 'generator',
+            class_timetables: resultWithCombos.class_timetables,
+            faculty_timetables: resultWithCombos.faculty_timetables,
+            faculty_daily_hours: resultWithCombos.faculty_daily_hours,
+            score: resultWithCombos.bestScore,
+            combos: resultWithCombos.combos,
+            allocations_report: resultWithCombos.allocations_report
+          });
+          await rec.save();
+          taskResults.set(taskId, { status: 'completed', result: rec });
+        } catch (dbError) {
+          console.error(`Error saving result for task #${taskId}:`, dbError);
+          taskResults.set(taskId, { status: 'error', error: 'Failed to save result to database.' });
+        } finally {
+          workers.delete(taskId);
+        }
       } else if (message.type === 'ERROR') {
         taskResults.set(taskId, { status: 'error', error: message.error });
         workers.delete(taskId);

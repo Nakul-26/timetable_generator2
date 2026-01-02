@@ -331,16 +331,31 @@ function Timetable() {
                     return <td key={p}>-</td>;
                   }
 
-                  const combo = combos.find(
-                    (c) => String(c._id) === String(slotId) || (c.id && String(c.id) === String(slotId))
-                  );
+                  let combo, subjectName, facultyName;
+
+                  if (timetable.combos && timetable.combos.length > 0) {
+                    // Generator flow: timetable.combos has the map
+                    combo = timetable.combos.find(c => String(c._id) === String(slotId));
+                    if (combo) {
+                      const subject = subjects.find(s => String(s._id) === String(combo.subject_id));
+                      const faculty = faculties.find(f => String(f._id) === String(combo.faculty_id));
+                      subjectName = subject ? subject.name : "N/A";
+                      facultyName = faculty ? faculty.name : "N/A";
+                    }
+                  } else {
+                    // Manual/older flow: top-level combos state is populated
+                    combo = combos.find(
+                      (c) => String(c._id) === String(slotId) || (c.id && String(c.id) === String(slotId))
+                    );
+                    if (combo) {
+                      subjectName = combo.subject ? combo.subject.name : "N/A";
+                      facultyName = combo.faculty ? combo.faculty.name : "N/A";
+                    }
+                  }
 
                   if (!combo) {
                     return <td key={p}>{slotId}</td>;
                   }
-                  
-                  const subjectName = combo.subject ? combo.subject.name : "N/A";
-                  const facultyName = combo.faculty ? combo.faculty.name : "N/A";
 
                   if (
                     (selectedFaculty &&
@@ -383,7 +398,8 @@ function Timetable() {
             ))}
           </tbody>
         </table>
-
+        
+        {console.log("Allocations Report for Class:", allocationsReportForClass)}
         {allocationsReportForClass && allocationsReportForClass.subjects && (
           <div style={{ marginTop: "20px", borderTop: "1px solid #eee", paddingTop: "15px" }}>
             <h4>Allocation Summary for {allocationsReportForClass.className}</h4>
@@ -541,11 +557,14 @@ function Timetable() {
         classes.map((cls) => renderEmptyTable(cls._id))}
 
       {/* Generated timetable */}
+      {console.log("Current Timetable State:", timetable , timetable && timetable.class_timetables)}
       {timetable && timetable.class_timetables && (
+
         <div style={{ marginTop: "20px" }}>
-          {filteredTimetable().map(([classId, slots]) =>
-            renderClassTable(classId, slots)
-          )}
+          {filteredTimetable().map(([classId, slots]) => {
+            const allocationsReportForClass = timetable.allocations_report?.[classId];
+            return renderClassTable(classId, slots, allocationsReportForClass);
+          })}
           {renderFacultyDailyHours()}
         </div>
       )}
