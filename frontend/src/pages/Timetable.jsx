@@ -271,6 +271,30 @@ function Timetable() {
     setLoading(false);
   };
 
+  const handleSave = async () => {
+    if (!timetable) {
+      alert("No timetable to save.");
+      return;
+    }
+
+    const name = prompt("Please enter a name for this timetable:");
+    if (!name) {
+      return; // User cancelled
+    }
+
+    try {
+      const payload = {
+        name,
+        timetableData: timetable,
+      };
+      await api.post("/timetables", payload);
+      alert("Timetable saved successfully!");
+    } catch (err) {
+      console.error("Error saving timetable:", err);
+      alert(`Failed to save timetable: ${err.response?.data?.error || 'Server error'}`);
+    }
+  };
+
   // Helpers
   const getClassName = (id) => {
     const cls = classes.find((c) => String(c._id) === String(id));
@@ -357,18 +381,14 @@ function Timetable() {
                     return <td key={p}>{slotId}</td>;
                   }
 
-                  if (
-                    (selectedFaculty &&
-                      (!combo.faculty ||
-                        String(combo.faculty._id) !== selectedFaculty)) ||
-                    (selectedSubject &&
-                      (!combo.subject ||
-                        String(combo.subject._id) !== selectedSubject))
-                  ) {
-                    return <td key={p}>-</td>;
-                  }
                   const isFixed =
                     fixedSlots[classId]?.[dayIdx]?.[p] === combo._id;
+                  
+                  const facultyId = combo.faculty_id || combo.faculty?._id;
+                  const subjectId = combo.subject_id || combo.subject?._id;
+
+                  const isFilteredOut = (selectedFaculty && String(facultyId) !== selectedFaculty) ||
+                                        (selectedSubject && String(subjectId) !== selectedSubject);
 
                   return (
                     <td
@@ -376,10 +396,8 @@ function Timetable() {
                       style={{
                         backgroundColor: isFixed ? "#d1ffd1" : "inherit",
                         cursor: "pointer",
+                        opacity: isFilteredOut ? 0.3 : 1, // Gray out non-matching slots
                       }}
-                      // onClick={() =>
-                      //   toggleFixedSlot(classId, dayIdx, p, combo._id)
-                      // }
                       title={
                         isFixed ? "Click to unfix this slot" : "Click to fix slot"
                       }
@@ -459,17 +477,51 @@ function Timetable() {
   };
 
   const filteredTimetable = () => {
-    // Defensive check to prevent crash if class_timetables is null or undefined
     if (!timetable || !timetable.class_timetables) {
       return [];
     }
-    let filteredEntries = Object.entries(timetable.class_timetables);
+
+    let allClassTimetables = Object.entries(timetable.class_timetables);
+    const comboSource = timetable.combos || combos; // Use timetable.combos if available
+
+    // Filter by selected class
     if (selectedClass) {
-      filteredEntries = filteredEntries.filter(
+      allClassTimetables = allClassTimetables.filter(
         ([classId]) => classId === selectedClass
       );
     }
-    return filteredEntries;
+
+    // Filter by selected faculty
+    if (selectedFaculty) {
+      allClassTimetables = allClassTimetables.filter(([classId, classSlots]) => {
+        return Object.values(classSlots).some(dayRow =>
+          Object.values(dayRow).some(slotId => {
+            if (slotId === -1 || slotId === "BREAK") return false;
+            const combo = comboSource.find(c => String(c._id) === String(slotId));
+            // For older records, combo might have populated faculty
+            const facultyId = combo?.faculty_id || combo?.faculty?._id;
+            return combo && String(facultyId) === selectedFaculty;
+          })
+        );
+      });
+    }
+
+    // Filter by selected subject
+    if (selectedSubject) {
+      allClassTimetables = allClassTimetables.filter(([classId, classSlots]) => {
+        return Object.values(classSlots).some(dayRow =>
+          Object.values(dayRow).some(slotId => {
+            if (slotId === -1 || slotId === "BREAK") return false;
+            const combo = comboSource.find(c => String(c._id) === String(slotId));
+            // For older records, combo might have populated subject
+            const subjectId = combo?.subject_id || combo?.subject?._id;
+            return combo && String(subjectId) === selectedSubject;
+          })
+        );
+      });
+    }
+
+    return allClassTimetables;
   };
 
   const resetFilters = () => {
@@ -506,6 +558,9 @@ function Timetable() {
         </button>
         <button className="secondary-btn" onClick={deleteAllTimetables} disabled={loading}>
           Delete All Timetables
+        </button>
+        <button className="primary-btn" onClick={handleSave} disabled={loading || !timetable}>
+          Save Timetable
         </button>
       </div>
 
