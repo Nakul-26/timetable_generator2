@@ -7,15 +7,16 @@ function runGenerate({
   classes,
   combos,
   fixedSlots,
-  attempts = 10, // 🔧 1. Make attempt count configurable
+  attempts = 10,
 }) {
-  let bestClassTimetables = null;
-  let bestFacultyTimetables = null;
-  let bestFacultyDailyHours = null;
+  let best_class_timetables = null;
+  let best_faculty_timetables = null;
+  let best_faculty_daily_hours = null;
   let bestScore = Infinity;
+  let result_combos = null; // To store the combos from the best result
+  let result_allocations = null; // To store the allocations from the best result
 
   for (let attempt = 0; attempt < attempts; attempt++) {
-    // 🔧 2. Clone arrays before shuffling to avoid mutating inputs
     const shuffledClasses = [...classes];
     const shuffledCombos = [...combos];
     const shuffledFaculties = [...faculties];
@@ -26,7 +27,7 @@ function runGenerate({
     Generator.shuffle(shuffledFaculties);
     Generator.shuffle(shuffledSubjects);
 
-    const { ok, class_timetables, faculty_timetables, faculty_daily_hours } = Generator.generate({
+    const result = Generator.generate({
       faculties: shuffledFaculties,
       subjects: shuffledSubjects,
       classes: shuffledClasses,
@@ -34,8 +35,7 @@ function runGenerate({
       fixed_slots: fixedSlots,
     });
 
-    if (!ok) {
-      // 🔧 3. Gate logging
+    if (!result.ok) {
       if (process.env.NODE_ENV !== "production") {
         console.log(`Attempt ${attempt + 1}: Failed to generate`);
       }
@@ -43,33 +43,33 @@ function runGenerate({
     }
 
     const score = Generator.scoreTimetable(
-      class_timetables,
+      result.class_timetables,
       classes.map((c) => c._id)
     );
 
-    // 🔧 3. Gate logging
     if (process.env.NODE_ENV !== "production") {
       console.log(`Attempt ${attempt + 1}: Score = ${score}`);
     }
 
     if (score < bestScore) {
       bestScore = score;
-      bestClassTimetables = class_timetables;
-      bestFacultyTimetables = faculty_timetables;
-      bestFacultyDailyHours = faculty_daily_hours;
+      best_class_timetables = result.class_timetables;
+      best_faculty_timetables = result.faculty_timetables;
+      best_faculty_daily_hours = result.faculty_daily_hours;
+      result_combos = shuffledCombos; // Save the combos that produced this result
+      result_allocations = result.allocations_report;
     }
   }
 
-  // 🔧 3. Gate logging for the final result
   if (process.env.NODE_ENV !== "production") {
-    if (bestClassTimetables) {
+    if (best_class_timetables) {
       console.log("\n🎉 Best timetable found! Score:", bestScore);
       const classMap = new Map(classes.map((c) => [c._id, c]));
 
       for (const cls of classes) {
         Generator.printTimetable(
           cls._id,
-          bestClassTimetables[cls._id],
+          best_class_timetables[cls._id],
           classMap
         );
       }
@@ -78,13 +78,14 @@ function runGenerate({
     }
   }
 
-  // 🔧 4. Return more structured metadata
   return {
-    ok: Boolean(bestClassTimetables),
-    bestScore,
-    bestClassTimetables,
-    bestFacultyTimetables,
-    bestFacultyDailyHours,
+    ok: Boolean(best_class_timetables),
+    score: bestScore,
+    class_timetables: best_class_timetables,
+    faculty_timetables: best_faculty_timetables,
+    faculty_daily_hours: best_faculty_daily_hours,
+    combos: result_combos, // Pass the combos along
+    allocations_report: result_allocations, // Pass allocations along
     attemptsTried: attempts,
   };
 }

@@ -162,6 +162,19 @@ protectedRouter.get('/timetables', async (req, res) => {
     }
 });
 
+protectedRouter.get('/processed-assignments', async (req, res) => {
+    console.log("[GET /processed-assignments] Fetching all saved assignment-only results");
+    try {
+        // The post-find hook on TimetableResult will populate 'populated_assignments'
+        const timetables = await TimetableResult.find({ source: 'assignments' }).sort({ createdAt: -1 });
+        console.log("[GET /processed-assignments] Found:", timetables.length, "records");
+        res.json({ savedTimetables: timetables });
+    } catch (e) {
+        console.error("[GET /processed-assignments] Error:", e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 protectedRouter.get('/timetable/:id', async (req, res) => {
     console.log("[GET /timetable/:id] Fetching timetable with id:", req.params.id);
     try {
@@ -231,6 +244,35 @@ protectedRouter.delete("/timetables", async (req, res) => {
       message: "All timetables deleted successfully"
     });
   } catch (err) {
+    res.status(500).json({ ok: false, error: "Internal Server Error" });
+  }
+});
+
+// Save a new timetable
+protectedRouter.post("/timetables", async (req, res) => {
+  try {
+    const { name, timetableData } = req.body;
+    if (!name || !timetableData) {
+      return res.status(400).json({ error: "Missing name or timetable data." });
+    }
+
+    const newTimetable = new TimetableResult({
+      name,
+      source: 'generator', // Mark as from the generator
+      class_timetables: timetableData.class_timetables,
+      faculty_timetables: timetableData.faculty_timetables,
+      faculty_daily_hours: timetableData.faculty_daily_hours,
+      score: timetableData.score,
+      combos: timetableData.combos,
+      allocations_report: timetableData.allocations_report,
+      config: timetableData.config,
+    });
+
+    const saved = await newTimetable.save();
+    res.status(201).json(saved);
+
+  } catch (err) {
+    console.error("Error saving timetable:", err);
     res.status(500).json({ ok: false, error: "Internal Server Error" });
   }
 });
