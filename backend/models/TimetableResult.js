@@ -1,19 +1,38 @@
 import mongoose from "mongoose";
 const { Schema } = mongoose;
 
-const ResultSchema = new Schema({
-  name: { type: String, required: true }, // A name for the saved timetable/assignment
-  source: { type: String, enum: ['generator', 'manual', 'assignments'], default: 'manual' }, // To distinguish saved types
-  createdAt: { type: Date, default: Date.now },
-  assignments_only: { type: Object, default: null }, // To store { classId: [comboId1, comboId2] }
-  class_timetables: Object, // Corresponds to classTimetable
-  teacher_timetables: Object, // Corresponds to teacherTimetable
-  subject_hours_assigned: Object, // Corresponds to subjectHoursAssigned
-  config: Object, // Stores configuration like { days, hours }
-  version: Number, // The version number from the in-memory state
-  score: Number,
-  combos: Object,
-  allocations_report: Object,
-});
+const ResultSchema = new Schema(
+  {
+    name: { type: String, required: true },
+
+    source: {
+      type: String,
+      enum: ['generator', 'manual', 'assignments'],
+      default: 'manual'
+    },
+
+    // Assignment-only results:
+    // { [classId]: [teacherSubjectComboId, ...] }
+    assignments_only: { type: Object, default: null },
+
+    // Generator / manual outputs
+    class_timetables: Object,
+    faculty_timetables: Object,
+    faculty_daily_hours: Object,
+
+    // Metadata
+    config: Object,        // { days, hours, fixedSlots, ... }
+    version: Number,
+    score: Number,
+
+    combos: Object,
+    allocations_report: Object,
+  },
+  { timestamps: true }
+);
+
+// Indexes for fast queries
+ResultSchema.index({ createdAt: -1 });
+ResultSchema.index({ source: 1, createdAt: -1 });
 
 export default mongoose.model('TimetableResult', ResultSchema);

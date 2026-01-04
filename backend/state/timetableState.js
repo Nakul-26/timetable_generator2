@@ -1,6 +1,6 @@
 // In-memory store for timetable data, designed for multi-user and multi-timetable support.
 const timetables = new Map();
-const locks = new Map(); // Changed from Set to Map to store timeout IDs for auto-expiring locks
+const locks = new Map(); // Lock keys must be globally unique across all timetables
 
 /**
  * Retrieves the state for a specific timetable.
@@ -18,14 +18,22 @@ export const getState = (timetableId) => {
  * @param {object} newState - The new state properties to merge in.
  */
 export const setState = (timetableId, newState) => {
+  /**
+   * IMPORTANT:
+   * newState must be a FULL state object (not partial patches).
+   */
+  if (!newState.classTimetable || !newState.teacherTimetable) {
+    throw new Error("Invalid state update: incomplete state provided to setState.");
+  }
+
   const prev = timetables.get(timetableId) || {};
   const newVersion = (prev.version || 0) + 1;
   timetables.set(timetableId, { ...prev, ...newState, version: newVersion, updatedAt: Date.now() });
 };
 
 /**
- * Initializes a new, empty state for a given timetable ID.
- * Throws an error if the timetableId already exists.
+ * Initializes or re-initializes a timetable state.
+ * Existing state will be reset.
  * @param {string} timetableId - The unique ID for the new timetable.
  * @param {Array} classes - List of class objects.
  * @param {Array} faculties - List of faculty objects.
@@ -88,6 +96,9 @@ export const deleteState = (timetableId) => {
  * @param {object} savedState - The saved state object to load.
  */
 export const loadState = (timetableId, savedState) => {
+    if (!savedState.classTimetable || !savedState.teacherTimetable) {
+        throw new Error("Invalid saved state: missing classTimetable or teacherTimetable.");
+    }
     timetables.set(timetableId, {
         ...savedState,
         updatedAt: Date.now(),

@@ -12,7 +12,9 @@ export function convertNewCollegeInput({
   classElectiveGroups = []  // 🔹 NEW
 }) {
 
-  console.log("Electives:", JSON.stringify(classElectiveGroups, null, 2));
+  if (process.env.NODE_ENV !== "production") {
+    console.log("Electives:", JSON.stringify(classElectiveGroups, null, 2));
+  }
 
   //------------------------------------------------------------
   // Normalize
@@ -77,8 +79,8 @@ export function convertNewCollegeInput({
       name: s.name,
       sem: s.sem,
       type: s.type || "theory",
-      combined_classes: Array.isArray(s.combinedClasses)
-        ? s.combinedClasses.map(String)
+      combined_classes: Array.isArray(s.combined_classes)
+        ? s.combined_classes.map(String)
         : [],
       no_of_hours_per_week
     };

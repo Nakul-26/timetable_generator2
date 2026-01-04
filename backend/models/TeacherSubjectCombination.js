@@ -2,9 +2,20 @@
 import mongoose from "mongoose";
 const { Schema } = mongoose;
 
-const TeacherSubjectCombinationSchema = new Schema({
-  faculty: { type: Schema.Types.ObjectId, ref: 'Faculty', required: true },
-  subject: { type: Schema.Types.ObjectId, ref: 'Subject', required: true },
-});
+const TeacherSubjectCombinationSchema = new Schema(
+  {
+    faculty: { type: Schema.Types.ObjectId, ref: 'Faculty', required: true },
+    subject: { type: Schema.Types.ObjectId, ref: 'Subject', required: true },
+  },
+  { timestamps: true }
+);
 
-export default mongoose.model('TeacherSubjectCombination', TeacherSubjectCombinationSchema);
+TeacherSubjectCombinationSchema.index(
+  { faculty: 1, subject: 1 },
+  { unique: true }
+);
+
+export default mongoose.model(
+  'TeacherSubjectCombination',
+  TeacherSubjectCombinationSchema
+);

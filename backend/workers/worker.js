@@ -1,71 +1,42 @@
-// workers/worker.js
 import { parentPort } from "worker_threads";
-console.log("WORKER STARTED");
-import generator from "../models/lib/generator.js"; // Your existing timetable generator
+import { runGeneration } from "../services/generator/generate.service.js";
 
-let stopRequested = false;
+let stopped = false;
 
-// Accept messages from parent thread
 parentPort.on("message", async (message) => {
   const { action, payload } = message;
 
   if (action === "STOP") {
-    console.log("⛔ STOP requested in worker");
-    stopRequested = true;
+    stopped = true;
     return;
   }
 
-  if (action === "GENERATE") {
-    stopRequested = false;
+  if (action !== "GENERATE") return;
 
-    const {
-      faculties,
-      subjects,
-      classes,
-      combos,
-      DAYS_PER_WEEK,
-      HOURS_PER_DAY,
-      BREAK_HOURS,
-      fixed_slots,
-      taskId
-    } = payload;
+  try {
+    const result = runGeneration({
+      ...payload,
+      onProgress: (progress, partialData) => {
+        if (stopped) {
+          throw new Error("Generation stopped by user");
+        }
 
-    console.log(`🧠 Worker started generation Task #${taskId}`);
+        parentPort.postMessage({
+          type: "PROGRESS",
+          progress,
+          partialData
+        });
+      }
+    });
 
-    try {
-      // Directly call generator.generate and pass progressCallback
-      const result = generator.generate({
-        faculties, subjects, classes, combos, DAYS_PER_WEEK, HOURS_PER_DAY, BREAK_HOURS, fixed_slots,
-        progressCallback: (progress) => {
-          // Send progress updates back to main thread
-          parentPort.postMessage({
-            taskId,
-            type: "PROGRESS",
-            progress: progress.progress,
-            partialData: progress.partialData
-          });
-        },
-        stopFlag: stopRequested // Pass the stopRequested flag
-      });
-
-      result.combos = combos;
-
-      // Whether success or partial, always send a final result message
-      parentPort.postMessage({
-        taskId,
-        type: "RESULT",
-        ok: result.ok,
-        data: result
-      });
-
-    } catch (err) {
-      parentPort.postMessage({
-        taskId,
-        type: "ERROR",
-        error: err.message || err.toString()
-      });
-    }
+    parentPort.postMessage({
+      type: "RESULT",
+      data: result
+    });
+  } catch (err) {
+    parentPort.postMessage({
+      type: "ERROR",
+      error: err.message || "Worker error"
+    });
   }
 });
-
-

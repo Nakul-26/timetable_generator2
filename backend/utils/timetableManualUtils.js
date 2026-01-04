@@ -9,7 +9,7 @@ export function computeRemainingHours(classObj, subjectHoursAssigned) {
   const remaining = {};
 
   if (!classObj.subject_hours) {
-    return remaining;
+    return null;
   }
 
   for (const [subjId, required] of Object.entries(classObj.subject_hours)) {
@@ -66,8 +66,9 @@ export function checkClassConstraints(classTimetable, classObj, day, hour, subjI
   }
 
   // Subject hours limit check
-  if (remainingHours[subjId] <= 0) {
-    return { ok: false, error: "Required hours for this subject are already completed." };
+  // Handle case where remainingHours might be null (e.g., if subject_hours is not defined for the class)
+  if (!remainingHours || remainingHours[subjId] === undefined || remainingHours[subjId] <= 0) {
+    return { ok: false, error: "Required hours for this subject are already completed or subject hours data is missing." };
   }
 
   return { ok: true };
@@ -88,15 +89,17 @@ export function computeAvailableCombos({
 }) {
   const remainingHours = computeRemainingHours(classObj, subjectHoursAssigned);
 
+  // If remainingHours is null, it means subject_hours data is missing for the class,
+  // so no subjects can be assigned.
+  if (remainingHours === null) {
+    return [];
+  }
+
   const valid = [];
 
   const assignedComboIds = classObj.assigned_teacher_subject_combos.map(id => id.toString());
 
   for (const cb of combos) {
-    // Check if combo is assigned to this class
-    if (!assignedComboIds.includes(cb._id.toString()))
-      continue;
-
     const subjId = cb.subject._id.toString();
     const facultyId = cb.faculty._id.toString();
 
@@ -127,6 +130,10 @@ export function computeAvailableCombos({
 }
 
 export async function autoFillTimetable(classId, currentState) {
+    /**
+     * Auto-fill currently does NOT handle elective group placement.
+     * It only fills single-subject slots.
+     */
     const { config, classTimetable, teacherTimetable, subjectHoursAssigned } = currentState;
 
     const classObj = await ClassModel.findById(classId).lean();

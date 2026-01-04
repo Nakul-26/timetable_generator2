@@ -4,7 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { MongoClient, ServerApiVersion } from "mongodb";
 import cookieParser from "cookie-parser";
-import API from "./models/routes/api.js"; // ensure this uses ESM too
+import API from "./routes/api.js"; // ensure this uses ESM too
 import ManualAPI from "./routes/timetableManual.js";
 import mongoose from "mongoose";
 // import rateLimit from 'express-rate-limit';
@@ -99,6 +99,10 @@ app.use((req, res, next) => {
   next();
 });
 
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET is not defined");
+}
+
 // --- Routes ---
 app.use("/api", API);
 app.use("/api/manual", ManualAPI);
@@ -112,37 +116,54 @@ const server = app.listen(PORT, () =>
   console.log(`🚀 Server running on port ${PORT}`)
 );
 
-const gracefulShutdown = async (reason, err) => {
+let isShuttingDown = false;
+
+const gracefulShutdown = async (reason, exitCode, err) => {
+  if (isShuttingDown) {
+    console.log("Graceful shutdown already in progress, ignoring duplicate signal.");
+    return;
+  }
+  isShuttingDown = true;
+
   console.error(`❌ ${reason}`);
-  if (err) console.error(err);
+  if (err) console.error("Associated error:", err);
 
   server.close(async () => {
+    console.log("🔌 Server closed. Closing database connections...");
     try {
       await mongoose.connection.close(false);
+      console.log("Mongoose connection closed.");
       await client.close();
-      console.log("🛑 Clean shutdown complete");
+      console.log("MongoClient connection closed.");
+      console.log("🛑 Clean shutdown complete.");
     } catch (e) {
-      console.error("Shutdown error:", e);
+      console.error("❗️Error during database connection closing:", e);
     } finally {
-      process.exit(1);
+      process.exit(exitCode);
     }
   });
+
+  // Force shutdown if server.close() hangs
+  setTimeout(() => {
+    console.error("❗️Could not close connections in time, forcing shutdown.");
+    process.exit(exitCode);
+  }, 10000).unref(); // 10 seconds
 };
 
 process.on("unhandledRejection", (err) =>
-  gracefulShutdown("UNHANDLED PROMISE REJECTION", err)
+  gracefulShutdown("UNHANDLED PROMISE REJECTION", 1, err)
 );
 
 process.on("uncaughtException", (err) =>
-  gracefulShutdown("UNCAUGHT EXCEPTION", err)
+  gracefulShutdown("UNCAUGHT EXCEPTION", 1, err)
 );
 
 process.on("SIGTERM", () =>
-  gracefulShutdown("SIGTERM RECEIVED")
+  gracefulShutdown("SIGTERM RECEIVED", 0)
 );
 
 process.on("SIGINT", () =>
-  gracefulShutdown("SIGINT RECEIVED")
+  gracefulShutdown("SIGINT RECEIVED", 0)
 );
 
 // --- Start Server ---

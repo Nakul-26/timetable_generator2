@@ -43,7 +43,7 @@ AdminSchema.methods.matchPassword = async function (enteredPassword) {
 // Method to generate auth token
 AdminSchema.methods.generateAuthToken = function () {
   return jwt.sign({ id: this._id, role: "admin" }, process.env.JWT_SECRET, {
-    expiresIn: '1h',
+    expiresIn: process.env.JWT_EXPIRES_IN || '1h',
   });
 };
 
