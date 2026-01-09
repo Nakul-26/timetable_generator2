@@ -21,8 +21,21 @@ export function startGenerationWorker({ payload }) {
   const taskId = nextTaskId++;
 
   const worker = new Worker(
-    path.resolve(__dirname, "../../workers/worker.js")
+    path.resolve(__dirname, "../../workers/worker.js"),
+    {
+        // IMPORTANT: These must be true to create the output streams
+        stdout: true,
+        stderr: true
+    }
   );
+
+  // Now that the streams are created, we can listen to them
+  worker.stdout.on("data", (data) => {
+    process.stdout.write(`[WORKER ${taskId}] ${data}`);
+  });
+  worker.stderr.on("data", (data) => {
+    process.stderr.write(`[WORKER ${taskId} ERROR] ${data}`);
+  });
 
   workers.set(taskId, worker);
   taskResults.set(taskId, {
@@ -30,6 +43,7 @@ export function startGenerationWorker({ payload }) {
     progress: 0
   });
 
+  // Use postMessage to send data to the worker, as it's set up to listen for messages
   worker.postMessage({
     action: "GENERATE",
     payload: { ...payload, taskId }

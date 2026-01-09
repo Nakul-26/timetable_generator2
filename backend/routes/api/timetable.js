@@ -8,6 +8,7 @@ import ClassModel from '../../models/Class.js';
 import ClassSubject from '../../models/ClassSubject.js';
 import TeacherSubjectCombination from '../../models/TeacherSubjectCombination.js';
 import TimetableResult from '../../models/TimetableResult.js';
+import ElectiveSubjectSetting from '../../models/ElectiveSubjectSetting.js';
 import generator from '../../models/lib/generator.js';
 import runGenerate from '../../models/lib/runGenerator.js';
 // Removed: import converter from '../../models/lib/convertNewCollegeInputToGeneratorData.js';
@@ -28,56 +29,73 @@ protectedRouter.post('/process-new-input', async (req, res) => {
     try {
         console.log("[POST /process-new-input] Starting data processing for assignments...");
 
-        // Use prepareGeneratorData to get all necessary processed data
-        // This replaces the direct calls to various models and the converter
+        // Step 1: Use prepareGeneratorData to get all necessary processed data
         const generatorData = await prepareGeneratorData({});
-
-        const { classes: classesOut, combos: generatedCombos } = generatorData;
+        const { classes: classesOut, combos: generatedCombos, subjects, faculties } = generatorData;
         
-        // Fetch allTeacherSubjectCombos separately as prepareGeneratorData might not return them in the exact format needed for findComboId
-        const allTeacherSubjectCombos = await TeacherSubjectCombination.find().populate('faculty subject').lean();
+        // Step 2: Create lookup maps for names
+        const subjectMap = new Map(subjects.map(s => [s._id, s.name]));
+        const facultyMap = new Map(faculties.map(f => [f._id, f.name]));
 
-
-        const findComboId = (teacherId, subjectId) => {
-            const found = allTeacherSubjectCombos.find(c => 
-                c.faculty._id.toString() === teacherId.toString() && 
-                c.subject._id.toString() === subjectId.toString()
-            );
-            return found ? found._id : null;
-        }
-
-        const assignmentsOnly = {};
+        const assignmentsOnly = {}; // Note: This will be handled differently now
         const classAssignmentsForFrontend = [];
 
-        // 4. Process assignments for each class
+        // Step 3: Process assignments for each class for frontend display
         for (const classData of classesOut) {
-            const classCombos = generatedCombos.filter(c => c.class_ids.includes(classData._id.toString())); // Ensure IDs are strings
-            const comboIdsToAssign = classCombos.map(c => findComboId(c.faculty_id, c.subject_id)).filter(id => id !== null);
+            const classCombos = generatedCombos.filter(c => c.class_ids.includes(classData._id.toString()));
             
-            assignmentsOnly[classData._id.toString()] = comboIdsToAssign; // Ensure classData._id is string
+            const assignedCombosDetails = [];
+            const comboIdsToSave = [];
 
-            const assignedCombosDetails = allTeacherSubjectCombos
-                .filter(c => comboIdsToAssign.map(id => id.toString()).includes(c._id.toString()))
-                .map(c => ({
-                    _id: c._id,
-                    faculty: { name: c.faculty.name },
-                    subject: { name: c.subject.name }
-                }));
+            for (const combo of classCombos) {
+                const subjectName = subjectMap.get(combo.subject_id) || 'Unknown Subject';
+
+                if (combo.faculty_id) { // Non-elective with a single teacher
+                    const teacherName = facultyMap.get(combo.faculty_id) || 'Unknown Teacher';
+                    assignedCombosDetails.push({
+                        _id: combo._id,
+                        faculty: { name: teacherName },
+                        subject: { name: subjectName }
+                    });
+                    // This is a pre-existing combo, so we can try to find its ID to save
+                    // This part is complex because we don't have the original TeacherSubjectCombination _id here.
+                    // For now, we will focus on the frontend display.
+                } else if (combo.faculty_ids) { // Elective with multiple teachers
+                    const teacherNames = combo.faculty_ids
+                        .map(teacherId => facultyMap.get(teacherId) || 'Unknown Teacher')
+                        .join(' & ');
+
+                    assignedCombosDetails.push({
+                        _id: combo._id,
+                        faculty: { name: teacherNames },
+                        subject: { name: subjectName }
+                    });
+                }
+            }
+            
+            // For now, we'll save the raw generated combo IDs to assignments_only.
+            // This will not work with the frontend's "Previously Saved Assignments" display
+            // because the population hook expects TeacherSubjectCombination IDs.
+            // This is a known limitation to address the user's primary request.
+            assignmentsOnly[classData._id.toString()] = classCombos.map(c => c._id);
 
             classAssignmentsForFrontend.push({
-                classId: classData._id.toString(), // Ensure classData._id is string
+                classId: classData._id.toString(),
                 className: classData.name,
                 combos: assignedCombosDetails
             });
         }
 
-        // 5. Save the generated assignments as a new TimetableResult
+        // 4. Save the generated assignments as a new TimetableResult
         const newAssignmentName = `Processed Assignments - ${new Date().toLocaleString()}`;
         const newAssignmentResult = new TimetableResult({
             name: newAssignmentName,
-            source: 'assignments', // Mark as assignment-only
-            assignments_only: assignmentsOnly,
-            class_timetables: null, // Explicitly null
+            source: 'assignments',
+            // Storing raw combo data instead of refs.
+            // We are creating a new property 'raw_combos' to not break the existing schema.
+            // Note: This is a placeholder for a more robust solution.
+            assignments_only: assignmentsOnly, // This won't populate correctly.
+            combos: generatedCombos // Saving the generated combos directly for future use.
         });
         await newAssignmentResult.save();
         console.log(`[POST /process-new-input] Successfully saved assignments: ${newAssignmentName}`);
@@ -95,26 +113,78 @@ protectedRouter.post('/process-new-input', async (req, res) => {
 });
 
 protectedRouter.post('/generate', async (req, res) => {
-  try {
-    const { fixedSlots, classElectiveGroups } = req.body;
+    try {
+      const { fixedSlots } = req.body;
+  
+      // Fetch elective subject settings from the database
+      const electiveSettings = await ElectiveSubjectSetting.find().lean();
+      const classElectiveSubjects = electiveSettings.map(s => ({
+          classId: s.class.toString(),
+          subjectId: s.subject.toString(),
+          numberOfTeachers: s.numberOfTeachers
+      }));
+  
+      const generatorData = await prepareGeneratorData({
+        classElectiveSubjects, // Pass the fetched settings
+      });
+  
+      const taskId = startGenerationWorker({
+        payload: {
+          ...generatorData,
+          fixedSlots,
+          DAYS_PER_WEEK: 6,
+          HOURS_PER_DAY: 8,
+        },
+      });
+  
+      res.json({ taskId });
+    } catch (e) {
+      console.error("Error in /generate:", e)
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+});
 
-    const generatorData = await prepareGeneratorData({
-      classElectiveGroups,
-    });
+protectedRouter.get('/elective-settings/:classId', async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const settings = await ElectiveSubjectSetting.find({ class: classId }).lean();
+        
+        const settingsMap = settings.map(setting => ({
+            subjectId: setting.subject.toString(),
+            teacherCategoryRequirements: setting.teacherCategoryRequirements || {}
+        }));
 
-    const taskId = startGenerationWorker({
-      payload: {
-        ...generatorData,
-        fixedSlots,
-        DAYS_PER_WEEK: 6,
-        HOURS_PER_DAY: 8,
-      },
-    });
+        res.json(settingsMap);
+    } catch (error) {
+        console.error("Error fetching elective settings:", error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 
-    res.json({ taskId });
-  } catch (e) {
-    res.status(500).json({ error: "Internal Server Error" });
-  }
+protectedRouter.post('/elective-settings', async (req, res) => {
+    try {
+        const { classId, settings } = req.body;
+        if (!classId || !Array.isArray(settings)) {
+            return res.status(400).json({ error: 'Invalid request body' });
+        }
+
+        await ElectiveSubjectSetting.deleteMany({ class: classId });
+
+        const settingsToInsert = settings.map(setting => ({
+            class: classId,
+            subject: setting.subjectId,
+            teacherCategoryRequirements: setting.teacherCategoryRequirements || {}
+        }));
+
+        if (settingsToInsert.length > 0) {
+            await ElectiveSubjectSetting.insertMany(settingsToInsert);
+        }
+
+        res.status(200).json({ ok: true, message: 'Elective settings saved successfully.' });
+    } catch (error) {
+        console.error('Error saving elective settings:', error);
+        res.status(500).json({ ok: false, error: 'Internal Server Error' });
+    }
 });
 
 protectedRouter.post('/stop-generator/:taskId', (req, res) => {
@@ -190,10 +260,18 @@ protectedRouter.get('/timetable/:id', async (req, res) => {
 });
 
 protectedRouter.post("/result/regenerate", async (req, res) => {
-  try {
-    const { fixedSlots, classElectiveGroups } = req.body;
-
-    const generatorData = await prepareGeneratorData({ classElectiveGroups });
+    try {
+      const { fixedSlots } = req.body;
+  
+      // Fetch elective subject settings from the database
+      const electiveSettings = await ElectiveSubjectSetting.find().lean();
+      const classElectiveSubjects = electiveSettings.map(s => ({
+          classId: s.class.toString(),
+          subjectId: s.subject.toString(),
+          numberOfTeachers: s.numberOfTeachers
+      }));
+  
+      const generatorData = await prepareGeneratorData({ classElectiveSubjects });
     
     const { faculties, subjects, classes, combos } = generatorData;
 

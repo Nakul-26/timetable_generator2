@@ -3,21 +3,24 @@ import Subject from "../../models/Subject.js";
 import ClassModel from "../../models/Class.js";
 import ClassSubject from "../../models/ClassSubject.js";
 import TeacherSubjectCombination from "../../models/TeacherSubjectCombination.js";
+import ElectiveSubjectSetting from "../../models/ElectiveSubjectSetting.js";
 import converter from "../../models/lib/convertNewCollegeInputToGeneratorData.js";
 
-export async function prepareGeneratorData({ classElectiveGroups = [] }) {
+export async function prepareGeneratorData() {
   const [
     faculties,
     subjects,
     classes,
     classSubjectsRaw,
-    combosRaw
+    combosRaw,
+    electiveSettings
   ] = await Promise.all([
     Faculty.find().lean(),
     Subject.find().lean(),
     ClassModel.find().populate("faculties").lean(),
     ClassSubject.find().lean(),
-    TeacherSubjectCombination.find().lean()
+    TeacherSubjectCombination.find().lean(),
+    ElectiveSubjectSetting.find().lean()
   ]);
 
   const classSubjects = classSubjectsRaw.map(cs => ({
@@ -38,6 +41,12 @@ export async function prepareGeneratorData({ classElectiveGroups = [] }) {
     });
   });
 
+  const classElectiveSubjects = electiveSettings.map(setting => ({
+    classId: setting.class.toString(),
+    subjectId: setting.subject.toString(),
+    teacherCategoryRequirements: setting.teacherCategoryRequirements
+  }));
+
   return converter.convertNewCollegeInput({
     classes,
     subjects,
@@ -45,6 +54,6 @@ export async function prepareGeneratorData({ classElectiveGroups = [] }) {
     classSubjects,
     classTeachers,
     teacherSubjectCombos,
-    classElectiveGroups
+    classElectiveSubjects
   });
 }

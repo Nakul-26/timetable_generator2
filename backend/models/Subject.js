@@ -29,6 +29,10 @@ const SubjectSchema = new Schema(
       type: [String], // keep as String if you are using class codes
       default: [],
     },
+    isElective: { // New field
+      type: Boolean,
+      default: false,
+    }
   },
   { timestamps: true }
 );

@@ -351,44 +351,36 @@ function Timetable() {
               <tr key={dayIdx}>
                 <td>Day {dayIdx + 1}</td>
                 {dayRow.map((slotId, p) => {
-                  if (slotId === -1) {
+                  const slot = dayRow[p];
+                  if (!slot || slot === -1 || slot === "BREAK") {
                     return <td key={p}>-</td>;
                   }
-
-                  let combo, subjectName, facultyName;
-
-                  if (timetable.combos && timetable.combos.length > 0) {
-                    // Generator flow: timetable.combos has the map
-                    combo = timetable.combos.find(c => String(c._id) === String(slotId));
-                    if (combo) {
-                      const subject = subjects.find(s => String(s._id) === String(combo.subject_id));
-                      const faculty = faculties.find(f => String(f._id) === String(combo.faculty_id));
-                      subjectName = subject ? subject.name : "N/A";
-                      facultyName = faculty ? faculty.name : "N/A";
-                    }
-                  } else {
-                    // Manual/older flow: top-level combos state is populated
-                    combo = combos.find(
-                      (c) => String(c._id) === String(slotId) || (c.id && String(c.id) === String(slotId))
-                    );
-                    if (combo) {
-                      subjectName = combo.subject ? combo.subject.name : "N/A";
-                      facultyName = combo.faculty ? combo.faculty.name : "N/A";
-                    }
-                  }
-
+                  
+                  // New data structure: slot is { comboId, teacherIds }
+                  const comboSource = timetable.combos || combos;
+                  const comboId = slot;
+                  const combo = comboSource.find(c => String(c._id) === String(comboId));
+                  const teacherIds = combo?.faculty_ids || [];
+                  
                   if (!combo) {
-                    return <td key={p}>{slotId}</td>;
+                    return <td key={p}>?</td>;
                   }
+
+                  const subject = subjects.find(s => String(s._id) === String(combo.subject_id));
+                  const subjectName = subject ? subject.name : "N/A";
+
+                  // Find all teacher names
+                  const facultyNames = (teacherIds || []).map(tid => {
+                    const faculty = faculties.find(f => String(f._id) === String(tid));
+                    return faculty ? faculty.name : "N/A";
+                  });
 
                   const isFixed =
                     fixedSlots[classId]?.[dayIdx]?.[p] === combo._id;
                   
-                  const facultyId = combo.faculty_id || combo.faculty?._id;
-                  const subjectId = combo.subject_id || combo.subject?._id;
-
-                  const isFilteredOut = (selectedFaculty && String(facultyId) !== selectedFaculty) ||
-                                        (selectedSubject && String(subjectId) !== selectedSubject);
+                  // For filtering, check if any of the assigned teachers match
+                  const isFilteredOut = (selectedFaculty && !(teacherIds || []).includes(selectedFaculty)) ||
+                                        (selectedSubject && String(combo.subject_id) !== selectedSubject);
 
                   return (
                     <td
@@ -396,7 +388,7 @@ function Timetable() {
                       style={{
                         backgroundColor: isFixed ? "#d1ffd1" : "inherit",
                         cursor: "pointer",
-                        opacity: isFilteredOut ? 0.3 : 1, // Gray out non-matching slots
+                        opacity: isFilteredOut ? 0.3 : 1,
                       }}
                       title={
                         isFixed ? "Click to unfix this slot" : "Click to fix slot"
@@ -405,7 +397,9 @@ function Timetable() {
                       <div>
                         <b>{subjectName}</b>
                       </div>
-                      <div>{facultyName}</div>
+                      {/* Render all teacher names */}
+                      {facultyNames.map((name, i) => <div key={i}>{name}</div>)}
+
                       {isFixed && (
                         <div style={{ fontSize: "0.8em" }}>📌 Fixed</div>
                       )}
@@ -495,12 +489,14 @@ function Timetable() {
     if (selectedFaculty) {
       allClassTimetables = allClassTimetables.filter(([classId, classSlots]) => {
         return Object.values(classSlots).some(dayRow =>
-          Object.values(dayRow).some(slotId => {
-            if (slotId === -1 || slotId === "BREAK") return false;
-            const combo = comboSource.find(c => String(c._id) === String(slotId));
-            // For older records, combo might have populated faculty
-            const facultyId = combo?.faculty_id || combo?.faculty?._id;
-            return combo && String(facultyId) === selectedFaculty;
+          Object.values(dayRow).some(slotComboId => { // slot is now comboId string
+            if (!slotComboId || slotComboId === -1 || slotComboId === "BREAK") return false;
+            
+            const combo = comboSource.find(c => String(c._id) === String(slotComboId));
+            if (!combo) return false;
+
+            const teacherIds = combo.faculty_ids || [];
+            return teacherIds.includes(selectedFaculty);
           })
         );
       });
@@ -510,12 +506,11 @@ function Timetable() {
     if (selectedSubject) {
       allClassTimetables = allClassTimetables.filter(([classId, classSlots]) => {
         return Object.values(classSlots).some(dayRow =>
-          Object.values(dayRow).some(slotId => {
-            if (slotId === -1 || slotId === "BREAK") return false;
-            const combo = comboSource.find(c => String(c._id) === String(slotId));
-            // For older records, combo might have populated subject
-            const subjectId = combo?.subject_id || combo?.subject?._id;
-            return combo && String(subjectId) === selectedSubject;
+          Object.values(dayRow).some(slotComboId => { // slot is now comboId string
+            if (!slotComboId || slotComboId === -1 || slotComboId === "BREAK") return false;
+            
+            const combo = comboSource.find(c => String(c._id) === String(slotComboId));
+            return combo && String(combo.subject_id) === selectedSubject;
           })
         );
       });

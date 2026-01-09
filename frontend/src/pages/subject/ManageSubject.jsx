@@ -13,6 +13,7 @@ function ManageSubject() {
   const [editSem, setEditSem] = useState("");
   const [editType, setEditType] = useState("");
   const [editCombinedClasses, setEditCombinedClasses] = useState([]);
+  const [editIsElective, setEditIsElective] = useState(false); // New state for isElective
 
   // 🔍 Filter states
   const [showFilters, setShowFilters] = useState(false);
@@ -43,6 +44,7 @@ function ManageSubject() {
     setEditSem(subject.sem);
     setEditType(subject.type);
     setEditCombinedClasses(subject.combined_classes || []);
+    setEditIsElective(subject.isElective || false); // Initialize new state
   };
 
   const handleEditCombinedClassesChange = (e) => {
@@ -63,6 +65,7 @@ function ManageSubject() {
         sem: editSem,
         type: editType,
         combined_classes: editCombinedClasses,
+        isElective: editIsElective, // Include new state in payload
       };
       await axios.put(`/subjects/${editId}`, updatedSubject);
       setEditId(null);
@@ -71,7 +74,7 @@ function ManageSubject() {
       setEditSem("");
       setEditType("theory");
       setEditCombinedClasses([]);
-      refetchData(['subjects']);
+      refetchData();
     } catch (err) {
       console.log(`Error: ${err.message}`);
     }
@@ -140,6 +143,7 @@ function ManageSubject() {
               <th>Combined Classes</th>
               <th>Assigned Classes</th>
               <th>Assigned Faculties</th>
+              <th>Elective</th> {/* New table header */}
               <th>Actions</th>
             </tr>
           </thead>
@@ -231,6 +235,17 @@ function ManageSubject() {
                         .map(c => (
                             <div key={c._id}>{c.faculty?.name}</div>
                         ))}
+                  </td>
+                  <td> {/* New table cell for Elective */}
+                    {editId === subject._id ? (
+                      <input
+                        type="checkbox"
+                        checked={editIsElective}
+                        onChange={(e) => setEditIsElective(e.target.checked)}
+                      />
+                    ) : (
+                      subject.isElective ? "✅ Yes" : "❌ No"
+                    )}
                   </td>
                   <td>
                     {editId === subject._id ? (

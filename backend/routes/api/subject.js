@@ -45,11 +45,11 @@ protectedRouter.get('/subjects', async (req, res) => {
 protectedRouter.put('/subjects/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, sem, type, combined_classes } = req.body;
+    const { name, sem, type, combined_classes, isElective } = req.body;
 
     const updatedSubject = await Subject.findOneAndUpdate(
       { _id: id },
-      { name, sem, type, combined_classes }, // ✅ include type
+      { name, sem, type, combined_classes, isElective },
       { new: true, runValidators: true }
     );
 

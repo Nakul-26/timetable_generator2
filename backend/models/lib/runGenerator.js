@@ -7,6 +7,7 @@ function runGenerate({
   classes,
   combos,
   fixedSlots,
+  onProgress,
   attempts = 10,
 }) {
   let best_class_timetables = null;
@@ -22,10 +23,10 @@ function runGenerate({
     const shuffledFaculties = [...faculties];
     const shuffledSubjects = [...subjects];
 
-    Generator.shuffle(shuffledClasses);
-    Generator.shuffle(shuffledCombos);
-    Generator.shuffle(shuffledFaculties);
-    Generator.shuffle(shuffledSubjects);
+    // Generator.shuffle(shuffledClasses);
+    // Generator.shuffle(shuffledCombos);
+    // Generator.shuffle(shuffledFaculties);
+    // Generator.shuffle(shuffledSubjects);
 
     const result = Generator.generate({
       faculties: shuffledFaculties,
@@ -33,6 +34,7 @@ function runGenerate({
       classes: shuffledClasses,
       combos: shuffledCombos,
       fixed_slots: fixedSlots,
+      progressCallback: onProgress,
     });
 
     if (!result.ok) {
