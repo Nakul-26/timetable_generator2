@@ -485,7 +485,7 @@ function Timetable() {
                           }
 
                           const subject = subjects && subjects.find(s => String(s._id) === String(combo.subject_id));
-                          const subjectName = subject ? subject.name : "N/A";
+                          const subjectName = subject ? subject.name : `Elective ${combo.subject_id.slice(-4)}`;
 
                           let facultyNames = [];
                           if (combo.faculty_ids) {
@@ -517,16 +517,47 @@ function Timetable() {
                 </table>
                 <div style={{ marginTop: '10px' }}>
                     <h4 style={{ marginBottom: '5px' }}>Subject Hours Report</h4>
-                    {currentClass && currentClass.subject_hours && Object.entries(currentClass.subject_hours).map(([subjectId, requiredHours]) => {
-                        const subject = subjects.find(s => String(s._id) === String(subjectId));
-                        if (!subject) return null;
-                        const assigned = assignedHours[subjectId] || 0;
+                    {(() => {
+                        if (!currentClass) return null;
+
+                        const assignedElectiveIds = new Set();
+                        slots.flat().forEach(slot => {
+                            if(!slot || slot === -1 || slot === "BREAK") return;
+                            const combo = combos.find(c => String(c._id) === String(slot));
+                            if (combo && !subjects.find(s => s._id === combo.subject_id)) {
+                                assignedElectiveIds.add(combo.subject_id);
+                            }
+                        });
+
                         return (
-                            <div key={subjectId}>
-                                <span>{subject.name}: {assigned} / {requiredHours}</span>
-                            </div>
-                        )
-                    })}
+                            <>
+                                {currentClass.subject_hours && Object.entries(currentClass.subject_hours).map(([subjectId, requiredHours]) => {
+                                    const subject = subjects.find(s => String(s._id) === String(subjectId));
+                                    if (!subject) return null;
+                                    const assigned = assignedHours[subjectId] || 0;
+                                    
+                                    if (assigned === 0 && assignedElectiveIds.size > 0) return null;
+                                    if (assigned === 0 && requiredHours === 0) return null;
+
+                                    return (
+                                        <div key={subjectId}>
+                                            <span>{subject.name}: {assigned} / {requiredHours}</span>
+                                        </div>
+                                    )
+                                })}
+                                {Array.from(assignedElectiveIds).map(subjectId => {
+                                    const assigned = assignedHours[subjectId] || 0;
+                                    if (assigned === 0) return null;
+                                    const name = `Elective ${subjectId.slice(-4)}`;
+                                    return (
+                                        <div key={subjectId}>
+                                            <span>{name}: {assigned} / N/A</span>
+                                        </div>
+                                    );
+                                })}
+                            </>
+                        );
+                    })()}
                 </div>
               </div>
             )
