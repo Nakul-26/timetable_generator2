@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../api/axios";
 import axios from "../api/axios";
 
@@ -17,6 +17,7 @@ function Timetable() {
   const [classes, setClasses] = useState([]);
   const [faculties, setFaculties] = useState([]);
   const [subjects, setSubjects] = useState([]);
+  const [combos, setCombos] = useState([]);
 
   // Filters
   const [showFilters, setShowFilters] = useState(false);
@@ -29,6 +30,8 @@ function Timetable() {
 
   const DAYS_PER_WEEK = 6;
   const HOURS_PER_DAY = 8;
+
+  const classById = useMemo(() => new Map(classes.map((c) => [String(c._id), c])), [classes]);
 
   /* ===================== DATA FETCH ===================== */
 
@@ -53,6 +56,9 @@ function Timetable() {
     try {
       const res = await api.get("/result/latest");
       setTimetable(res.data);
+      if (res.data && res.data.combos) {
+        setCombos(res.data.combos);
+      }
       setBestScore(res.data?.score ?? null);
       setFacultyDailyHours(res.data?.faculty_daily_hours ?? null);
     } catch {
@@ -84,6 +90,9 @@ function Timetable() {
 
           if (result) {
             setTimetable(result);
+            if (result.combos) {
+              setCombos(result.combos);
+            }
             setBestScore(result.score ?? null);
             setFacultyDailyHours(result.faculty_daily_hours ?? null);
           } else if (partialData) {
@@ -182,36 +191,47 @@ function Timetable() {
     setLoading(false);
   };
 
-  const handleSave = async () => {
-    if (!timetable) {
-      alert("No timetable to save.");
-      return;
-    }
-
-    const name = prompt("Please enter a name for this timetable:");
-    if (!name) {
-      return; // User cancelled
-    }
-
-    } catch (err) {
-      console.error("Error saving timetable:", err);
-      alert(`Failed to save timetable: ${err.response?.data?.error || 'Server error'}`);
-    }
-  };
-
-    } catch {
-      setError("Failed to regenerate timetable.");
-    }
-
-  /* ===================== HELPERS ===================== */
-
-  const getClassName = id => {
-    const cls = classes.find(c => String(c._id) === String(id));
-    return cls
-      ? `${cls.id}, ${cls.name} (Sem ${cls.sem}, ${cls.section})`
-      : id;
-  };
-
+      const handleSave = async () => {
+        if (!timetable) {
+          alert("No timetable to save.");
+          return;
+        }
+    
+        const name = prompt("Please enter a name for this timetable:");
+        if (!name) {
+          return; // User cancelled
+        }
+    
+        try {
+          await api.post("/timetables", { name, timetable });
+          alert("Timetable saved successfully!");
+        } catch (err) {
+          console.error("Error saving timetable:", err);
+          alert(`Failed to save timetable: ${err.response?.data?.error || 'Server error'}`);
+        }
+      };
+    
+          const regenerateTimetable = async () => {
+            try {
+              await generateTimetable();
+            } catch {
+              setError("Failed to regenerate timetable.");
+            }
+          };
+        
+          /* ===================== HELPERS ===================== */
+        
+          const getClassName = id => {
+            const cls = classes.find(c => String(c._id) === String(id));
+            return cls
+              ? `${cls.id}, ${cls.name} (Sem ${cls.sem}, ${cls.section})`
+              : id;
+          };
+        
+          const getFacultyName = id => {
+            const fac = faculties.find(f => String(f._id) === String(id));
+            return fac ? fac.name : id;
+          };
 
 
   const renderEmptyTable = (classId) => {
@@ -247,14 +267,14 @@ function Timetable() {
                         <option value="">
                           --Select faculty-subject--
                         </option>
-                        {timetable && timetable.combos && timetable.combos
+                        {combos && combos
                           .map((c) => {
                             const facultyNames = (c.faculty_ids || []).map(fid => {
-                              const fac = faculties.find(f => String(f._id) === String(fid));
+                              const fac = faculties && faculties.find(f => String(f._id) === String(fid));
                               return fac ? fac.name : 'N/A'
                             }).join(' & ');
 
-                            const subject = subjects.find(s => String(s._id) === String(c.subject_id));
+                            const subject = subjects && subjects.find(s => String(s._id) === String(c.subject_id));
                             const subjectName = subject ? subject.name : "N/A";
 
                             return (
@@ -281,7 +301,6 @@ function Timetable() {
     }
 
     let allClassTimetables = Object.entries(timetable.class_timetables);
-    const comboSource = timetable.combos;
 
     if (selectedClass) {
       allClassTimetables = allClassTimetables.filter(
@@ -289,36 +308,61 @@ function Timetable() {
       );
     }
 
-    if (selectedFaculty) {
-      allClassTimetables = allClassTimetables.filter(([, classSlots]) => {
-        return Object.values(classSlots).some(dayRow =>
-          Object.values(dayRow).some(slotComboId => {
-            if (!slotComboId || slotComboId === -1 || slotComboId === "BREAK") return false;
-            
-            const combo = comboSource.find(c => String(c._id) === String(slotComboId));
-            if (!combo) return false;
-
-            const teacherIds = combo.faculty_ids || [];
-            return teacherIds.includes(selectedFaculty);
-          })
-        );
-      });
-    }
-
-    if (selectedSubject) {
-      allClassTimetables = allClassTimetables.filter(([, classSlots]) => {
-        return Object.values(classSlots).some(dayRow =>
-          Object.values(dayRow).some(slotComboId => {
-            if (!slotComboId || slotComboId === -1 || slotComboId === "BREAK") return false;
-            
-            const combo = comboSource.find(c => String(c._id) === String(slotComboId));
-            return combo && String(combo.subject_id) === selectedSubject;
-          })
-        );
-      });
-    }
-
     return allClassTimetables;
+  };
+
+  const isCellMatching = (slotComboId) => {
+    const hasFilter = selectedFaculty || selectedSubject;
+    if (!hasFilter) {
+      return true; // No filter, all match
+    }
+
+    if (!slotComboId || slotComboId === -1 || slotComboId === "BREAK") {
+      return false;
+    }
+
+    const combo = combos.find(c => String(c._id) === String(slotComboId));
+    if (!combo) {
+      return false;
+    }
+
+    const facultyMatch = () => {
+        if (!selectedFaculty) return true;
+        if (combo.faculty_ids) {
+            return combo.faculty_ids.includes(selectedFaculty);
+        } else if (combo.faculty_id) {
+            return String(combo.faculty_id) === selectedFaculty;
+        }
+        return false;
+    }
+
+    const subjectMatch = () => {
+        if (!selectedSubject) return true;
+        return String(combo.subject_id) === selectedSubject;
+    }
+
+    return facultyMatch() && subjectMatch();
+  };
+
+  const calculateAssignedHours = (slots) => {
+    const assignedHours = {};
+    if (!slots || !combos) return assignedHours;
+
+    slots.forEach(dayRow => {
+      dayRow.forEach(slot => {
+        if (slot && slot !== -1 && slot !== "BREAK") {
+          const combo = combos.find(c => String(c._id) === String(slot));
+          if (combo) {
+            const subjectId = combo.subject_id;
+            if (!assignedHours[subjectId]) {
+              assignedHours[subjectId] = 0;
+            }
+            assignedHours[subjectId]++;
+          }
+        }
+      });
+    });
+    return assignedHours;
   };
 
   const resetFilters = () => {
@@ -407,55 +451,86 @@ function Timetable() {
 
       {timetable && timetable.class_timetables && (
         <div style={{ marginTop: 20 }}>
-          {filteredTimetable().map(([classId, slots]) => (
-            <div key={classId} style={{ marginBottom: 40 }}>
-              <h3>{getClassName(classId)}</h3>
-              <table className="styled-table">
-                <thead>
-                  <tr>
-                    <th>Day / Period</th>
-                    {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
-                      <th key={p}>P{p + 1}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {slots.map((row, d) => (
-                    <tr key={d}>
-                      <td>Day {d + 1}</td>
-                      {row.map((slot, h) => {
-                        if (!slot || slot === -1 || slot === "BREAK") {
-                          return <td key={h}>-</td>;
-                        }
+          {filteredTimetable().map(([classId, slots]) => {
+            const assignedHours = calculateAssignedHours(slots);
+            const currentClass = classById.get(classId);
 
-                        const combo = timetable.combos.find(c => String(c._id) === String(slot));
-                        if (!combo) {
-                          return <td key={h}>?</td>;
-                        }
-
-                        const subject = subjects.find(s => String(s._id) === String(combo.subject_id));
-                        const subjectName = subject ? subject.name : "N/A";
-
-                        const facultyNames = (combo.faculty_ids || []).map(tid => {
-                          const faculty = faculties.find(f => String(f._id) === String(tid));
-                          return faculty ? faculty.name : "N/A";
-                        });
-
-                        return (
-                          <td key={h}>
-                            <div>
-                              <b>{subjectName}</b>
-                            </div>
-                            {facultyNames.map((name, i) => <div key={i}>{name}</div>)}
-                          </td>
-                        );
-                      })}
+            return (
+              <div key={classId} style={{ marginBottom: 40 }}>
+                <h3>{getClassName(classId)}</h3>
+                <table className="styled-table">
+                  <thead>
+                    <tr>
+                      <th>Day / Period</th>
+                      {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
+                        <th key={p}>P{p + 1}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
+                  </thead>
+                  <tbody>
+                    {slots.map((row, d) => (
+                      <tr key={d}>
+                        <td>Day {d + 1}</td>
+                        {row.map((slot, h) => {
+                          const cellMatches = isCellMatching(slot);
+                          const cellStyle = { opacity: cellMatches ? 1 : 0.3 };
+
+                          if (!slot || slot === -1 || slot === "BREAK") {
+                            return <td key={h} style={cellStyle}>-</td>;
+                          }
+
+                          const combo = combos && combos.find(c => String(c._id) === String(slot));
+                          if (!combo) {
+                            return <td key={h} style={cellStyle}>?</td>;
+                          }
+
+                          const subject = subjects && subjects.find(s => String(s._id) === String(combo.subject_id));
+                          const subjectName = subject ? subject.name : "N/A";
+
+                          let facultyNames = [];
+                          if (combo.faculty_ids) {
+                              facultyNames = (combo.faculty_ids || []).map(tid => {
+                                  const faculty = faculties && faculties.find(f => String(f._id) === String(tid));
+                                  return faculty ? faculty.name : "N/A";
+                              });
+                          } else if (combo.faculty_id) {
+                              const faculty = faculties && faculties.find(f => String(f._id) === String(combo.faculty_id));
+                              if (faculty) {
+                                  facultyNames.push(faculty.name);
+                              } else {
+                                  facultyNames.push("N/A");
+                              }
+                          }
+
+                          return (
+                            <td key={h} style={cellStyle}>
+                              <div>
+                                <b>{subjectName}</b>
+                              </div>
+                              {facultyNames.map((name, i) => <div key={i}>{name}</div>)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: '10px' }}>
+                    <h4 style={{ marginBottom: '5px' }}>Subject Hours Report</h4>
+                    {currentClass && currentClass.subject_hours && Object.entries(currentClass.subject_hours).map(([subjectId, requiredHours]) => {
+                        const subject = subjects.find(s => String(s._id) === String(subjectId));
+                        if (!subject) return null;
+                        const assigned = assignedHours[subjectId] || 0;
+                        return (
+                            <div key={subjectId}>
+                                <span>{subject.name}: {assigned} / {requiredHours}</span>
+                            </div>
+                        )
+                    })}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
