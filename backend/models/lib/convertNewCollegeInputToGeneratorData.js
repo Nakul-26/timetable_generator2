@@ -141,7 +141,7 @@ export function convertNewCollegeInput({
         const eligibleTeachers = teachersForSubject.filter(tid => teachersForClass.includes(tid));
         for (const teacherId of eligibleTeachers) {
             combos.push({
-                _id: "C" + comboIndex++, faculty_id: teacherId, subject_id: subjectId, class_ids: [classId],
+                _id: "C" + comboIndex++, faculty_ids: [teacherId], subject_id: subjectId, class_ids: [classId],
                 hours_per_week: hoursRequired, hours_per_class: { [classId]: hoursRequired },
                 combo_name: `T${teacherId}_S${subjectId}_C${classId}`
             });
