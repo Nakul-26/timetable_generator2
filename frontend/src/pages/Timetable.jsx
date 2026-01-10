@@ -90,6 +90,9 @@ function Timetable() {
 
           if (result) {
             setTimetable(result);
+            if (result.classes) {
+              setClasses(result.classes);
+            }
             if (result.combos) {
               setCombos(result.combos);
             }
@@ -549,9 +552,10 @@ function Timetable() {
                                     const assigned = assignedHours[subjectId] || 0;
                                     if (assigned === 0) return null;
                                     const name = `Elective ${subjectId.slice(-4)}`;
+                                    const requiredHours = currentClass?.subject_hours?.[subjectId] ?? 'N/A';
                                     return (
                                         <div key={subjectId}>
-                                            <span>{name}: {assigned} / N/A</span>
+                                            <span>{name}: {assigned} / {requiredHours}</span>
                                         </div>
                                     );
                                 })}

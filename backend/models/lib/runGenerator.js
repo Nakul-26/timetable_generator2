@@ -13,6 +13,7 @@ function runGenerate({
   let best_class_timetables = null;
   let best_faculty_timetables = null;
   let best_faculty_daily_hours = null;
+  let best_classes = null;
   let bestScore = Infinity;
   let result_combos = null; // To store the combos from the best result
   let result_allocations = null; // To store the allocations from the best result
@@ -22,11 +23,6 @@ function runGenerate({
     const shuffledCombos = [...combos];
     const shuffledFaculties = [...faculties];
     const shuffledSubjects = [...subjects];
-
-    // Generator.shuffle(shuffledClasses);
-    // Generator.shuffle(shuffledCombos);
-    // Generator.shuffle(shuffledFaculties);
-    // Generator.shuffle(shuffledSubjects);
 
     const result = Generator.generate({
       faculties: shuffledFaculties,
@@ -58,6 +54,7 @@ function runGenerate({
       best_class_timetables = result.class_timetables;
       best_faculty_timetables = result.faculty_timetables;
       best_faculty_daily_hours = result.faculty_daily_hours;
+      best_classes = result.classes; // Save the classes from the best result
       result_combos = shuffledCombos; // Save the combos that produced this result
       result_allocations = result.allocations_report;
     }
@@ -86,6 +83,7 @@ function runGenerate({
     class_timetables: best_class_timetables,
     faculty_timetables: best_faculty_timetables,
     faculty_daily_hours: best_faculty_daily_hours,
+    classes: best_classes,
     combos: result_combos, // Pass the combos along
     allocations_report: result_allocations, // Pass allocations along
     attemptsTried: attempts,
