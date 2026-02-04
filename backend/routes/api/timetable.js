@@ -275,7 +275,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
     
     const { faculties, subjects, classes, combos } = generatorData;
 
-    const { bestClassTimetables, bestFacultyTimetables, bestFacultyDailyHours, bestScore } = runGenerate({
+    const { bestClassTimetables, bestFacultyTimetables, bestFacultyDailyHours, bestScore } = await runGenerate({
       faculties,
       subjects,
       classes,

@@ -14,7 +14,7 @@ parentPort.on("message", async (message) => {
   if (action !== "GENERATE") return;
 
   try {
-    const result = runGeneration({
+    const result = await runGeneration({
       ...payload,
       onProgress: ({ progress, partialData }) => {
         if (stopped) {

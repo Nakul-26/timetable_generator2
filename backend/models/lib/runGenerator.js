@@ -1,22 +1,22 @@
 // runGenerator.js
 import Generator from "./generator.js";
 
-function runGenerate({
+async function runGenerate({
   faculties,
   subjects,
   classes,
   combos,
   fixedSlots,
   onProgress,
-  attempts = 10,
+  attempts = 1,
 }) {
   let best_class_timetables = null;
   let best_faculty_timetables = null;
   let best_faculty_daily_hours = null;
   let best_classes = null;
   let bestScore = Infinity;
-  let result_combos = null; // To store the combos from the best result
-  let result_allocations = null; // To store the allocations from the best result
+  let result_combos = null;
+  let result_allocations = null;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const shuffledClasses = [...classes];
@@ -24,7 +24,7 @@ function runGenerate({
     const shuffledFaculties = [...faculties];
     const shuffledSubjects = [...subjects];
 
-    const result = Generator.generate({
+    const result = await Generator.generate({
       faculties: shuffledFaculties,
       subjects: shuffledSubjects,
       classes: shuffledClasses,
@@ -54,26 +54,17 @@ function runGenerate({
       best_class_timetables = result.class_timetables;
       best_faculty_timetables = result.faculty_timetables;
       best_faculty_daily_hours = result.faculty_daily_hours;
-      best_classes = result.classes; // Save the classes from the best result
-      result_combos = shuffledCombos; // Save the combos that produced this result
+      best_classes = result.classes;
+      result_combos = shuffledCombos;
       result_allocations = result.allocations_report;
     }
   }
 
   if (process.env.NODE_ENV !== "production") {
     if (best_class_timetables) {
-      console.log("\n🎉 Best timetable found! Score:", bestScore);
-      const classMap = new Map(classes.map((c) => [c._id, c]));
-
-      for (const cls of classes) {
-        Generator.printTimetable(
-          cls._id,
-          best_class_timetables[cls._id],
-          classMap
-        );
-      }
+      console.log("Best timetable found. Score:", bestScore);
     } else {
-      console.error("❌ Could not generate a valid timetable.");
+      console.error("Could not generate a valid timetable.");
     }
   }
 
@@ -84,9 +75,14 @@ function runGenerate({
     faculty_timetables: best_faculty_timetables,
     faculty_daily_hours: best_faculty_daily_hours,
     classes: best_classes,
-    combos: result_combos, // Pass the combos along
-    allocations_report: result_allocations, // Pass allocations along
+    combos: result_combos,
+    allocations_report: result_allocations,
     attemptsTried: attempts,
+    // Legacy aliases used in some routes
+    bestClassTimetables: best_class_timetables,
+    bestFacultyTimetables: best_faculty_timetables,
+    bestFacultyDailyHours: best_faculty_daily_hours,
+    bestScore: bestScore,
   };
 }
 

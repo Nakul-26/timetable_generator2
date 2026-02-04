@@ -4,7 +4,7 @@ import runGenerate from "../../models/lib/runGenerator.js"; // Import runGenerat
  * Runs the timetable generator.
  * This function MUST be pure (no DB, no side effects).
  */
-export function runGeneration({
+export async function runGeneration({
   faculties,
   subjects,
   classes,
