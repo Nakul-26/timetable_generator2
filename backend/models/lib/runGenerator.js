@@ -17,6 +17,7 @@ async function runGenerate({
   let bestScore = Infinity;
   let result_combos = null;
   let result_allocations = null;
+  let lastError = null;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     const shuffledClasses = [...classes];
@@ -34,8 +35,9 @@ async function runGenerate({
     });
 
     if (!result.ok) {
+      lastError = result.error || "Unknown generator failure";
       if (process.env.NODE_ENV !== "production") {
-        console.log(`Attempt ${attempt + 1}: Failed to generate`);
+        console.log(`Attempt ${attempt + 1}: Failed to generate - ${lastError}`);
       }
       continue;
     }
@@ -62,14 +64,15 @@ async function runGenerate({
 
   if (process.env.NODE_ENV !== "production") {
     if (best_class_timetables) {
-      console.log("Best timetable found. Score:", bestScore);
-    } else {
-      console.error("Could not generate a valid timetable.");
-    }
+    console.log("Best timetable found. Score:", bestScore);
+  } else {
+      console.error("Could not generate a valid timetable.", lastError ? `Last error: ${lastError}` : "");
+  }
   }
 
   return {
     ok: Boolean(best_class_timetables),
+    error: best_class_timetables ? null : (lastError || "Failed to generate timetable"),
     score: bestScore,
     class_timetables: best_class_timetables,
     faculty_timetables: best_faculty_timetables,

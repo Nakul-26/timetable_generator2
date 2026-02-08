@@ -25,7 +25,6 @@ function generateElectiveCartesian(requirements, teachersByCategory) {
         const requiredCount = requirements[subjectId] || 1;
 
         if (teachersForCategory.length < requiredCount) {
-            console.warn(`Not enough teachers for elective category ${subjectId}. Required: ${requiredCount}, Available: ${teachersForCategory.length}`);
             return []; // Not possible to create combos
         }
 
@@ -66,6 +65,16 @@ export function convertNewCollegeInput({
     classes = classes.map(c => ({ ...c, _id: String(c._id) }));
     subjects = subjects.map(s => ({ ...s, _id: String(s._id) }));
     teachers = teachers.map(t => ({ ...t, _id: String(t._id) }));
+
+    const classById = new Map(classes.map(c => [String(c._id), c]));
+    const subjectById = new Map(subjects.map(s => [String(s._id), s]));
+    const formatClassLabel = (c) => {
+        if (!c) return "unknown";
+        const name = c.name || c.id || c._id;
+        const sem = c.sem ?? "?";
+        const section = c.section ? `, Sec ${c.section}` : "";
+        return `${name} (Sem ${sem}${section})`;
+    };
     
     const teachersByCategory = new Map();
     for (const combo of teacherSubjectCombos) {
@@ -155,6 +164,24 @@ export function convertNewCollegeInput({
             const teachersForClassByCategory = new Map();
             for(const [subId, teacherList] of teachersByCategory.entries()){
                 teachersForClassByCategory.set(subId, teacherList.filter(tid => classTeachForThisClass.includes(tid)));
+            }
+
+            // Pre-check elective requirements to log detailed context
+            let hasShortage = false;
+            for (const [subId, requiredCount] of Object.entries(electiveGroup.requirements || {})) {
+                const availableCount = (teachersForClassByCategory.get(subId) || []).length;
+                if (availableCount < requiredCount) {
+                    const cls = classById.get(String(classId));
+                    const subj = subjectById.get(String(subId));
+                    console.warn(
+                        `Elective teacher shortage: class=${formatClassLabel(cls)} classId=${classId} ` +
+                        `subject=${subj?.name || subId} subjectId=${subId} required=${requiredCount} available=${availableCount}`
+                    );
+                    hasShortage = true;
+                }
+            }
+            if (hasShortage) {
+                continue;
             }
             
             // FIX: Use generateElectiveCartesian for elective combos
