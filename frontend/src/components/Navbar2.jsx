@@ -4,13 +4,17 @@ import "../styles/Navbar.css";
 import { useAuth } from "../context/AuthContext";
 
 const Navbar = () => {
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
   };
+
+  if (loading || !user) {
+    return null;
+  }
 
   return (
     <nav className="navbar">
@@ -28,11 +32,9 @@ const Navbar = () => {
         <NavLink to="/timetable" className="nav-item">Timetable</NavLink>
         <NavLink to="/manual-timetable" className="nav-item">Manual Timetable</NavLink>
         <NavLink to="/saved-timetables" className="nav-item">Saved Timetables</NavLink>
-        {user && (
-          <button onClick={handleLogout} className="nav-item-logout">
-            Logout
-          </button>
-        )}
+        <button onClick={handleLogout} className="nav-item-logout">
+          Logout
+        </button>
       </div>
     </nav>
   );

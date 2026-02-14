@@ -33,6 +33,59 @@ function Timetable() {
 
   const classById = useMemo(() => new Map(classes.map((c) => [String(c._id), c])), [classes]);
 
+  const normalizeTableShape = (table) => {
+    if (!table || typeof table !== "object") return null;
+    const out = {};
+    for (const [classId, days] of Object.entries(table)) {
+      if (Array.isArray(days)) {
+        out[classId] = days;
+        continue;
+      }
+      if (days && typeof days === "object") {
+        const orderedDays = Object.keys(days)
+          .sort((a, b) => Number(a) - Number(b))
+          .map((k) => {
+            const row = days[k];
+            if (Array.isArray(row)) return row;
+            if (row && typeof row === "object") {
+              return Object.keys(row)
+                .sort((a, b) => Number(a) - Number(b))
+                .map((h) => row[h]);
+            }
+            return [];
+          });
+        out[classId] = orderedDays;
+      }
+    }
+    return out;
+  };
+
+  const normalizeGenerationResult = (raw) => {
+    if (!raw) return null;
+    const payload = raw.result && typeof raw.result === "object" ? raw.result : raw;
+    const classTimetables =
+      payload.class_timetables ??
+      payload.bestClassTimetables ??
+      payload.partialData?.class_timetables ??
+      null;
+    const facultyTimetables =
+      payload.faculty_timetables ??
+      payload.bestFacultyTimetables ??
+      payload.partialData?.faculty_timetables ??
+      null;
+
+    return {
+      ...payload,
+      class_timetables: normalizeTableShape(classTimetables),
+      faculty_timetables: facultyTimetables,
+    };
+  };
+
+  const hasRenderableTimetable = (data) => {
+    const table = data?.class_timetables;
+    return !!table && typeof table === "object" && Object.keys(table).length > 0;
+  };
+
   /* ===================== DATA FETCH ===================== */
 
   const fetchAll = useCallback(async () => {
@@ -84,22 +137,34 @@ function Timetable() {
 
         if (status === "running") {
           setProgress(progress ?? 0);
-          if (partialData) setTimetable(partialData);
+          if (partialData) {
+            const normalized = normalizeGenerationResult(partialData);
+            if (hasRenderableTimetable(normalized)) {
+              setTimetable(normalized);
+            }
+          }
         } else {
           if (status === "error") setError(error || "Generation failed");
 
-          if (result) {
-            setTimetable(result);
-            if (result.classes) {
-              setClasses(result.classes);
+          if (result || partialData) {
+            const normalized = normalizeGenerationResult(result || partialData);
+            setTimetable((prev) =>
+              hasRenderableTimetable(normalized) ? normalized : prev
+            );
+            if (normalized?.ok === false && normalized?.error) {
+              setError(normalized.error);
             }
-            if (result.combos) {
-              setCombos(result.combos);
+            if (normalized?.classes) {
+              setClasses(normalized.classes);
             }
-            setBestScore(result.score ?? null);
-            setFacultyDailyHours(result.faculty_daily_hours ?? null);
+            if (normalized?.combos) {
+              setCombos(normalized.combos);
+            }
+            setBestScore(normalized?.score ?? null);
+            setFacultyDailyHours(normalized?.faculty_daily_hours ?? null);
           } else if (partialData) {
-            setTimetable(partialData);
+            const normalized = normalizeGenerationResult(partialData);
+            setTimetable(normalized);
             setBestScore(null);
             setFacultyDailyHours(null);
           }
@@ -224,12 +289,15 @@ function Timetable() {
         
           /* ===================== HELPERS ===================== */
         
-          const getClassName = id => {
-            const cls = classes.find(c => String(c._id) === String(id));
-            return cls
-              ? `${cls.id}, ${cls.name} (Sem ${cls.sem}, ${cls.section})`
-              : id;
-          };
+  const getClassName = id => {
+    const cls = classes.find(c => String(c._id) === String(id));
+    if (!cls) return id;
+    const name = cls.name || cls.id || id;
+    const semPart = cls.sem != null ? `Sem ${cls.sem}` : null;
+    const sectionPart = cls.section ? `${cls.section}` : null;
+    const meta = [semPart, sectionPart].filter(Boolean).join(", ");
+    return meta ? `${name} (${meta})` : name;
+  };
         
           const getFacultyName = id => {
             const fac = faculties.find(f => String(f._id) === String(id));

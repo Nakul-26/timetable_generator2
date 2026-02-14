@@ -13,6 +13,7 @@ async function generate({
   BREAK_HOURS = [],
   fixed_slots = [],
   fixedSlots = [],
+  random_seed,
   progressCallback,
   stopFlag
 }) {
@@ -43,7 +44,8 @@ async function generate({
         DAYS_PER_WEEK,
         HOURS_PER_DAY,
         BREAK_HOURS,
-        fixed_slots: fixed_slots.length ? fixed_slots : fixedSlots
+        fixed_slots: fixed_slots.length ? fixed_slots : fixedSlots,
+        random_seed
       }),
       signal: controller.signal
     });
@@ -65,7 +67,9 @@ async function generate({
         error: data.error || "Solver error",
         class_timetables: data.class_timetables || {},
         faculty_timetables: data.faculty_timetables || {},
-        classes: data.classes || classes || []
+        classes: data.classes || classes || [],
+        unmet_requirements: data.unmet_requirements || [],
+        warnings: data.warnings || []
       };
     }
 
@@ -75,7 +79,9 @@ async function generate({
       ok: true,
       class_timetables: data.class_timetables,
       faculty_timetables: data.faculty_timetables,
-      classes: data.classes || classes || []
+      classes: data.classes || classes || [],
+      unmet_requirements: data.unmet_requirements || [],
+      warnings: data.warnings || []
     };
   } catch (err) {
     const msg = err?.name === "AbortError" ? "Solver timeout" : (err?.message || "Solver request failed");

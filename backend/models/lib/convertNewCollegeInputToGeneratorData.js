@@ -146,8 +146,11 @@ export function convertNewCollegeInput({
         }
         const hoursRequired = hoursPerClassSubject[`${classId}|${subjectId}`] || 0;
         if (hoursRequired <= 0) continue;
-        const teachersForSubject = teachersByCategory.get(subjectId) || [], teachersForClass = teachersPerClass[classId] || [];
-        const eligibleTeachers = teachersForSubject.filter(tid => teachersForClass.includes(tid));
+        const teachersForSubject = teachersByCategory.get(subjectId) || [];
+        const teachersForClass = teachersPerClass[classId] || [];
+        const eligibleTeachers = teachersForClass.length > 0
+            ? teachersForSubject.filter(tid => teachersForClass.includes(tid))
+            : teachersForSubject;
         for (const teacherId of eligibleTeachers) {
             combos.push({
                 _id: "C" + comboIndex++, faculty_ids: [teacherId], subject_id: subjectId, class_ids: [classId],
@@ -163,7 +166,11 @@ export function convertNewCollegeInput({
             const classTeachForThisClass = teachersPerClass[classId] || [];
             const teachersForClassByCategory = new Map();
             for(const [subId, teacherList] of teachersByCategory.entries()){
-                teachersForClassByCategory.set(subId, teacherList.filter(tid => classTeachForThisClass.includes(tid)));
+                if (classTeachForThisClass.length > 0) {
+                    teachersForClassByCategory.set(subId, teacherList.filter(tid => classTeachForThisClass.includes(tid)));
+                } else {
+                    teachersForClassByCategory.set(subId, teacherList);
+                }
             }
 
             // Pre-check elective requirements to log detailed context
