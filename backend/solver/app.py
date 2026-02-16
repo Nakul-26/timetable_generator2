@@ -120,6 +120,7 @@ async def solve(request: Request) -> Dict[str, Any]:
     teacher_covers: Dict[Tuple[str, int, int], List[cp_model.IntVar]] = {}
     subject_covers: Dict[Tuple[str, int, int, str], List[cp_model.IntVar]] = {}
     unmet_requirements: List[Dict[str, Any]] = []
+    objective_terms: List[cp_model.LinearExpr] = []
 
     for cls in classes:
         class_id = cls["_id"]
@@ -224,7 +225,7 @@ async def solve(request: Request) -> Dict[str, Any]:
                     model.Add(occ == 0)
                 teacher_occ[(fid, day, hour)] = occ
 
-    # Constraint: required hours per subject per class
+    # Constraint: weekly subject hours as soft constraints (shortage penalty).
     x_by_class_subject: Dict[Tuple[str, str], List[Tuple[cp_model.IntVar, int]]] = {}
     for (c_id, _day, _hour, combo_id), var in x.items():
         combo = combo_by_id.get(combo_id)
@@ -250,20 +251,17 @@ async def solve(request: Request) -> Dict[str, Any]:
                 if terms:
                     model.Add(sum(terms) == 0)
                 continue
-            if not terms:
-                unmet_requirements.append(
-                    {
-                        "class_id": class_id,
-                        "subject_id": subj_id,
-                        "required_hours": req,
-                        "scheduled_hours": 0,
-                        "reason": "no_eligible_combos_or_slots",
-                    }
-                )
-                continue
-            model.Add(sum(terms) == req)
+            scheduled = model.NewIntVar(0, req, f"scheduled_{class_id}_{subj_id}")
+            if terms:
+                model.Add(scheduled == sum(terms))
+            else:
+                model.Add(scheduled == 0)
 
-    # Constraint: teacher continuity (no 4 consecutive hours)
+            shortage = model.NewIntVar(0, req, f"shortage_{class_id}_{subj_id}")
+            model.Add(scheduled + shortage == req)
+            objective_terms.append(shortage * 1000)
+
+    # Soft constraint: teacher continuity (penalize 4th consecutive hour)
     for fid in [f["_id"] for f in faculties]:
         for day in range(DAYS_PER_WEEK):
             for start in range(HOURS_PER_DAY - 3):
@@ -274,12 +272,12 @@ async def solve(request: Request) -> Dict[str, Any]:
                     or (start + 3) in break_hours_set
                 ):
                     continue
-                model.Add(
-                    sum(teacher_occ[(fid, day, h)] for h in range(start, start + 4))
-                    <= 3
-                )
+                win = sum(teacher_occ[(fid, day, h)] for h in range(start, start + 4))
+                excess = model.NewIntVar(0, 4, f"teacher_cont_excess_{fid}_{day}_{start}")
+                model.Add(excess >= win - 3)
+                objective_terms.append(excess * 100)
 
-    # Constraint: class continuity (no 4 consecutive periods for a class)
+    # Soft constraint: class continuity (penalize 4th consecutive period)
     for cls in classes:
         class_id = cls["_id"]
         days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
@@ -292,10 +290,10 @@ async def solve(request: Request) -> Dict[str, Any]:
                     or (start + 3) in break_hours_set
                 ):
                     continue
-                model.Add(
-                    sum(class_occ[(class_id, day, h)] for h in range(start, start + 4))
-                    <= 3
-                )
+                win = sum(class_occ[(class_id, day, h)] for h in range(start, start + 4))
+                excess = model.NewIntVar(0, 4, f"class_cont_excess_{class_id}_{day}_{start}")
+                model.Add(excess >= win - 3)
+                objective_terms.append(excess * 80)
 
     # Fixed slots
     for fs in valid_fixed_slots:
@@ -311,7 +309,7 @@ async def solve(request: Request) -> Dict[str, Any]:
             continue
         model.Add(var == 1)
 
-    # Hard cap: teacher daily load <= 6 periods
+    # Soft cap: teacher daily load (penalize load above 6).
     teacher_day_load: Dict[Tuple[str, int], cp_model.IntVar] = {}
     for fid in [f["_id"] for f in faculties]:
         for day in range(DAYS_PER_WEEK):
@@ -324,31 +322,12 @@ async def solve(request: Request) -> Dict[str, Any]:
                 continue
             load = model.NewIntVar(0, len(day_terms), f"teacher_load_{fid}_{day}")
             model.Add(load == sum(day_terms))
-            model.Add(load <= 6)
             teacher_day_load[(fid, day)] = load
+            overload = model.NewIntVar(0, HOURS_PER_DAY, f"teacher_overload_{fid}_{day}")
+            model.Add(overload >= load - 6)
+            objective_terms.append(overload * 120)
 
-    # Soft objective for timetable quality.
-    objective_terms: List[cp_model.LinearExpr] = []
-
-    # 1) Reduce teacher idle days and overload.
-    for fid in [f["_id"] for f in faculties]:
-        for day in range(DAYS_PER_WEEK):
-            load = teacher_day_load.get((fid, day))
-            if load is None:
-                continue
-            works_today = model.NewBoolVar(f"works_{fid}_{day}")
-            model.Add(load >= 1).OnlyEnforceIf(works_today)
-            model.Add(load == 0).OnlyEnforceIf(works_today.Not())
-
-            # Penalize idle days and loads above 4.
-            idle_today = model.NewBoolVar(f"idle_{fid}_{day}")
-            model.Add(idle_today + works_today == 1)
-            objective_terms.append(idle_today * 2)
-            overload = model.NewIntVar(0, HOURS_PER_DAY, f"overload_{fid}_{day}")
-            model.Add(overload >= load - 4)
-            objective_terms.append(overload * 3)
-
-    # 2) Reduce subject clustering within a day.
+    # Soft objective: reduce subject clustering within a day.
     for cls in classes:
         class_id = cls["_id"]
         days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
@@ -369,19 +348,19 @@ async def solve(request: Request) -> Dict[str, Any]:
                     0, HOURS_PER_DAY, f"subj_day_count_{class_id}_{subj_id}_{day}"
                 )
                 model.Add(day_count == sum(day_terms))
-                # Penalize more than 2 periods/day of same subject.
+                # Penalize more than 3 periods/day of same subject.
                 excess = model.NewIntVar(
                     0, HOURS_PER_DAY, f"subj_day_excess_{class_id}_{subj_id}_{day}"
                 )
-                model.Add(excess >= day_count - 2)
-                objective_terms.append(excess)
+                model.Add(excess >= day_count - 3)
+                objective_terms.append(excess * 50)
 
     if objective_terms:
         model.Minimize(sum(objective_terms))
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = float(
-        os.getenv("SOLVER_TIME_LIMIT_SEC", "60")
+        os.getenv("SOLVER_TIME_LIMIT_SEC", "180")
     )
     solver.parameters.num_search_workers = max(1, int(os.getenv("SOLVER_WORKERS", "8")))
     solver.parameters.random_seed = random_seed
@@ -389,157 +368,9 @@ async def solve(request: Request) -> Dict[str, Any]:
     status = solver.Solve(model)
 
     if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        # Build a best-effort partial timetable so UI can still display useful output.
-        max_days = max(
-            [int(c.get("days_per_week") or DAYS_PER_WEEK) for c in classes]
-            or [DAYS_PER_WEEK]
-        )
-
-        class_timetables: Dict[str, List[List[Any]]] = {}
-        for cls in classes:
-            class_id = cls["_id"]
-            days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
-            table = []
-            for _d in range(days):
-                row = []
-                for h in range(HOURS_PER_DAY):
-                    row.append(BREAK if h in break_hours_set else EMPTY)
-                table.append(row)
-            class_timetables[class_id] = table
-
-        faculty_timetables: Dict[str, List[List[Any]]] = {}
-        for f in faculties:
-            fid = f["_id"]
-            table = []
-            for _d in range(max_days):
-                row = []
-                for h in range(HOURS_PER_DAY):
-                    row.append(BREAK if h in break_hours_set else EMPTY)
-                table.append(row)
-            faculty_timetables[fid] = table
-
-        scheduled_hours: Dict[Tuple[str, str], int] = {}
-
-        def can_place(class_id: str, combo: Dict[str, Any], day: int, hour: int, block: int) -> bool:
-            if hour + block > HOURS_PER_DAY:
-                return False
-            if any(h in break_hours_set for h in range(hour, hour + block)):
-                return False
-            for h in range(hour, hour + block):
-                if class_timetables[class_id][day][h] != EMPTY:
-                    return False
-                for fid in combo.get("faculty_ids", []):
-                    if day >= len(faculty_timetables.get(fid, [])):
-                        return False
-                    if faculty_timetables[fid][day][h] != EMPTY:
-                        return False
-            return True
-
-        def place(class_id: str, combo: Dict[str, Any], day: int, hour: int, block: int) -> None:
-            combo_id = combo["_id"]
-            for h in range(hour, hour + block):
-                class_timetables[class_id][day][h] = combo_id
-                for fid in combo.get("faculty_ids", []):
-                    faculty_timetables[fid][day][h] = combo_id
-            key = (class_id, combo["subject_id"])
-            scheduled_hours[key] = scheduled_hours.get(key, 0) + block
-
-        # Place fixed slots first.
-        for fs in valid_fixed_slots:
-            class_id = str(fs.get("class"))
-            day = int(fs.get("day"))
-            hour = int(fs.get("hour"))
-            combo_id = str(fs.get("combo"))
-            combo = combo_by_id.get(combo_id)
-            if not combo:
-                continue
-            subj = subject_by_id.get(combo["subject_id"])
-            if not subj:
-                continue
-            block = 2 if subj.get("type") == "lab" else 1
-            days = int(class_by_id[class_id].get("days_per_week") or DAYS_PER_WEEK)
-            if day < 0 or day >= days:
-                continue
-            if can_place(class_id, combo, day, hour, block):
-                place(class_id, combo, day, hour, block)
-
-        # Greedy fill remaining demand.
-        demand_items: List[Tuple[str, str, int]] = []
-        for cls in classes:
-            class_id = cls["_id"]
-            for subj in subjects:
-                subj_id = subj["_id"]
-                req = required_hours_by_class_subject[class_id][subj_id]
-                if req > 0:
-                    demand_items.append((class_id, subj_id, req))
-        demand_items.sort(key=lambda x: x[2], reverse=True)
-
-        for class_id, subj_id, req in demand_items:
-            key = (class_id, subj_id)
-            already = scheduled_hours.get(key, 0)
-            remaining = req - already
-            if remaining <= 0:
-                continue
-
-            eligible_combos = []
-            for combo in combos:
-                if combo.get("subject_id") != subj_id:
-                    continue
-                class_ids = combo.get("class_ids") or []
-                if class_ids and class_id not in class_ids:
-                    continue
-                eligible_combos.append(combo)
-
-            if not eligible_combos:
-                unmet_requirements.append(
-                    {
-                        "class_id": class_id,
-                        "subject_id": subj_id,
-                        "required_hours": req,
-                        "scheduled_hours": already,
-                        "reason": "no_eligible_combos_or_slots",
-                    }
-                )
-                continue
-
-            subj = subject_by_id.get(subj_id) or {}
-            block = 2 if subj.get("type") == "lab" else 1
-            days = int(class_by_id[class_id].get("days_per_week") or DAYS_PER_WEEK)
-
-            placed_any = True
-            while remaining > 0 and placed_any:
-                placed_any = False
-                for day in range(days):
-                    if placed_any:
-                        break
-                    for hour in range(HOURS_PER_DAY):
-                        if placed_any:
-                            break
-                        if block > remaining:
-                            continue
-                        for combo in eligible_combos:
-                            if can_place(class_id, combo, day, hour, block):
-                                place(class_id, combo, day, hour, block)
-                                remaining -= block
-                                placed_any = True
-                                break
-
-            if remaining > 0:
-                unmet_requirements.append(
-                    {
-                        "class_id": class_id,
-                        "subject_id": subj_id,
-                        "required_hours": req,
-                        "scheduled_hours": req - remaining,
-                        "reason": "infeasible_under_current_constraints",
-                    }
-                )
-
         return {
             "ok": False,
-            "error": "No feasible full solution. Returned partial timetable.",
-            "class_timetables": class_timetables,
-            "faculty_timetables": faculty_timetables,
+            "error": f"Solver status: {solver.StatusName(status)}",
             "classes": classes,
             "unmet_requirements": unmet_requirements,
             "warnings": fixed_slot_warnings,
