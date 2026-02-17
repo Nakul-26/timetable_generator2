@@ -13,12 +13,14 @@ protectedRouter.use(auth);
 protectedRouter.post('/subjects', async (req, res) => {
   console.log("[POST /subjects] Body:", req.body);
   try {
+    const { id, name, sem, combined_classes, isElective } = req.body;
     const s = new Subject({
-      id: req.body.id,
-      name: req.body.name,
-      sem: req.body.sem,
+      id,
+      name,
+      sem,
       type: req.body.type, // ✅ new property
-      combined_classes: req.body.combined_classes
+      combined_classes,
+      isElective: Boolean(isElective),
     });
 
     await s.save();

@@ -12,6 +12,7 @@ function AddSubject() {
   const [sem, setSem] = useState("");
   const [type, setType] = useState("theory");
   const [combinedClasses, setCombinedClasses] = useState([]);
+  const [isElective, setIsElective] = useState(false);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -19,6 +20,7 @@ function AddSubject() {
     if (name === "code") setCode(value);
     if (name === "sem") setSem(value);
     if (name === "type") setType(value);
+    if (name === "isElective") setIsElective(checked);
     if (name === "combinedClasses") {
       if (checked) {
         setCombinedClasses([...combinedClasses, value]);
@@ -53,6 +55,7 @@ function AddSubject() {
         sem,
         type: type,
         combined_classes: combinedClasses,
+        isElective,
       });
       setSuccess("Subject added successfully!");
       setName("");
@@ -60,6 +63,7 @@ function AddSubject() {
       setSem("");
       setType("theory");
       setCombinedClasses([]);
+      setIsElective(false);
       refetchData();
     } catch (err) {
       setError("Failed to add subject.");
@@ -116,6 +120,17 @@ function AddSubject() {
           <option value="theory">Theory</option>
           <option value="lab">Lab</option>
         </select>
+      </div>
+      <div className="form-group">
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            name="isElective"
+            checked={isElective}
+            onChange={handleChange}
+          />
+          Mark as Elective Subject
+        </label>
       </div>
       <div className="form-group">
           <label>Combined Classes</label>
