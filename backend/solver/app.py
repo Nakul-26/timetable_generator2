@@ -16,6 +16,7 @@ app = FastAPI()
 
 EMPTY = -1
 BREAK = "BREAK"
+CLASS_INBETWEEN_GAP_PENALTY = 90
 
 
 def _normalize_id(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -294,6 +295,44 @@ async def solve(request: Request) -> Dict[str, Any]:
                 excess = model.NewIntVar(0, 4, f"class_cont_excess_{class_id}_{day}_{start}")
                 model.Add(excess >= win - 3)
                 objective_terms.append(excess * 80)
+
+    # Soft constraint: reduce in-between class gaps within a day.
+    # A gap is an empty non-break slot that has at least one class before it
+    # and at least one class after it on the same day.
+    for cls in classes:
+        class_id = cls["_id"]
+        days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+        valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
+        for day in range(days):
+            for hour in valid_hours:
+                prev_hours = [h for h in valid_hours if h < hour]
+                next_hours = [h for h in valid_hours if h > hour]
+                if not prev_hours or not next_hours:
+                    continue
+
+                has_before = model.NewBoolVar(
+                    f"class_has_before_{class_id}_{day}_{hour}"
+                )
+                before_terms = [class_occ[(class_id, day, h)] for h in prev_hours]
+                model.Add(has_before <= sum(before_terms))
+                for term in before_terms:
+                    model.Add(has_before >= term)
+
+                has_after = model.NewBoolVar(
+                    f"class_has_after_{class_id}_{day}_{hour}"
+                )
+                after_terms = [class_occ[(class_id, day, h)] for h in next_hours]
+                model.Add(has_after <= sum(after_terms))
+                for term in after_terms:
+                    model.Add(has_after >= term)
+
+                gap = model.NewBoolVar(f"class_gap_{class_id}_{day}_{hour}")
+                occ = class_occ[(class_id, day, hour)]
+                model.Add(gap <= has_before)
+                model.Add(gap <= has_after)
+                model.Add(gap <= 1 - occ)
+                model.Add(gap >= has_before + has_after - occ - 1)
+                objective_terms.append(gap * CLASS_INBETWEEN_GAP_PENALTY)
 
     # Fixed slots
     for fs in valid_fixed_slots:
