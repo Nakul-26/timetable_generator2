@@ -16,7 +16,6 @@ app = FastAPI()
 
 EMPTY = -1
 BREAK = "BREAK"
-CLASS_INBETWEEN_GAP_PENALTY = 90
 
 
 def _normalize_id(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -296,7 +295,7 @@ async def solve(request: Request) -> Dict[str, Any]:
                 model.Add(excess >= win - 3)
                 objective_terms.append(excess * 80)
 
-    # Soft constraint: reduce in-between class gaps within a day.
+    # Hard constraint: no in-between class gaps within a day.
     # A gap is an empty non-break slot that has at least one class before it
     # and at least one class after it on the same day.
     for cls in classes:
@@ -332,7 +331,7 @@ async def solve(request: Request) -> Dict[str, Any]:
                 model.Add(gap <= has_after)
                 model.Add(gap <= 1 - occ)
                 model.Add(gap >= has_before + has_after - occ - 1)
-                objective_terms.append(gap * CLASS_INBETWEEN_GAP_PENALTY)
+                model.Add(gap == 0)
 
     # Fixed slots
     for fs in valid_fixed_slots:
