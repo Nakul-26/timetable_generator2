@@ -1,7 +1,11 @@
 // lib/generator.js
 // Thin wrapper around the Python CP-SAT solver service
 const DEFAULT_SOLVER_URL = process.env.SOLVER_URL || "http://localhost:8001";
-const DEFAULT_TIMEOUT_MS = Number(process.env.SOLVER_TIMEOUT_MS || 180000);
+const DEFAULT_SOLVER_TIME_LIMIT_SEC = Number(process.env.SOLVER_TIME_LIMIT_SEC || 180);
+// Keep HTTP timeout slightly above solver time limit to avoid client abort races.
+const DEFAULT_TIMEOUT_MS = Number(
+  process.env.SOLVER_TIMEOUT_MS || (DEFAULT_SOLVER_TIME_LIMIT_SEC * 1000 + 30000)
+);
 
 async function generate({
   faculties,
@@ -45,7 +49,8 @@ async function generate({
         HOURS_PER_DAY,
         BREAK_HOURS,
         fixed_slots: fixed_slots.length ? fixed_slots : fixedSlots,
-        random_seed
+        random_seed,
+        solver_time_limit_sec: DEFAULT_SOLVER_TIME_LIMIT_SEC
       }),
       signal: controller.signal
     });

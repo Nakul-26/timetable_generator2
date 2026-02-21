@@ -7,15 +7,29 @@
 #  uvicorn app:app --host 0.0.0.0 --port 8001
 
 # FastAPI CP-SAT timetable solver service
+import asyncio
 import os
+import sys
 from typing import Dict, List, Any, Tuple
 from fastapi import FastAPI, Request
 from ortools.sat.python import cp_model
+
+# Avoid noisy Proactor transport shutdown tracebacks on Windows when clients disconnect.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 app = FastAPI()
 
 EMPTY = -1
 BREAK = "BREAK"
+
+def _solver_loop_exception_handler(loop, context):
+    exc = context.get("exception")
+    if isinstance(exc, ConnectionResetError):
+        # Ignore noisy Windows socket shutdown resets from disconnected clients.
+        if getattr(exc, "winerror", None) == 10054:
+            return
+    loop.default_exception_handler(context)
 
 
 def _normalize_id(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -29,6 +43,12 @@ def _required_hours(class_obj: Dict[str, Any], subject_obj: Dict[str, Any]) -> i
     if subj_id in subj_hours and subj_hours[subj_id] is not None:
         return int(subj_hours[subj_id])
     return int(subject_obj.get("no_of_hours_per_week") or 0)
+
+
+@app.on_event("startup")
+async def _install_loop_handler():
+    loop = asyncio.get_running_loop()
+    loop.set_exception_handler(_solver_loop_exception_handler)
 
 
 @app.get("/health")
@@ -63,6 +83,9 @@ async def solve(request: Request) -> Dict[str, Any]:
 
     fixed_slots = payload.get("fixed_slots") or payload.get("fixedSlots") or []
     random_seed = int(payload.get("random_seed") or os.getenv("SOLVER_RANDOM_SEED", "1"))
+    solver_time_limit_sec = float(
+        payload.get("solver_time_limit_sec") or os.getenv("SOLVER_TIME_LIMIT_SEC", "180")
+    )
 
     subject_by_id = {s["_id"]: s for s in subjects}
     class_by_id = {c["_id"]: c for c in classes}
@@ -393,13 +416,41 @@ async def solve(request: Request) -> Dict[str, Any]:
                 model.Add(excess >= day_count - 3)
                 objective_terms.append(excess * 50)
 
+    # Medium soft constraint: global front-loading per class across the full week.
+    # Flatten class occupancy by (day, hour) order (excluding breaks) and penalize
+    # any 0 -> 1 transition, which means an occupied slot after an empty slot.
+    # This drives patterns toward: 111111000000 (empties at the end of the week).
+    for cls in classes:
+        class_id = cls["_id"]
+        days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+        if days <= 0:
+            continue
+
+        flat_occ: List[cp_model.IntVar] = []
+        for day in range(days):
+            for hour in range(HOURS_PER_DAY):
+                if hour in break_hours_set:
+                    continue
+                flat_occ.append(class_occ[(class_id, day, hour)])
+
+        if len(flat_occ) <= 1:
+            continue
+
+        for i in range(len(flat_occ) - 1):
+            prev_occ = flat_occ[i]
+            next_occ = flat_occ[i + 1]
+            violation = model.NewBoolVar(f"class_frontload_violation_{class_id}_{i}")
+            # violation = 1 iff (prev_occ=0 and next_occ=1)
+            model.Add(violation >= next_occ - prev_occ)
+            model.Add(violation <= next_occ)
+            model.Add(violation <= 1 - prev_occ)
+            objective_terms.append(violation * 400)
+
     if objective_terms:
         model.Minimize(sum(objective_terms))
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = float(
-        os.getenv("SOLVER_TIME_LIMIT_SEC", "180")
-    )
+    solver.parameters.max_time_in_seconds = solver_time_limit_sec
     solver.parameters.num_search_workers = max(1, int(os.getenv("SOLVER_WORKERS", "8")))
     solver.parameters.random_seed = random_seed
 

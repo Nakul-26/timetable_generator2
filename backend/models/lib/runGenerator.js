@@ -1,6 +1,46 @@
 // runGenerator.js
 import Generator from "./generator.js";
 
+function analyzeClassInternalGaps(classTimetables) {
+  let gapCount = 0;
+
+  if (!classTimetables || typeof classTimetables !== "object") {
+    return { gapCount: 0 };
+  }
+
+  for (const rows of Object.values(classTimetables)) {
+    if (!Array.isArray(rows)) continue;
+
+    for (const row of rows) {
+      if (!Array.isArray(row)) continue;
+
+      const teachingSlots = row
+        .map((slot, idx) => ({ slot, idx }))
+        .filter(
+          ({ slot }) =>
+            slot !== -1 &&
+            slot !== "BREAK" &&
+            slot !== null &&
+            slot !== undefined
+        )
+        .map(({ idx }) => idx);
+
+      if (teachingSlots.length <= 1) continue;
+
+      const first = teachingSlots[0];
+      const last = teachingSlots[teachingSlots.length - 1];
+      for (let h = first + 1; h < last; h++) {
+        const slot = row[h];
+        if (slot === -1 || slot === null || slot === undefined) {
+          gapCount += 1;
+        }
+      }
+    }
+  }
+
+  return { gapCount };
+}
+
 function buildGreedyPartial({
   classes,
   combos,
@@ -139,6 +179,8 @@ async function runGenerate({
   onProgress,
   attempts = 3,
 }) {
+  const enforceHardNoGaps = String(process.env.ENFORCE_HARD_NO_GAPS || "true").toLowerCase() !== "false";
+
   let best_class_timetables = null;
   let best_faculty_timetables = null;
   let best_faculty_daily_hours = null;
@@ -205,6 +247,15 @@ async function runGenerate({
       continue;
     }
 
+    const { gapCount } = analyzeClassInternalGaps(result.class_timetables);
+    if (enforceHardNoGaps && gapCount > 0) {
+      lastError = `Generated timetable has ${gapCount} internal class gaps`;
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`Attempt ${attempt + 1}: Rejected due to gaps (${gapCount})`);
+      }
+      continue;
+    }
+
     const score = Generator.scoreTimetable(
       result.class_timetables,
       classes.map((c) => c._id)
@@ -236,20 +287,23 @@ async function runGenerate({
   }
 
   if (!best_class_timetables && (!bestPartial || bestPartialFilled <= 0)) {
-    const fallback = buildGreedyPartial({
-      classes,
-      combos,
-      faculties,
-      fixedSlots,
-    });
-    bestPartial = {
-      class_timetables: fallback.class_timetables,
-      faculty_timetables: fallback.faculty_timetables,
-      classes,
-      combos,
-      unmet_requirements: fallback.unmet_requirements,
-      warnings: [],
-    };
+    // Do not auto-return greedy partial timetables when strict no-gap mode is enabled.
+    if (!enforceHardNoGaps) {
+      const fallback = buildGreedyPartial({
+        classes,
+        combos,
+        faculties,
+        fixedSlots,
+      });
+      bestPartial = {
+        class_timetables: fallback.class_timetables,
+        faculty_timetables: fallback.faculty_timetables,
+        classes,
+        combos,
+        unmet_requirements: fallback.unmet_requirements,
+        warnings: [],
+      };
+    }
   }
 
   return {
