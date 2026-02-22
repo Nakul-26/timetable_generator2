@@ -32,6 +32,14 @@ function Timetable() {
   const HOURS_PER_DAY = 8;
 
   const classById = useMemo(() => new Map(classes.map((c) => [String(c._id), c])), [classes]);
+  const facultyById = useMemo(
+    () => new Map(faculties.map((f) => [String(f._id), f])),
+    [faculties]
+  );
+  const subjectById = useMemo(
+    () => new Map(subjects.map((s) => [String(s._id), s])),
+    [subjects]
+  );
 
   const normalizeTableShape = (table) => {
     if (!table || typeof table !== "object") return null;
@@ -225,6 +233,8 @@ function Timetable() {
     setProgress(0);
 
     try {
+      await api.delete("/timetables");
+
       const payload = transformFixedSlots(fixedSlots);
       const classElectiveGroups =
         JSON.parse(localStorage.getItem("classElectiveGroups")) || [];
@@ -298,11 +308,183 @@ function Timetable() {
     const meta = [semPart, sectionPart].filter(Boolean).join(", ");
     return meta ? `${name} (${meta})` : name;
   };
+
+  const escapeHtml = (value) => {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  };
         
           const getFacultyName = id => {
             const fac = faculties.find(f => String(f._id) === String(id));
             return fac ? fac.name : id;
           };
+
+  const getSlotDisplay = (slot) => {
+    if (!slot || slot === -1 || slot === "BREAK") {
+      return { subjectName: "-", facultyNames: [] };
+    }
+
+    const combo = combos.find((c) => String(c._id) === String(slot));
+    if (!combo) {
+      return { subjectName: "?", facultyNames: [] };
+    }
+
+    const subject = subjectById.get(String(combo.subject_id));
+    const subjectName = subject ? subject.name : `Elective ${String(combo.subject_id).slice(-4)}`;
+
+    let facultyNames = [];
+    if (combo.faculty_ids && Array.isArray(combo.faculty_ids)) {
+      facultyNames = combo.faculty_ids.map((fid) => {
+        const fac = facultyById.get(String(fid));
+        return fac ? fac.name : "N/A";
+      });
+    } else if (combo.faculty_id) {
+      const fac = facultyById.get(String(combo.faculty_id));
+      facultyNames = [fac ? fac.name : "N/A"];
+    }
+
+    return { subjectName, facultyNames };
+  };
+
+  const buildPdfHtml = ({ entries, filtered }) => {
+    const now = new Date();
+    const filtersText = [
+      selectedClass ? `Class: ${getClassName(selectedClass)}` : null,
+      selectedFaculty ? `Faculty: ${getFacultyName(selectedFaculty)}` : null,
+      selectedSubject
+        ? `Subject: ${subjectById.get(String(selectedSubject))?.name || selectedSubject}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const sections = entries
+      .map(([classId, slots]) => {
+        const rows = slots
+          .map((row, dayIndex) => {
+            const cells = row
+              .map((slot) => {
+                const matches = filtered ? isCellMatching(slot) : true;
+                const { subjectName, facultyNames } = getSlotDisplay(slot);
+                const facultyLine = facultyNames.length
+                  ? `<div class="faculty">${escapeHtml(facultyNames.join(", "))}</div>`
+                  : "";
+                return `<td class="${matches ? "" : "dim"}"><div class="subject">${escapeHtml(subjectName)}</div>${facultyLine}</td>`;
+              })
+              .join("");
+            return `<tr><td class="day">Day ${dayIndex + 1}</td>${cells}</tr>`;
+          })
+          .join("");
+
+        return `
+          <div class="class-block">
+            <h3>${escapeHtml(getClassName(classId))}</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Day / Period</th>
+                  ${Array.from({ length: HOURS_PER_DAY })
+                    .map((_, p) => `<th>P${p + 1}</th>`)
+                    .join("")}
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div class="pdf-root">
+        <h1>${filtered ? "Filtered Timetable" : "Generated Timetable"}</h1>
+        <div class="meta">Generated on: ${escapeHtml(now.toLocaleString())}</div>
+        ${filtered && filtersText ? `<div class="meta">Filters: ${escapeHtml(filtersText)}</div>` : ""}
+        ${sections}
+      </div>
+    `;
+  };
+
+  const downloadPdfFromHtml = (html, title) => {
+    const popup = window.open("", "_blank", "noopener,noreferrer");
+    if (!popup) {
+      throw new Error("Unable to open print window.");
+    }
+
+    popup.document.open();
+    popup.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>${escapeHtml(title)}</title>
+          <style>
+            @page { size: A4 portrait; margin: 10mm; }
+            body { margin: 0; padding: 0; font-family: Arial, sans-serif; color: #111; }
+            .pdf-root h1 { margin: 0 0 10px 0; }
+            .pdf-root .meta { margin: 0 0 8px 0; font-size: 13px; color: #444; }
+            .pdf-root .class-block { margin-top: 18px; page-break-inside: avoid; }
+            .pdf-root .class-block h3 { margin: 0 0 8px 0; font-size: 16px; }
+            .pdf-root table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            .pdf-root th, .pdf-root td { border: 1px solid #d0d0d0; padding: 6px; font-size: 10px; vertical-align: top; word-wrap: break-word; }
+            .pdf-root th { background: #f2f2f2; }
+            .pdf-root .day { font-weight: 700; width: 95px; }
+            .pdf-root .subject { font-weight: 700; }
+            .pdf-root .faculty { margin-top: 3px; color: #333; }
+            .pdf-root .dim { opacity: 0.35; }
+          </style>
+        </head>
+        <body>${html}</body>
+      </html>
+    `);
+    popup.document.close();
+    popup.focus();
+    popup.print();
+  };
+
+  const downloadGeneratedPdf = () => {
+    if (!timetable || !timetable.class_timetables) {
+      alert("No timetable available to download.");
+      return;
+    }
+
+    const entries = Object.entries(timetable.class_timetables);
+    if (!entries.length) {
+      alert("No timetable data available to download.");
+      return;
+    }
+
+    try {
+      const html = buildPdfHtml({ entries, filtered: false });
+      downloadPdfFromHtml(html, "Generated Timetable PDF");
+    } catch {
+      setError("Failed to download generated timetable PDF.");
+    }
+  };
+
+  const downloadFilteredPdf = () => {
+    if (!timetable || !timetable.class_timetables) {
+      alert("No timetable available to download.");
+      return;
+    }
+
+    const entries = filteredTimetable();
+    if (!entries.length) {
+      alert("No filtered timetable data available to download.");
+      return;
+    }
+
+    try {
+      const html = buildPdfHtml({ entries, filtered: true });
+      downloadPdfFromHtml(html, "Filtered Timetable PDF");
+    } catch {
+      setError("Failed to download filtered timetable PDF.");
+    }
+  };
 
 
   const renderEmptyTable = (classId) => {
@@ -459,23 +641,29 @@ function Timetable() {
         <button className="primary-btn" onClick={generateTimetable} disabled={loading}>
           Generate
         </button>
-        <button className="danger-btn" onClick={stopGeneration} disabled={!loading}>
+        {/* <button className="danger-btn" onClick={stopGeneration} disabled={!loading}>
           Stop
-        </button>
-        <button className="secondary-btn" onClick={fetchLatest} disabled={loading}>
+        </button> */}
+        {/* <button className="secondary-btn" onClick={fetchLatest} disabled={loading}>
           Fetch Latest
-        </button>
-        <button className="secondary-btn" onClick={regenerateTimetable} disabled={loading}>
+        </button> */}
+        {/* <button className="secondary-btn" onClick={regenerateTimetable} disabled={loading}>
           Regenerate
-        </button>
+        </button> */}
         <button className="secondary-btn" onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Filters" : "Show Filters"}
         </button>
-        <button className="secondary-btn" onClick={deleteAllTimetables} disabled={loading}>
+        {/* <button className="secondary-btn" onClick={deleteAllTimetables} disabled={loading}>
           Delete All
-        </button>
-        <button className="primary-btn" onClick={handleSave} disabled={loading || !timetable}>
+        </button> */}
+        {/* <button className="primary-btn" onClick={handleSave} disabled={loading || !timetable}>
           Save Timetable
+        </button> */}
+        <button className="secondary-btn" onClick={downloadGeneratedPdf} disabled={loading || !timetable}>
+          Download Generated PDF
+        </button>
+        <button className="secondary-btn" onClick={downloadFilteredPdf} disabled={loading || !timetable}>
+          Download Filtered PDF
         </button>
       </div>
 

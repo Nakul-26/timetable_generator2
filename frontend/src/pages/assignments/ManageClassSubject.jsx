@@ -7,7 +7,7 @@ const ManageClassSubject = () => {
     const { assignments, classes, subjects, loading, error, refetchData } = useContext(DataContext);
     const [addClasses, setAddClasses] = useState([]);
     const [addSubjects, setAddSubjects] = useState([]);
-    const [addHours, setAddHours] = useState(5); // Default to 5 hours
+    const [addHours, setAddHours] = useState("");
     const [filterClass, setFilterClass] = useState(null);
     const [filterSubject, setFilterSubject] = useState(null);
 
@@ -34,7 +34,7 @@ const ManageClassSubject = () => {
             refetchData(['class-subjects']);
             setAddClasses([]);
             setAddSubjects([]);
-            setAddHours(5);
+            setAddHours("");
         } catch (err) {
             console.log(`Error: ${err.message}`);
         }
@@ -81,6 +81,7 @@ const ManageClassSubject = () => {
                 />
                 <input
                     type="number"
+                    className="hours-input"
                     value={addHours}
                     onChange={(e) => setAddHours(e.target.value)}
                     placeholder="Hours per week"

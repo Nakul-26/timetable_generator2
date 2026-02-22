@@ -213,7 +213,7 @@ protectedRouter.get('/generation-status/:taskId', (req, res) => {
 protectedRouter.get('/result/latest', async (req, res) => {
   console.log("[GET /result/latest] Fetching latest timetable result");
   try {
-    const r = await TimetableResult.findOne().sort({ createdAt: -1 }).lean();
+    const r = await TimetableResult.findOne({ source: 'generator' }).sort({ createdAt: -1 }).lean();
     console.log("[GET /result/latest] Found:", r ? "Yes" : "No");
     res.json(r);
   } catch (e) {
@@ -224,7 +224,11 @@ protectedRouter.get('/result/latest', async (req, res) => {
 protectedRouter.get('/timetables', async (req, res) => {
     console.log("[GET /timetables] Fetching all saved timetables");
     try {
-        const timetables = await TimetableResult.find({ source: 'manual' }).sort({ createdAt: -1 }).lean();
+        const timetables = await TimetableResult.find({
+          source: { $in: ['manual', 'generator'] }
+        })
+          .sort({ createdAt: -1 })
+          .lean();
         console.log("[GET /timetables] Found:", timetables.length, "records");
         res.json(timetables);
     } catch (e) {

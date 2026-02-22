@@ -1,6 +1,7 @@
 import { Worker } from "worker_threads";
 import path from "path";
 import { fileURLToPath } from "url";
+import TimetableResult from "../../models/TimetableResult.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,9 +60,34 @@ export function startGenerationWorker({ payload }) {
     }
 
     if (message.type === "RESULT") {
+      const resultData = message.data || {};
+      const hasTimetable =
+        resultData.class_timetables &&
+        typeof resultData.class_timetables === "object" &&
+        Object.keys(resultData.class_timetables).length > 0;
+
+      if (hasTimetable) {
+        const generatedName = `Generated Timetable - ${new Date().toLocaleString()}`;
+        try {
+          const rec = new TimetableResult({
+            name: generatedName,
+            source: "generator",
+            class_timetables: resultData.class_timetables,
+            faculty_timetables: resultData.faculty_timetables,
+            faculty_daily_hours: resultData.faculty_daily_hours,
+            score: resultData.score,
+            combos: resultData.combos,
+            allocations_report: resultData.allocations_report,
+          });
+          await rec.save();
+        } catch (saveErr) {
+          console.error(`[WORKER ${taskId}] Failed to persist generated timetable:`, saveErr);
+        }
+      }
+
       taskResults.set(taskId, {
         status: "completed",
-        result: message.data
+        result: resultData
       });
       cleanup(taskId);
     }

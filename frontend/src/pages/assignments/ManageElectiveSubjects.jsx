@@ -116,21 +116,35 @@ const ManageElectiveSubjects = () => {
             alert('Failed to save settings.');
         }
     };
+
+    const handleCancel = async () => {
+        if (!selectedClass) return;
+        try {
+            const response = await api.get(`/elective-settings/${selectedClass}`);
+            const settingsMap = response.data.reduce((acc, setting) => {
+                acc[setting.subjectId] = setting.teacherCategoryRequirements;
+                return acc;
+            }, {});
+            setElectiveSettings(settingsMap);
+        } catch (error) {
+            console.error("Error resetting elective settings:", error);
+            alert("Failed to reset changes.");
+        }
+    };
     
     return (
-        <div className="container mx-auto p-4">
-            <h1 className="text-2xl font-bold mb-4">Manage Elective Teacher Requirements</h1>
+        <div className="manage-container">
+            <h2>Manage Elective Teacher Requirements</h2>
 
-            <div className="mb-4">
-                <label htmlFor="class-select" className="block text-sm font-medium text-gray-700">Select Class</label>
+            <div className="elective-class-picker">
+                <label htmlFor="class-select">Select Class</label>
                 <select
                     id="class-select"
                     value={selectedClass}
                     onChange={(e) => setSelectedClass(e.target.value)}
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
                 >
                     <option value="">-- Select a Class --</option>
-                    {classes.map(c => (
+                    {classes.map((c) => (
                         <option key={c._id} value={c._id}>{c.name}</option>
                     ))}
                 </select>
@@ -138,51 +152,64 @@ const ManageElectiveSubjects = () => {
 
             {selectedClass && (
                 <div>
-                    <h2 className="text-xl font-semibold mb-2">Configure Electives for {classes.find(c => c._id === selectedClass)?.name}</h2>
-                    <div className="space-y-4">
-                        {subjectsForClass.map(subject => {
-                             const currentRequirements = electiveSettings[subject._id] || {};
-                             const totalTeachers = Object.values(currentRequirements).reduce((a, b) => a + b, 0);
+                    <h3 className="elective-section-title">
+                        Configure Electives for {classes.find((c) => c._id === selectedClass)?.name}
+                    </h3>
+                    {subjectsForClass.length === 0 ? (
+                        <div className="elective-empty-message">
+                            There are no elective subjects in this class.
+                        </div>
+                    ) : (
+                        <>
+                            <div className="elective-list">
+                                {subjectsForClass.map((subject) => {
+                                    const currentRequirements = electiveSettings[subject._id] || {};
+                                    const totalTeachers = Object.values(currentRequirements).reduce((a, b) => a + b, 0);
 
-                            return (
-                            <div key={subject._id} className="p-4 border rounded-md shadow-sm bg-white">
-                                <div className="font-semibold text-lg">{subject.name}</div>
-                                <div className="text-sm text-gray-500 mb-3 flex justify-between">
-                                    <span>Hours per week: {subject.hoursPerWeek}</span>
-                                    <span className="font-bold">Total teachers per slot: {totalTeachers}</span>
-                                </div>
-                                
-                                <div>
-                                    <h4 className="text-md font-medium mb-2">Required Teacher Expertise (based on other subjects they can teach):</h4>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        {subjectCategories.map(categorySubject => (
-                                            <div key={categorySubject._id} className="flex items-center space-x-2">
-                                                <label htmlFor={`count-${subject._id}-${categorySubject._id}`} className="text-sm capitalize w-32">{categorySubject.name}:</label>
-                                                <input
-                                                    type="number"
-                                                    id={`count-${subject._id}-${categorySubject._id}`}
-                                                    min="0"
-                                                    max={teacherCountPerSubject[categorySubject._id] || 0}
-                                                    value={currentRequirements[categorySubject._id] || 0}
-                                                    onChange={(e) => handleRequirementCountChange(subject._id, categorySubject._id, e.target.value)}
-                                                    className="w-20 p-1 border-gray-300 rounded-md"
-                                                />
+                                    return (
+                                        <div key={subject._id} className="elective-card">
+                                            <div className="elective-card-title">{subject.name}</div>
+                                            <div className="elective-card-meta">
+                                                <span>Hours per week: {subject.hoursPerWeek}</span>
+                                                <span>Total teachers per slot: {totalTeachers}</span>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
+
+                                            <h4 className="elective-grid-title">
+                                                Required Teacher Expertise (based on other subjects they can teach):
+                                            </h4>
+                                            <div className="elective-grid">
+                                                {subjectCategories.map((categorySubject) => (
+                                                    <div key={categorySubject._id} className="elective-grid-item">
+                                                        <label htmlFor={`count-${subject._id}-${categorySubject._id}`}>
+                                                            {categorySubject.name}
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            id={`count-${subject._id}-${categorySubject._id}`}
+                                                            min="0"
+                                                            max={teacherCountPerSubject[categorySubject._id] || 0}
+                                                            value={currentRequirements[categorySubject._id] || 0}
+                                                            onChange={(e) =>
+                                                                handleRequirementCountChange(subject._id, categorySubject._id, e.target.value)
+                                                            }
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
-                            )
-                        })}
-                    </div>
-                    <div className="mt-6">
-                        <button
-                            onClick={handleSave}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        >
-                            Save Settings
-                        </button>
-                    </div>
+                            <div className="elective-save-row">
+                                <button onClick={handleSave} className="primary-btn">
+                                    Save Settings
+                                </button>
+                                <button onClick={handleCancel} className="secondary-btn">
+                                    Cancel
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
         </div>

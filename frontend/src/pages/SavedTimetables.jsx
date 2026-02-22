@@ -40,7 +40,7 @@ const SavedTimetables = () => {
 
     return (
         <div className="manage-container">
-            <h2>Saved Manual Timetables</h2>
+            <h2>Saved Timetables</h2>
             {timetables.length === 0 ? (
                 <p>No saved timetables found.</p>
             ) : (

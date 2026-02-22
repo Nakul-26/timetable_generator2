@@ -495,3 +495,138 @@ h2 {
 .add-form > div {
     flex-grow: 1;
 }
+.add-form .hours-input {
+    flex-grow: 1;
+    min-width: 180px;
+    height: 38px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+.add-form .hours-input:focus {
+    border-color: #ff8c42;
+    box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+    outline: none;
+}
+
+.elective-class-picker {
+  margin-bottom: 20px;
+}
+
+.elective-class-picker label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+}
+
+.elective-class-picker select {
+  width: 100%;
+  max-width: 520px;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  transition: border 0.3s, box-shadow 0.3s;
+}
+
+.elective-class-picker select:focus {
+  border-color: #ff8c42;
+  box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+  outline: none;
+}
+
+.elective-section-title {
+  margin: 8px 0 16px;
+  color: #333;
+}
+
+.elective-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.elective-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  padding: 16px;
+}
+
+.elective-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.elective-card-meta {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+  color: #666;
+  font-size: 0.92rem;
+}
+
+.elective-card-meta span:last-child {
+  font-weight: 700;
+  color: #333;
+}
+
+.elective-grid-title {
+  margin: 0 0 10px;
+  color: #444;
+  font-size: 0.95rem;
+}
+
+.elective-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 16px;
+}
+
+.elective-grid-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.elective-grid-item label {
+  color: #444;
+  font-size: 0.9rem;
+  flex: 1;
+}
+
+.elective-grid-item input {
+  width: 72px;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.elective-grid-item input:focus {
+  border-color: #ff8c42;
+  box-shadow: 0 0 0 2px rgba(255, 140, 66, 0.2);
+  outline: none;
+}
+
+.elective-save-row {
+  margin-top: 20px;
+}
+
+.elective-empty-message {
+  padding: 14px 16px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #f9f9f9;
+  color: #555;
+  font-size: 0.95rem;
+}
