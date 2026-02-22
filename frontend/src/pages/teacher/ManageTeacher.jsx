@@ -153,9 +153,9 @@ const ManageTeacher = () => {
                             <div key={c._id}>{c.subject?.name}</div>
                         ))}
                   </td>
-                  <td>
+                  <td className="actions-cell">
                     {editId === teacher._id ? (
-                      <>
+                      <div className="actions-buttons">
                         <button
                           onClick={handleEditSubmit}
                           className="primary-btn"
@@ -168,9 +168,9 @@ const ManageTeacher = () => {
                         >
                           Cancel
                         </button>
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="actions-buttons">
                         <button
                           onClick={() => handleEdit(teacher)}
                           className="primary-btn"
@@ -183,7 +183,7 @@ const ManageTeacher = () => {
                         >
                           Delete
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>

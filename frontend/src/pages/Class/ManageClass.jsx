@@ -223,9 +223,9 @@ function ManageClass() {
                           <div key={f._id}>{f.name}</div>
                       ))}
                   </td>
-                  <td>
+                  <td className="actions-cell">
                     {editId === classItem._id ? (
-                      <>
+                      <div className="actions-buttons">
                         <button onClick={handleEditSubmit} className="primary-btn">
                           Save
                         </button>
@@ -235,9 +235,9 @@ function ManageClass() {
                         >
                           Cancel
                         </button>
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="actions-buttons">
                         {/* <button
                           onClick={() => handleOpenModal(classItem)}
                           className="secondary-btn"
@@ -256,7 +256,7 @@ function ManageClass() {
                         >
                           Delete
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>

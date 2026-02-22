@@ -4,6 +4,8 @@
     justify-content: center;
     min-height: 100vh;
     background: #ffe3cc; 
+    padding: 16px;
+    box-sizing: border-box;
 }
 
 .login-form-container {
@@ -111,4 +113,34 @@
     color: #d9534f;
     font-weight: 500;
     text-align: center;
+}
+
+@media (max-width: 768px) {
+    .login-form-container {
+        max-width: 100%;
+        padding: 24px 18px;
+    }
+
+    .login-form-container h2 {
+        font-size: 2.2rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-container {
+        padding: 10px;
+    }
+
+    .login-form-container {
+        padding: 18px 14px;
+        border-radius: 10px;
+    }
+
+    .login-form-container h2 {
+        font-size: 1.7rem;
+    }
+
+    .login-btn {
+        font-size: 1rem;
+    }
 }

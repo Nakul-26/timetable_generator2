@@ -247,9 +247,9 @@ function ManageSubject() {
                       subject.isElective ? "✅ Yes" : "❌ No"
                     )}
                   </td>
-                  <td>
+                  <td className="actions-cell">
                     {editId === subject._id ? (
-                      <>
+                      <div className="actions-buttons">
                         <button
                           onClick={handleEditSubmit}
                           className="primary-btn"
@@ -262,9 +262,9 @@ function ManageSubject() {
                         >
                           Cancel
                         </button>
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className="actions-buttons">
                         <button
                           onClick={() => handleEdit(subject)}
                           className="primary-btn"
@@ -277,7 +277,7 @@ function ManageSubject() {
                         >
                           Delete
                         </button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>

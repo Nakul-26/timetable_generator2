@@ -348,41 +348,41 @@ const ManualTimetable = () => {
     }
 
     return (
-        <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div className="manage-container manual-page">
+            <div className="manual-header">
                 <h1>Manual Timetable Generator</h1>
-                <div>
+                <div className="manual-header-actions">
                     <button
                         onClick={handleLoad}
-                        style={{ backgroundColor: 'blue', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
+                        className="manual-action-btn manual-action-load"
                         disabled={isSaving || isDeleting}
                     >
                         Load Timetable
                     </button>
                     <button
                         onClick={() => handleSave()}
-                        style={{ backgroundColor: 'green', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
+                        className="manual-action-btn manual-action-save"
                         disabled={isSaving || isDeleting}
                     >
                         {isSaving ? 'Saving...' : 'Save Timetable'}
                     </button>
                     <button
                         onClick={() => handleSave(true)}
-                        style={{ backgroundColor: 'purple', color: 'white', marginRight: '10px', padding: '20px', fontSize: '24px' }}
+                        className="manual-action-btn manual-action-save-as"
                         disabled={isSaving || isDeleting}
                     >
                         Save As...
                     </button>
                     <button 
                         onClick={handleClearAll}
-                        style={{ backgroundColor: 'orange', color: 'white', marginRight: '10px' }}
+                        className="manual-action-btn manual-action-clear"
                         disabled={isSaving || isDeleting}
                     >
                         Clear All Timetables
                     </button>
                     <button 
                         onClick={handleDeleteTimetable}
-                        style={{ backgroundColor: 'red', color: 'white' }}
+                        className="manual-action-btn manual-action-delete"
                         disabled={isSaving || isDeleting}
                     >
                         {isDeleting ? 'Deleting...' : 'Delete Timetable'}
@@ -390,17 +390,19 @@ const ManualTimetable = () => {
                 </div>
             </div>
             {classes.map(c => (
-                <div key={c._id} style={{ marginBottom: '40px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                <div key={c._id} className="manual-class-block">
+                    <div className="manual-class-header">
                         <h2>Timetable for {c.name}</h2>
                         <button 
                             onClick={() => handleAutoFill(c._id)}
+                            className="manual-autofill-btn"
                             disabled={isAutoFilling[c._id] || isDeleting || isSaving}
                         >
                             {isAutoFilling[c._id] ? 'Filling...' : 'Auto-Fill'}
                         </button>
                     </div>
-                    <table>
+                    <div className="table-responsive">
+                    <table className="styled-table manual-table">
                         <thead>
                             <tr>
                                 <th>Day</th>
@@ -472,9 +474,11 @@ const ManualTimetable = () => {
                             ))}
                         </tbody>
                     </table>
-                    <div style={{ marginTop: '20px' }}>
+                    </div>
+                    <div className="manual-summary">
                         <h3>Subject Allocation Summary</h3>
-                        <table style={{ width: '50%' }}>
+                        <div className="table-responsive">
+                        <table className="styled-table manual-summary-table">
                             <thead>
                                 <tr>
                                     <th>Subject</th>
@@ -492,6 +496,7 @@ const ManualTimetable = () => {
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
             ))}
