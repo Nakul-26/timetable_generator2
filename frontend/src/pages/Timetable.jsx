@@ -98,14 +98,16 @@ function Timetable() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [classRes, facRes, subRes] = await Promise.all([
+      const [classRes, facRes, subRes, comboRes] = await Promise.all([
         axios.get("/classes"),
         axios.get("/faculties"),
         axios.get("/subjects"),
+        axios.get("/teacher-subject-combos"),
       ]);
       setClasses(classRes.data);
       setFaculties(facRes.data);
       setSubjects(subRes.data);
+      setCombos(comboRes.data || []);
     } catch {
       setError("Failed to fetch master data.");
     }
@@ -624,6 +626,10 @@ function Timetable() {
     setSelectedSubject("");
   };
 
+  const clearFixedSlots = () => {
+    setFixedSlots({});
+  };
+
   /* ===================== RENDER ===================== */
 
   return (
@@ -704,9 +710,21 @@ function Timetable() {
 
       {error && <div className="error-message">{error}</div>}
 
-      {/* Empty timetable with assignment dropdowns */}
-      {!timetable &&
-        classes.map((cls) => renderEmptyTable(cls._id))}
+      <div style={{ marginTop: 20 }}>
+        <h3>Fixed Classes (Empty Timetable)</h3>
+        <p style={{ marginTop: 0 }}>
+          Assign slots here to lock them before you generate.
+        </p>
+        <button className="secondary-btn" onClick={clearFixedSlots} disabled={loading}>
+          Clear Fixed Classes
+        </button>
+        <div style={{ marginTop: 14 }}>
+          {(selectedClass
+            ? classes.filter((cls) => String(cls._id) === String(selectedClass))
+            : classes
+          ).map((cls) => renderEmptyTable(cls._id))}
+        </div>
+      </div>
 
       {timetable && timetable.class_timetables && (
         <div style={{ marginTop: 20 }}>
