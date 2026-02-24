@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
 import api from "../api/axios";
 import axios from "../api/axios";
+import { loadConstraintConfig } from "./constraintConfig";
+
+const HEALTH_BLOCK_STORAGE_KEY = "timetable.blockGenerateOnHealthErrors";
+const SEVERITY_RANK = { error: 0, warning: 1, info: 2 };
 
 function Timetable() {
   const [loading, setLoading] = useState(false);
@@ -12,6 +17,17 @@ function Timetable() {
   // Async generation
   const [taskId, setTaskId] = useState(null);
   const [progress, setProgress] = useState(0);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthReport, setHealthReport] = useState(null);
+  const [healthSeverityFilter, setHealthSeverityFilter] = useState("all");
+  const [blockGenerateOnHealthErrors, setBlockGenerateOnHealthErrors] = useState(() => {
+    try {
+      const raw = window.localStorage.getItem(HEALTH_BLOCK_STORAGE_KEY);
+      return raw ? raw === "true" : false;
+    } catch {
+      return false;
+    }
+  });
 
   // Master data
   const [classes, setClasses] = useState([]);
@@ -27,9 +43,9 @@ function Timetable() {
 
   // Fixed slots
   const [fixedSlots, setFixedSlots] = useState({});
-
-  const DAYS_PER_WEEK = 6;
-  const HOURS_PER_DAY = 8;
+  const [constraintConfig, setConstraintConfig] = useState(() => loadConstraintConfig());
+  const DAYS_PER_WEEK = Number(constraintConfig?.schedule?.daysPerWeek) || 6;
+  const HOURS_PER_DAY = Number(constraintConfig?.schedule?.hoursPerDay) || 8;
 
   const classById = useMemo(() => new Map(classes.map((c) => [String(c._id), c])), [classes]);
   const facultyById = useMemo(
@@ -135,6 +151,60 @@ function Timetable() {
     fetchLatest();
   }, [fetchAll, fetchLatest]);
 
+  useEffect(() => {
+    const refreshConfig = () => setConstraintConfig(loadConstraintConfig());
+    window.addEventListener("storage", refreshConfig);
+    window.addEventListener("focus", refreshConfig);
+    return () => {
+      window.removeEventListener("storage", refreshConfig);
+      window.removeEventListener("focus", refreshConfig);
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        HEALTH_BLOCK_STORAGE_KEY,
+        blockGenerateOnHealthErrors ? "true" : "false"
+      );
+    } catch {
+      // ignore localStorage failures
+    }
+  }, [blockGenerateOnHealthErrors]);
+
+  const sortedHealthWarnings = useMemo(() => {
+    const list = Array.isArray(healthReport?.warnings) ? [...healthReport.warnings] : [];
+    return list.sort((a, b) => {
+      const sa = String(a?.severity || "warning").toLowerCase();
+      const sb = String(b?.severity || "warning").toLowerCase();
+      const ra = SEVERITY_RANK[sa] ?? 9;
+      const rb = SEVERITY_RANK[sb] ?? 9;
+      if (ra !== rb) return ra - rb;
+      return String(a?.message || "").localeCompare(String(b?.message || ""));
+    });
+  }, [healthReport]);
+
+  const filteredHealthWarnings = useMemo(() => {
+    if (healthSeverityFilter === "all") return sortedHealthWarnings;
+    return sortedHealthWarnings.filter(
+      (w) => String(w?.severity || "warning").toLowerCase() === healthSeverityFilter
+    );
+  }, [sortedHealthWarnings, healthSeverityFilter]);
+
+  const groupedHealthWarnings = useMemo(() => {
+    const out = { error: [], warning: [], info: [] };
+    for (const w of filteredHealthWarnings) {
+      const s = String(w?.severity || "warning").toLowerCase();
+      if (!out[s]) out[s] = [];
+      out[s].push(w);
+    }
+    return out;
+  }, [filteredHealthWarnings]);
+
+  const healthErrorsCount = Number(healthReport?.summary?.errors || 0);
+  const isGenerateBlockedByHealth =
+    blockGenerateOnHealthErrors && healthReport && healthErrorsCount > 0;
+
   /* ===================== POLLING ===================== */
 
   useEffect(() => {
@@ -229,12 +299,22 @@ function Timetable() {
   /* ===================== ACTIONS ===================== */
 
   const generateTimetable = async () => {
+    if (isGenerateBlockedByHealth) {
+      setError(
+        "Generation blocked: health check contains errors. Resolve issues or disable blocking."
+      );
+      return;
+    }
+
     setLoading(true);
     setError("");
     setTimetable(null);
     setProgress(0);
 
     try {
+      const latestConstraintConfig = loadConstraintConfig();
+      setConstraintConfig(latestConstraintConfig);
+
       await api.delete("/timetables");
 
       const payload = transformFixedSlots(fixedSlots);
@@ -243,11 +323,31 @@ function Timetable() {
       const res = await api.post("/generate", {
         fixedSlots: payload,
         classElectiveGroups,
+        constraintConfig: latestConstraintConfig,
       });
       setTaskId(res.data.taskId);
     } catch {
       setError("Failed to start generation.");
       setLoading(false);
+    }
+  };
+
+  const runHealthCheck = async () => {
+    setHealthLoading(true);
+    setError("");
+    try {
+      const latestConstraintConfig = loadConstraintConfig();
+      setConstraintConfig(latestConstraintConfig);
+      const payload = transformFixedSlots(fixedSlots);
+      const res = await api.post("/health-check", {
+        fixedSlots: payload,
+        constraintConfig: latestConstraintConfig,
+      });
+      setHealthReport(res.data || null);
+    } catch {
+      setError("Failed to run health check.");
+    } finally {
+      setHealthLoading(false);
     }
   };
 
@@ -644,9 +744,29 @@ function Timetable() {
       )}
 
       <div className="actions-bar">
-        <button className="primary-btn" onClick={generateTimetable} disabled={loading}>
+        <button className="secondary-btn" onClick={runHealthCheck} disabled={loading || healthLoading}>
+          {healthLoading ? "Checking..." : "Run Health Check"}
+        </button>
+        <button
+          className="primary-btn"
+          onClick={generateTimetable}
+          disabled={loading || isGenerateBlockedByHealth}
+          title={
+            isGenerateBlockedByHealth
+              ? "Blocked by health check errors"
+              : "Generate timetable"
+          }
+        >
           Generate
         </button>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={blockGenerateOnHealthErrors}
+            onChange={(e) => setBlockGenerateOnHealthErrors(e.target.checked)}
+          />
+          Block generate on health errors
+        </label>
         {/* <button className="danger-btn" onClick={stopGeneration} disabled={!loading}>
           Stop
         </button> */}
@@ -709,6 +829,91 @@ function Timetable() {
       )}
 
       {error && <div className="error-message">{error}</div>}
+
+      <div style={{ marginTop: 20 }}>
+        <h3>Active Constraint Policy</h3>
+        <p style={{ marginTop: 0 }}>
+          Configure solver rules on the dedicated settings page.
+        </p>
+        <div className="filters-container">
+          <span>Days: {constraintConfig?.schedule?.daysPerWeek ?? 6}</span>
+          <span>Hours: {constraintConfig?.schedule?.hoursPerDay ?? 8}</span>
+          <span>Solver Time: {constraintConfig?.solver?.timeLimitSec ?? 180}s</span>
+          <Link className="secondary-btn" to="/timetable/settings">
+            Open Timetable Settings
+          </Link>
+        </div>
+      </div>
+
+      {healthReport ? (
+        <div style={{ marginTop: 20 }}>
+          <h3>Constraint Health Report</h3>
+          <p style={{ marginTop: 0 }}>
+            Status: <b>{healthReport.ok ? "Healthy" : "Needs Attention"}</b>
+          </p>
+          <div className="filters-container">
+            <span>Class Required: {healthReport.summary?.totalClassRequiredHours ?? 0}</span>
+            <span>Class Capacity: {healthReport.summary?.totalClassCapacityHours ?? 0}</span>
+            <span>Errors: {healthReport.summary?.errors ?? 0}</span>
+            <span>Warnings: {healthReport.summary?.warnings ?? 0}</span>
+            <select
+              value={healthSeverityFilter}
+              onChange={(e) => setHealthSeverityFilter(e.target.value)}
+            >
+              <option value="all">All Severities</option>
+              <option value="error">Errors</option>
+              <option value="warning">Warnings</option>
+              <option value="info">Info</option>
+            </select>
+          </div>
+          {isGenerateBlockedByHealth ? (
+            <div className="error-message" style={{ marginTop: 10 }}>
+              Generate is blocked because health check contains errors.
+            </div>
+          ) : null}
+          {filteredHealthWarnings.length > 0 ? (
+            <div style={{ marginTop: 10, maxHeight: 220, overflowY: "auto" }}>
+              {["error", "warning", "info"].map((severity) => {
+                const items = groupedHealthWarnings[severity] || [];
+                if (!items.length) return null;
+                return (
+                  <div key={severity} style={{ marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                      {severity.toUpperCase()} ({items.length})
+                    </div>
+                    {items.map((w, idx) => (
+                      <div
+                        key={`${w.type || "warning"}-${severity}-${idx}`}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 6,
+                          marginBottom: 8,
+                          background:
+                            severity === "error"
+                              ? "#ffe9e9"
+                              : severity === "warning"
+                                ? "#fff8e5"
+                                : "#eaf4ff",
+                          border:
+                            severity === "error"
+                              ? "1px solid #e0b4b4"
+                              : severity === "warning"
+                                ? "1px solid #e6d6a8"
+                                : "1px solid #b6d4ef",
+                        }}
+                      >
+                        <b>{severity.toUpperCase()}</b>: {w.message}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p style={{ marginTop: 8 }}>No issues detected.</p>
+          )}
+        </div>
+      ) : null}
 
       <div style={{ marginTop: 20 }}>
         <h3>Fixed Classes (Empty Timetable)</h3>

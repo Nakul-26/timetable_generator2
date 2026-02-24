@@ -4,6 +4,7 @@ import FacultyManager from '../src/pages/teacher/ManageTeacher';
 import SubjectManager from './pages/subject/ManageSubject';
 import ClassManager from './pages/Class/ManageClass';
 import Timetable from './pages/Timetable';
+import TimetableSettings from './pages/TimetableSettings';
 import AddTeacher from './pages/teacher/AddTeacher';
 import AddSubject from './pages/subject/AddSubject';
 import AddClass from './pages/Class/AddClass';
@@ -85,6 +86,7 @@ function App() {
           <Route path="/class-faculties" element={<PrivateRoute><ManageClassFaculty /></PrivateRoute>} />
           <Route path="/class-elective-subjects" element={<PrivateRoute><ManageElectiveSubjects /></PrivateRoute>} />
           <Route path="/timetable" element={<PrivateRoute><Timetable /></PrivateRoute>} />
+          <Route path="/timetable/settings" element={<PrivateRoute><TimetableSettings /></PrivateRoute>} />
           <Route path="/timetable/:id" element={<PrivateRoute><ViewTimetable /></PrivateRoute>} />
           <Route path="/teacher/add" element={<PrivateRoute><AddTeacher /></PrivateRoute>} />
           <Route path="/subject/add" element={<PrivateRoute><AddSubject /></PrivateRoute>} />
