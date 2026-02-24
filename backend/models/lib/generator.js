@@ -17,18 +17,20 @@ async function generate({
   BREAK_HOURS = [],
   fixed_slots = [],
   fixedSlots = [],
+  constraintConfig = {},
   random_seed,
   progressCallback,
   stopFlag
 }) {
   if (stopFlag?.is_set) {
-    return {
-      ok: false,
-      error: "Stopped by user",
-      class_timetables: {},
-      faculty_timetables: {},
-      classes: classes || []
-    };
+      return {
+        ok: false,
+        error: "Stopped by user",
+        class_timetables: {},
+        faculty_timetables: {},
+        classes: classes || [],
+        config: constraintConfig || {}
+      };
   }
 
   progressCallback?.({ progress: 0, phase: "start" });
@@ -37,6 +39,9 @@ async function generate({
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
   try {
+    const solverTimeLimitSec =
+      Number(constraintConfig?.solver?.timeLimitSec) || DEFAULT_SOLVER_TIME_LIMIT_SEC;
+
     const res = await fetch(`${DEFAULT_SOLVER_URL}/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -49,8 +54,9 @@ async function generate({
         HOURS_PER_DAY,
         BREAK_HOURS,
         fixed_slots: fixed_slots.length ? fixed_slots : fixedSlots,
+        constraintConfig,
         random_seed,
-        solver_time_limit_sec: DEFAULT_SOLVER_TIME_LIMIT_SEC
+        solver_time_limit_sec: solverTimeLimitSec
       }),
       signal: controller.signal
     });
@@ -62,7 +68,8 @@ async function generate({
         error: data?.error || `Solver HTTP ${res.status}`,
         class_timetables: {},
         faculty_timetables: {},
-        classes: classes || []
+        classes: classes || [],
+        config: constraintConfig || {}
       };
     }
 
@@ -74,7 +81,8 @@ async function generate({
         faculty_timetables: data.faculty_timetables || {},
         classes: data.classes || classes || [],
         unmet_requirements: data.unmet_requirements || [],
-        warnings: data.warnings || []
+        warnings: data.warnings || [],
+        config: data.config || constraintConfig || {}
       };
     }
 
@@ -86,7 +94,8 @@ async function generate({
       faculty_timetables: data.faculty_timetables,
       classes: data.classes || classes || [],
       unmet_requirements: data.unmet_requirements || [],
-      warnings: data.warnings || []
+      warnings: data.warnings || [],
+      config: data.config || constraintConfig || {}
     };
   } catch (err) {
     const msg = err?.name === "AbortError" ? "Solver timeout" : (err?.message || "Solver request failed");
@@ -95,7 +104,8 @@ async function generate({
       error: msg,
       class_timetables: {},
       faculty_timetables: {},
-      classes: classes || []
+      classes: classes || [],
+      config: constraintConfig || {}
     };
   } finally {
     clearTimeout(timeout);

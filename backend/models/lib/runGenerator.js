@@ -176,10 +176,16 @@ async function runGenerate({
   classes,
   combos,
   fixedSlots,
+  DAYS_PER_WEEK = 6,
+  HOURS_PER_DAY = 8,
+  constraintConfig = {},
   onProgress,
   attempts = 3,
 }) {
-  const enforceHardNoGaps = String(process.env.ENFORCE_HARD_NO_GAPS || "true").toLowerCase() !== "false";
+  const enforceHardNoGaps =
+    constraintConfig?.noGaps?.hard !== undefined
+      ? Boolean(constraintConfig.noGaps.hard)
+      : String(process.env.ENFORCE_HARD_NO_GAPS || "true").toLowerCase() !== "false";
 
   let best_class_timetables = null;
   let best_faculty_timetables = null;
@@ -188,6 +194,7 @@ async function runGenerate({
   let bestScore = Infinity;
   let result_combos = null;
   let result_allocations = null;
+  let result_config = null;
   let result_unmet_requirements = null;
   let result_warnings = null;
   let lastError = null;
@@ -223,6 +230,9 @@ async function runGenerate({
       classes: shuffledClasses,
       combos: shuffledCombos,
       fixed_slots: fixedSlots,
+      DAYS_PER_WEEK,
+      HOURS_PER_DAY,
+      constraintConfig,
       random_seed: attempt + 1,
       progressCallback: onProgress,
     });
@@ -237,6 +247,7 @@ async function runGenerate({
           faculty_timetables: result.faculty_timetables || {},
           classes: result.classes || shuffledClasses,
           combos: shuffledCombos,
+          config: result.config || constraintConfig || {},
           unmet_requirements: result.unmet_requirements || [],
           warnings: result.warnings || [],
         };
@@ -273,6 +284,7 @@ async function runGenerate({
       best_classes = result.classes;
       result_combos = shuffledCombos;
       result_allocations = result.allocations_report;
+      result_config = result.config || constraintConfig || {};
       result_unmet_requirements = result.unmet_requirements || [];
       result_warnings = result.warnings || [];
     }
@@ -294,12 +306,15 @@ async function runGenerate({
         combos,
         faculties,
         fixedSlots,
+        DAYS_PER_WEEK,
+        HOURS_PER_DAY,
       });
       bestPartial = {
         class_timetables: fallback.class_timetables,
         faculty_timetables: fallback.faculty_timetables,
         classes,
         combos,
+        config: constraintConfig || {},
         unmet_requirements: fallback.unmet_requirements,
         warnings: [],
       };
@@ -315,6 +330,7 @@ async function runGenerate({
     faculty_daily_hours: best_faculty_daily_hours,
     classes: best_classes || bestPartial?.classes || null,
     combos: result_combos || bestPartial?.combos || null,
+    config: result_config || bestPartial?.config || constraintConfig || {},
     allocations_report: result_allocations,
     unmet_requirements: result_unmet_requirements || bestPartial?.unmet_requirements || [],
     warnings: result_warnings || bestPartial?.warnings || [],

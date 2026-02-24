@@ -1,0 +1,250 @@
+function toInt(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
+function requiredHoursFor(classObj, subjectObj) {
+  const subjectId = String(subjectObj?._id || subjectObj?.id || "");
+  const classHours = classObj?.subject_hours || {};
+  if (subjectId && classHours[subjectId] != null) {
+    return Math.max(0, toInt(classHours[subjectId], 0));
+  }
+  return Math.max(0, toInt(subjectObj?.no_of_hours_per_week, 0));
+}
+
+function getConstraintSchedule(constraintConfig = {}) {
+  const schedule = constraintConfig?.schedule || {};
+  return {
+    daysPerWeek: Math.max(1, toInt(schedule.daysPerWeek, 6)),
+    hoursPerDay: Math.max(1, toInt(schedule.hoursPerDay, 8)),
+    breakHours: Array.from(
+      new Set(
+        (Array.isArray(schedule.breakHours) ? schedule.breakHours : [])
+          .map((v) => toInt(v, -1))
+          .filter((h) => h >= 0)
+      )
+    ),
+  };
+}
+
+function getComboFacultyIds(combo) {
+  if (Array.isArray(combo?.faculty_ids) && combo.faculty_ids.length > 0) {
+    return combo.faculty_ids.map(String);
+  }
+  if (combo?.faculty_id) return [String(combo.faculty_id)];
+  return [];
+}
+
+export function buildConstraintHealthReport({
+  faculties = [],
+  subjects = [],
+  classes = [],
+  combos = [],
+  fixedSlots = [],
+  constraintConfig = {},
+}) {
+  const warnings = [];
+  const schedule = getConstraintSchedule(constraintConfig);
+  const breakSet = new Set(
+    schedule.breakHours.filter((h) => h >= 0 && h < schedule.hoursPerDay)
+  );
+  const usableSlotsPerDay = Math.max(0, schedule.hoursPerDay - breakSet.size);
+
+  const subjectById = new Map(subjects.map((s) => [String(s._id), s]));
+  const comboById = new Map(combos.map((c) => [String(c._id), c]));
+
+  const potentialTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
+  const forcedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
+
+  let totalClassRequired = 0;
+  let totalClassCapacity = 0;
+
+  for (const cls of classes) {
+    const classId = String(cls._id);
+    const days = Math.max(1, toInt(cls.days_per_week, schedule.daysPerWeek));
+    const classCapacity = days * usableSlotsPerDay;
+    totalClassCapacity += classCapacity;
+
+    const allowedComboIds = new Set(
+      (cls.assigned_teacher_subject_combos || []).map((id) => String(id))
+    );
+    for (const combo of combos) {
+      const classIds = (combo.class_ids || []).map(String);
+      if (classIds.includes(classId)) {
+        allowedComboIds.add(String(combo._id));
+      }
+    }
+
+    const eligibleBySubject = new Map();
+    for (const comboId of allowedComboIds) {
+      const combo = comboById.get(comboId);
+      if (!combo) continue;
+      const classIds = (combo.class_ids || []).map(String);
+      if (classIds.length > 0 && !classIds.includes(classId)) continue;
+      const subjectId = String(combo.subject_id);
+      if (!eligibleBySubject.has(subjectId)) eligibleBySubject.set(subjectId, new Set());
+      for (const fid of getComboFacultyIds(combo)) {
+        eligibleBySubject.get(subjectId).add(fid);
+      }
+    }
+
+    let classRequired = 0;
+    for (const subject of subjects) {
+      const subjectId = String(subject._id);
+      const req = requiredHoursFor(cls, subject);
+      if (req <= 0) continue;
+      classRequired += req;
+
+      const eligibleSet = eligibleBySubject.get(subjectId) || new Set();
+      if (eligibleSet.size === 0) {
+        warnings.push({
+          severity: "error",
+          type: "missing_coverage",
+          message: `No eligible teacher-subject combo for class "${cls.name || classId}" subject "${subject.name || subjectId}".`,
+        });
+        continue;
+      }
+
+      for (const fid of eligibleSet) {
+        potentialTeacherLoad.set(fid, (potentialTeacherLoad.get(fid) || 0) + req);
+      }
+      if (eligibleSet.size === 1) {
+        const [onlyFid] = Array.from(eligibleSet);
+        forcedTeacherLoad.set(onlyFid, (forcedTeacherLoad.get(onlyFid) || 0) + req);
+      }
+    }
+
+    totalClassRequired += classRequired;
+    if (classRequired > classCapacity) {
+      warnings.push({
+        severity: "error",
+        type: "class_over_capacity",
+        message: `Class "${cls.name || classId}" requires ${classRequired} hours, capacity is ${classCapacity}.`,
+      });
+    }
+  }
+
+  const teacherWeeklyCapacity = schedule.daysPerWeek * usableSlotsPerDay;
+  for (const faculty of faculties) {
+    const fid = String(faculty._id);
+    const forced = forcedTeacherLoad.get(fid) || 0;
+    const potential = potentialTeacherLoad.get(fid) || 0;
+    if (forced > teacherWeeklyCapacity) {
+      warnings.push({
+        severity: "error",
+        type: "teacher_forced_overload",
+        message: `Teacher "${faculty.name || fid}" forced load ${forced} exceeds capacity ${teacherWeeklyCapacity}.`,
+      });
+    } else if (potential > teacherWeeklyCapacity) {
+      warnings.push({
+        severity: "warning",
+        type: "teacher_potential_overload",
+        message: `Teacher "${faculty.name || fid}" potential load ${potential} exceeds capacity ${teacherWeeklyCapacity}.`,
+      });
+    }
+  }
+
+  const fixedSlotsArray = Array.isArray(fixedSlots) ? fixedSlots : [];
+  const classSlotOwner = new Map();
+  const teacherSlotOwner = new Map();
+
+  for (const fs of fixedSlotsArray) {
+    const classId = String(fs?.class || "");
+    const comboId = String(fs?.combo || "");
+    const day = toInt(fs?.day, -1);
+    const hour = toInt(fs?.hour, -1);
+    if (!classId || !comboId) {
+      warnings.push({
+        severity: "warning",
+        type: "fixed_slot_invalid",
+        message: `Fixed slot has missing class/combo: ${JSON.stringify(fs)}`,
+      });
+      continue;
+    }
+    if (day < 0 || day >= schedule.daysPerWeek || hour < 0 || hour >= schedule.hoursPerDay) {
+      warnings.push({
+        severity: "warning",
+        type: "fixed_slot_out_of_range",
+        message: `Fixed slot out of range for class ${classId} at day ${day}, hour ${hour}.`,
+      });
+      continue;
+    }
+    if (breakSet.has(hour)) {
+      warnings.push({
+        severity: "warning",
+        type: "fixed_slot_on_break",
+        message: `Fixed slot for class ${classId} is on break hour ${hour}.`,
+      });
+    }
+
+    const classKey = `${classId}|${day}|${hour}`;
+    const existingClassCombo = classSlotOwner.get(classKey);
+    if (existingClassCombo && existingClassCombo !== comboId) {
+      warnings.push({
+        severity: "error",
+        type: "fixed_slot_class_conflict",
+        message: `Class ${classId} has multiple fixed combos at day ${day}, hour ${hour}.`,
+      });
+    } else {
+      classSlotOwner.set(classKey, comboId);
+    }
+
+    const combo = comboById.get(comboId);
+    if (!combo) {
+      warnings.push({
+        severity: "warning",
+        type: "fixed_slot_unknown_combo",
+        message: `Fixed slot references unknown combo ${comboId}.`,
+      });
+      continue;
+    }
+
+    const classIds = (combo.class_ids || []).map(String);
+    if (classIds.length > 0 && !classIds.includes(classId)) {
+      warnings.push({
+        severity: "warning",
+        type: "fixed_slot_class_combo_mismatch",
+        message: `Combo ${comboId} is not mapped to class ${classId}.`,
+      });
+    }
+
+    for (const fid of getComboFacultyIds(combo)) {
+      const teacherKey = `${fid}|${day}|${hour}`;
+      const existing = teacherSlotOwner.get(teacherKey);
+      if (existing && existing !== comboId) {
+        warnings.push({
+          severity: "error",
+          type: "fixed_slot_teacher_conflict",
+          message: `Teacher ${fid} has conflicting fixed slots at day ${day}, hour ${hour}.`,
+        });
+      } else {
+        teacherSlotOwner.set(teacherKey, comboId);
+      }
+    }
+  }
+
+  const summary = {
+    totalClasses: classes.length,
+    totalTeachers: faculties.length,
+    totalSubjects: subjects.length,
+    totalCombos: combos.length,
+    totalFixedSlots: fixedSlotsArray.length,
+    schedule: {
+      daysPerWeek: schedule.daysPerWeek,
+      hoursPerDay: schedule.hoursPerDay,
+      usableSlotsPerDay,
+      breakHours: Array.from(breakSet).sort((a, b) => a - b),
+    },
+    totalClassRequiredHours: totalClassRequired,
+    totalClassCapacityHours: totalClassCapacity,
+    errors: warnings.filter((w) => w.severity === "error").length,
+    warnings: warnings.filter((w) => w.severity === "warning").length,
+  };
+
+  return {
+    ok: summary.errors === 0,
+    summary,
+    warnings,
+  };
+}
+

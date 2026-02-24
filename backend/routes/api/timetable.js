@@ -13,6 +13,7 @@ import generator from '../../models/lib/generator.js';
 import runGenerate from '../../models/lib/runGenerator.js';
 // Removed: import converter from '../../models/lib/convertNewCollegeInputToGeneratorData.js';
 import { prepareGeneratorData } from '../../services/generator/prepareGeneratorData.js';
+import { buildConstraintHealthReport } from '../../services/generator/healthCheck.service.js';
 import {
   startGenerationWorker,
   stopGenerationWorker,
@@ -114,7 +115,9 @@ protectedRouter.post('/process-new-input', async (req, res) => {
 
 protectedRouter.post('/generate', async (req, res) => {
     try {
-      const { fixedSlots } = req.body;
+      const { fixedSlots, constraintConfig = {} } = req.body;
+      const daysPerWeek = Number(constraintConfig?.schedule?.daysPerWeek) || 6;
+      const hoursPerDay = Number(constraintConfig?.schedule?.hoursPerDay) || 8;
   
       // Fetch elective subject settings from the database
       const electiveSettings = await ElectiveSubjectSetting.find().lean();
@@ -132,8 +135,9 @@ protectedRouter.post('/generate', async (req, res) => {
         payload: {
           ...generatorData,
           fixedSlots,
-          DAYS_PER_WEEK: 6,
-          HOURS_PER_DAY: 8,
+          DAYS_PER_WEEK: daysPerWeek,
+          HOURS_PER_DAY: hoursPerDay,
+          constraintConfig,
         },
       });
   
@@ -141,6 +145,34 @@ protectedRouter.post('/generate', async (req, res) => {
     } catch (e) {
       console.error("Error in /generate:", e)
       res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+protectedRouter.post('/health-check', async (req, res) => {
+    try {
+      const { fixedSlots = [], constraintConfig = {} } = req.body || {};
+
+      const electiveSettings = await ElectiveSubjectSetting.find().lean();
+      const classElectiveSubjects = electiveSettings.map(s => ({
+          classId: s.class.toString(),
+          subjectId: s.subject.toString(),
+          numberOfTeachers: s.numberOfTeachers
+      }));
+
+      const generatorData = await prepareGeneratorData({
+        classElectiveSubjects,
+      });
+
+      const report = buildConstraintHealthReport({
+        ...generatorData,
+        fixedSlots,
+        constraintConfig,
+      });
+
+      res.json(report);
+    } catch (e) {
+      console.error("Error in /health-check:", e);
+      res.status(500).json({ ok: false, error: "Internal Server Error" });
     }
 });
 
@@ -265,7 +297,9 @@ protectedRouter.get('/timetable/:id', async (req, res) => {
 
 protectedRouter.post("/result/regenerate", async (req, res) => {
     try {
-      const { fixedSlots } = req.body;
+      const { fixedSlots, constraintConfig = {} } = req.body;
+      const daysPerWeek = Number(constraintConfig?.schedule?.daysPerWeek) || 6;
+      const hoursPerDay = Number(constraintConfig?.schedule?.hoursPerDay) || 8;
   
       // Fetch elective subject settings from the database
       const electiveSettings = await ElectiveSubjectSetting.find().lean();
@@ -279,12 +313,15 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
     
     const { faculties, subjects, classes, combos } = generatorData;
 
-    const { bestClassTimetables, bestFacultyTimetables, bestFacultyDailyHours, bestScore } = await runGenerate({
+    const { bestClassTimetables, bestFacultyTimetables, bestFacultyDailyHours, bestScore, config } = await runGenerate({
       faculties,
       subjects,
       classes,
       combos,
       fixedSlots,
+      DAYS_PER_WEEK: daysPerWeek,
+      HOURS_PER_DAY: hoursPerDay,
+      constraintConfig,
     });
 
     if (!bestClassTimetables) {
@@ -298,6 +335,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
       faculty_daily_hours: bestFacultyDailyHours,
       score: bestScore,
       combos,
+      config,
     });
 
     await rec.save();

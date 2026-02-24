@@ -45,6 +45,31 @@ def _required_hours(class_obj: Dict[str, Any], subject_obj: Dict[str, Any]) -> i
     return int(subject_obj.get("no_of_hours_per_week") or 0)
 
 
+def _cfg_get(cfg: Dict[str, Any], path: List[str], default: Any) -> Any:
+    node: Any = cfg
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            return default
+        node = node[key]
+    return node
+
+
+def _to_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "1", "yes", "y", "on"):
+            return True
+        if v in ("false", "0", "no", "n", "off"):
+            return False
+    return default
+
+
 @app.on_event("startup")
 async def _install_loop_handler():
     loop = asyncio.get_running_loop()
@@ -59,6 +84,7 @@ def health() -> Dict[str, str]:
 @app.post("/solve")
 async def solve(request: Request) -> Dict[str, Any]:
     payload = await request.json()
+    constraint_config = payload.get("constraintConfig") or {}
 
     faculties = [_normalize_id(f) for f in payload.get("faculties", [])]
     subjects = [_normalize_id({**s, "type": s.get("type") or "theory"}) for s in payload.get("subjects", [])]
@@ -76,16 +102,88 @@ async def solve(request: Request) -> Dict[str, Any]:
         }
         combos.append(combo)
 
-    DAYS_PER_WEEK = int(payload.get("DAYS_PER_WEEK") or 6)
-    HOURS_PER_DAY = int(payload.get("HOURS_PER_DAY") or 8)
-    BREAK_HOURS = [int(h) for h in (payload.get("BREAK_HOURS") or [])]
+    DAYS_PER_WEEK = int(
+        _cfg_get(constraint_config, ["schedule", "daysPerWeek"], payload.get("DAYS_PER_WEEK") or 6)
+    )
+    HOURS_PER_DAY = int(
+        _cfg_get(constraint_config, ["schedule", "hoursPerDay"], payload.get("HOURS_PER_DAY") or 8)
+    )
+    BREAK_HOURS = [
+        int(h) for h in (
+            _cfg_get(constraint_config, ["schedule", "breakHours"], payload.get("BREAK_HOURS") or [])
+        )
+    ]
     break_hours_set = set(BREAK_HOURS)
 
     fixed_slots = payload.get("fixed_slots") or payload.get("fixedSlots") or []
     random_seed = int(payload.get("random_seed") or os.getenv("SOLVER_RANDOM_SEED", "1"))
     solver_time_limit_sec = float(
-        payload.get("solver_time_limit_sec") or os.getenv("SOLVER_TIME_LIMIT_SEC", "180")
+        _cfg_get(
+            constraint_config,
+            ["solver", "timeLimitSec"],
+            payload.get("solver_time_limit_sec") or os.getenv("SOLVER_TIME_LIMIT_SEC", "180"),
+        )
     )
+
+    lab_block_size = max(1, int(_cfg_get(constraint_config, ["structural", "labBlockSize"], 2)))
+    theory_block_size = max(1, int(_cfg_get(constraint_config, ["structural", "theoryBlockSize"], 1)))
+
+    weekly_hours_hard = _to_bool(
+        _cfg_get(constraint_config, ["weeklySubjectHours", "hard"], True),
+        True,
+    )
+    weekly_hours_shortage_weight = max(
+        0, int(_cfg_get(constraint_config, ["weeklySubjectHours", "shortageWeight"], 1000))
+    )
+
+    teacher_cont_enabled = _to_bool(
+        _cfg_get(constraint_config, ["teacherContinuity", "enabled"], True), True
+    )
+    teacher_cont_max = max(
+        1, int(_cfg_get(constraint_config, ["teacherContinuity", "maxConsecutive"], 3))
+    )
+    teacher_cont_weight = max(0, int(_cfg_get(constraint_config, ["teacherContinuity", "weight"], 100)))
+
+    class_cont_enabled = _to_bool(
+        _cfg_get(constraint_config, ["classContinuity", "enabled"], True), True
+    )
+    class_cont_max = max(
+        1, int(_cfg_get(constraint_config, ["classContinuity", "maxConsecutive"], 3))
+    )
+    class_cont_weight = max(0, int(_cfg_get(constraint_config, ["classContinuity", "weight"], 80)))
+
+    no_gaps_hard = _to_bool(_cfg_get(constraint_config, ["noGaps", "hard"], True), True)
+    no_gaps_weight = max(0, int(_cfg_get(constraint_config, ["noGaps", "weight"], 500)))
+
+    teacher_daily_enabled = _to_bool(
+        _cfg_get(constraint_config, ["teacherDailyOverload", "enabled"], True), True
+    )
+    teacher_daily_max = max(0, int(_cfg_get(constraint_config, ["teacherDailyOverload", "max"], 6)))
+    teacher_daily_weight = max(0, int(_cfg_get(constraint_config, ["teacherDailyOverload", "weight"], 120)))
+
+    subject_cluster_enabled = _to_bool(
+        _cfg_get(constraint_config, ["subjectClustering", "enabled"], True), True
+    )
+    subject_cluster_max = max(1, int(_cfg_get(constraint_config, ["subjectClustering", "maxPerDay"], 3)))
+    subject_cluster_weight = max(0, int(_cfg_get(constraint_config, ["subjectClustering", "weight"], 50)))
+
+    front_loading_enabled = _to_bool(
+        _cfg_get(constraint_config, ["frontLoading", "enabled"], True), True
+    )
+    front_loading_weight = max(0, int(_cfg_get(constraint_config, ["frontLoading", "weight"], 400)))
+
+    applied_config = {
+        "schedule": {"daysPerWeek": DAYS_PER_WEEK, "hoursPerDay": HOURS_PER_DAY, "breakHours": BREAK_HOURS},
+        "structural": {"labBlockSize": lab_block_size, "theoryBlockSize": theory_block_size},
+        "weeklySubjectHours": {"hard": weekly_hours_hard, "shortageWeight": weekly_hours_shortage_weight},
+        "teacherContinuity": {"enabled": teacher_cont_enabled, "maxConsecutive": teacher_cont_max, "weight": teacher_cont_weight},
+        "classContinuity": {"enabled": class_cont_enabled, "maxConsecutive": class_cont_max, "weight": class_cont_weight},
+        "noGaps": {"hard": no_gaps_hard, "weight": no_gaps_weight},
+        "teacherDailyOverload": {"enabled": teacher_daily_enabled, "max": teacher_daily_max, "weight": teacher_daily_weight},
+        "subjectClustering": {"enabled": subject_cluster_enabled, "maxPerDay": subject_cluster_max, "weight": subject_cluster_weight},
+        "frontLoading": {"enabled": front_loading_enabled, "weight": front_loading_weight},
+        "solver": {"timeLimitSec": solver_time_limit_sec},
+    }
 
     subject_by_id = {s["_id"]: s for s in subjects}
     class_by_id = {c["_id"]: c for c in classes}
@@ -181,7 +279,7 @@ async def solve(request: Request) -> Dict[str, Any]:
                         <= 0
                     ):
                         continue
-                    block = 2 if subj.get("type") == "lab" else 1
+                    block = lab_block_size if subj.get("type") == "lab" else theory_block_size
                     if hour + block > HOURS_PER_DAY:
                         continue
                     if any(h in break_hours_set for h in range(hour, hour + block)):
@@ -248,7 +346,7 @@ async def solve(request: Request) -> Dict[str, Any]:
                     model.Add(occ == 0)
                 teacher_occ[(fid, day, hour)] = occ
 
-    # Constraint: weekly subject hours as soft constraints (shortage penalty).
+    # Weekly subject hours: configurable hard/soft behavior.
     x_by_class_subject: Dict[Tuple[str, str], List[Tuple[cp_model.IntVar, int]]] = {}
     for (c_id, _day, _hour, combo_id), var in x.items():
         combo = combo_by_id.get(combo_id)
@@ -257,10 +355,10 @@ async def solve(request: Request) -> Dict[str, Any]:
         subj = subject_by_id.get(combo["subject_id"])
         if not subj:
             continue
-        block = 2 if subj.get("type") == "lab" else 1
-        x_by_class_subject.setdefault((c_id, combo["subject_id"]), []).append(
-            (var, block)
-        )
+            block = lab_block_size if subj.get("type") == "lab" else theory_block_size
+            x_by_class_subject.setdefault((c_id, combo["subject_id"]), []).append(
+                (var, block)
+            )
 
     for cls in classes:
         class_id = cls["_id"]
@@ -274,49 +372,51 @@ async def solve(request: Request) -> Dict[str, Any]:
                 if terms:
                     model.Add(sum(terms) == 0)
                 continue
-            scheduled = model.NewIntVar(0, req, f"scheduled_{class_id}_{subj_id}")
-            if terms:
-                model.Add(scheduled == sum(terms))
+            scheduled_terms = sum(terms) if terms else 0
+            if weekly_hours_hard:
+                model.Add(scheduled_terms == req)
             else:
-                model.Add(scheduled == 0)
+                scheduled = model.NewIntVar(0, req, f"scheduled_{class_id}_{subj_id}")
+                model.Add(scheduled == scheduled_terms)
+                shortage = model.NewIntVar(0, req, f"shortage_{class_id}_{subj_id}")
+                model.Add(scheduled + shortage == req)
+                objective_terms.append(shortage * weekly_hours_shortage_weight)
 
-            shortage = model.NewIntVar(0, req, f"shortage_{class_id}_{subj_id}")
-            model.Add(scheduled + shortage == req)
-            objective_terms.append(shortage * 1000)
+    # Soft constraint: teacher continuity.
+    if teacher_cont_enabled and teacher_cont_weight > 0:
+        win_len = teacher_cont_max + 1
+        for fid in [f["_id"] for f in faculties]:
+            for day in range(DAYS_PER_WEEK):
+                for start in range(HOURS_PER_DAY - win_len + 1):
+                    if any(h in break_hours_set for h in range(start, start + win_len)):
+                        continue
+                    win = sum(
+                        teacher_occ[(fid, day, h)] for h in range(start, start + win_len)
+                    )
+                    excess = model.NewIntVar(
+                        0, win_len, f"teacher_cont_excess_{fid}_{day}_{start}"
+                    )
+                    model.Add(excess >= win - teacher_cont_max)
+                    objective_terms.append(excess * teacher_cont_weight)
 
-    # Soft constraint: teacher continuity (penalize 4th consecutive hour)
-    for fid in [f["_id"] for f in faculties]:
-        for day in range(DAYS_PER_WEEK):
-            for start in range(HOURS_PER_DAY - 3):
-                if (
-                    start in break_hours_set
-                    or (start + 1) in break_hours_set
-                    or (start + 2) in break_hours_set
-                    or (start + 3) in break_hours_set
-                ):
-                    continue
-                win = sum(teacher_occ[(fid, day, h)] for h in range(start, start + 4))
-                excess = model.NewIntVar(0, 4, f"teacher_cont_excess_{fid}_{day}_{start}")
-                model.Add(excess >= win - 3)
-                objective_terms.append(excess * 100)
-
-    # Soft constraint: class continuity (penalize 4th consecutive period)
-    for cls in classes:
-        class_id = cls["_id"]
-        days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
-        for day in range(days):
-            for start in range(HOURS_PER_DAY - 3):
-                if (
-                    start in break_hours_set
-                    or (start + 1) in break_hours_set
-                    or (start + 2) in break_hours_set
-                    or (start + 3) in break_hours_set
-                ):
-                    continue
-                win = sum(class_occ[(class_id, day, h)] for h in range(start, start + 4))
-                excess = model.NewIntVar(0, 4, f"class_cont_excess_{class_id}_{day}_{start}")
-                model.Add(excess >= win - 3)
-                objective_terms.append(excess * 80)
+    # Soft constraint: class continuity.
+    if class_cont_enabled and class_cont_weight > 0:
+        win_len = class_cont_max + 1
+        for cls in classes:
+            class_id = cls["_id"]
+            days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+            for day in range(days):
+                for start in range(HOURS_PER_DAY - win_len + 1):
+                    if any(h in break_hours_set for h in range(start, start + win_len)):
+                        continue
+                    win = sum(
+                        class_occ[(class_id, day, h)] for h in range(start, start + win_len)
+                    )
+                    excess = model.NewIntVar(
+                        0, win_len, f"class_cont_excess_{class_id}_{day}_{start}"
+                    )
+                    model.Add(excess >= win - class_cont_max)
+                    objective_terms.append(excess * class_cont_weight)
 
     # Hard constraint: no in-between class gaps within a day.
     # A gap is an empty non-break slot that has at least one class before it
@@ -354,7 +454,10 @@ async def solve(request: Request) -> Dict[str, Any]:
                 model.Add(gap <= has_after)
                 model.Add(gap <= 1 - occ)
                 model.Add(gap >= has_before + has_after - occ - 1)
-                model.Add(gap == 0)
+                if no_gaps_hard:
+                    model.Add(gap == 0)
+                elif no_gaps_weight > 0:
+                    objective_terms.append(gap * no_gaps_weight)
 
     # Fixed slots
     for fs in valid_fixed_slots:
@@ -370,81 +473,85 @@ async def solve(request: Request) -> Dict[str, Any]:
             continue
         model.Add(var == 1)
 
-    # Soft cap: teacher daily load (penalize load above 6).
-    teacher_day_load: Dict[Tuple[str, int], cp_model.IntVar] = {}
-    for fid in [f["_id"] for f in faculties]:
-        for day in range(DAYS_PER_WEEK):
-            day_terms = [
-                teacher_occ[(fid, day, h)]
-                for h in range(HOURS_PER_DAY)
-                if h not in break_hours_set
-            ]
-            if not day_terms:
-                continue
-            load = model.NewIntVar(0, len(day_terms), f"teacher_load_{fid}_{day}")
-            model.Add(load == sum(day_terms))
-            teacher_day_load[(fid, day)] = load
-            overload = model.NewIntVar(0, HOURS_PER_DAY, f"teacher_overload_{fid}_{day}")
-            model.Add(overload >= load - 6)
-            objective_terms.append(overload * 120)
-
-    # Soft objective: reduce subject clustering within a day.
-    for cls in classes:
-        class_id = cls["_id"]
-        days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
-        for subj in subjects:
-            subj_id = subj["_id"]
-            req = required_hours_by_class_subject[class_id][subj_id]
-            if req <= 0:
-                continue
-            for day in range(days):
-                day_terms: List[cp_model.IntVar] = []
-                for hour in range(HOURS_PER_DAY):
-                    if hour in break_hours_set:
-                        continue
-                    day_terms += subject_covers.get((class_id, day, hour, subj_id), [])
+    # Soft cap: teacher daily load.
+    if teacher_daily_enabled and teacher_daily_weight > 0:
+        teacher_day_load: Dict[Tuple[str, int], cp_model.IntVar] = {}
+        for fid in [f["_id"] for f in faculties]:
+            for day in range(DAYS_PER_WEEK):
+                day_terms = [
+                    teacher_occ[(fid, day, h)]
+                    for h in range(HOURS_PER_DAY)
+                    if h not in break_hours_set
+                ]
                 if not day_terms:
                     continue
-                day_count = model.NewIntVar(
-                    0, HOURS_PER_DAY, f"subj_day_count_{class_id}_{subj_id}_{day}"
+                load = model.NewIntVar(0, len(day_terms), f"teacher_load_{fid}_{day}")
+                model.Add(load == sum(day_terms))
+                teacher_day_load[(fid, day)] = load
+                overload = model.NewIntVar(
+                    0, HOURS_PER_DAY, f"teacher_overload_{fid}_{day}"
                 )
-                model.Add(day_count == sum(day_terms))
-                # Penalize more than 3 periods/day of same subject.
-                excess = model.NewIntVar(
-                    0, HOURS_PER_DAY, f"subj_day_excess_{class_id}_{subj_id}_{day}"
-                )
-                model.Add(excess >= day_count - 3)
-                objective_terms.append(excess * 50)
+                model.Add(overload >= load - teacher_daily_max)
+                objective_terms.append(overload * teacher_daily_weight)
+
+    # Soft objective: reduce subject clustering within a day.
+    if subject_cluster_enabled and subject_cluster_weight > 0:
+        for cls in classes:
+            class_id = cls["_id"]
+            days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+            for subj in subjects:
+                subj_id = subj["_id"]
+                req = required_hours_by_class_subject[class_id][subj_id]
+                if req <= 0:
+                    continue
+                for day in range(days):
+                    day_terms: List[cp_model.IntVar] = []
+                    for hour in range(HOURS_PER_DAY):
+                        if hour in break_hours_set:
+                            continue
+                        day_terms += subject_covers.get((class_id, day, hour, subj_id), [])
+                    if not day_terms:
+                        continue
+                    day_count = model.NewIntVar(
+                        0, HOURS_PER_DAY, f"subj_day_count_{class_id}_{subj_id}_{day}"
+                    )
+                    model.Add(day_count == sum(day_terms))
+                    excess = model.NewIntVar(
+                        0, HOURS_PER_DAY, f"subj_day_excess_{class_id}_{subj_id}_{day}"
+                    )
+                    model.Add(excess >= day_count - subject_cluster_max)
+                    objective_terms.append(excess * subject_cluster_weight)
 
     # Medium soft constraint: global front-loading per class across the full week.
     # Flatten class occupancy by (day, hour) order (excluding breaks) and penalize
     # any 0 -> 1 transition, which means an occupied slot after an empty slot.
     # This drives patterns toward: 111111000000 (empties at the end of the week).
-    for cls in classes:
-        class_id = cls["_id"]
-        days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
-        if days <= 0:
-            continue
+    if front_loading_enabled and front_loading_weight > 0:
+        for cls in classes:
+            class_id = cls["_id"]
+            days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+            if days <= 0:
+                continue
 
-        flat_occ: List[cp_model.IntVar] = []
-        for day in range(days):
-            for hour in range(HOURS_PER_DAY):
-                if hour in break_hours_set:
-                    continue
-                flat_occ.append(class_occ[(class_id, day, hour)])
+            flat_occ: List[cp_model.IntVar] = []
+            for day in range(days):
+                for hour in range(HOURS_PER_DAY):
+                    if hour in break_hours_set:
+                        continue
+                    flat_occ.append(class_occ[(class_id, day, hour)])
 
-        if len(flat_occ) <= 1:
-            continue
+            if len(flat_occ) <= 1:
+                continue
 
-        for i in range(len(flat_occ) - 1):
-            prev_occ = flat_occ[i]
-            next_occ = flat_occ[i + 1]
-            violation = model.NewBoolVar(f"class_frontload_violation_{class_id}_{i}")
-            # violation = 1 iff (prev_occ=0 and next_occ=1)
-            model.Add(violation >= next_occ - prev_occ)
-            model.Add(violation <= next_occ)
-            model.Add(violation <= 1 - prev_occ)
-            objective_terms.append(violation * 400)
+            for i in range(len(flat_occ) - 1):
+                prev_occ = flat_occ[i]
+                next_occ = flat_occ[i + 1]
+                violation = model.NewBoolVar(f"class_frontload_violation_{class_id}_{i}")
+                # violation = 1 iff (prev_occ=0 and next_occ=1)
+                model.Add(violation >= next_occ - prev_occ)
+                model.Add(violation <= next_occ)
+                model.Add(violation <= 1 - prev_occ)
+                objective_terms.append(violation * front_loading_weight)
 
     if objective_terms:
         model.Minimize(sum(objective_terms))
@@ -463,6 +570,7 @@ async def solve(request: Request) -> Dict[str, Any]:
             "classes": classes,
             "unmet_requirements": unmet_requirements,
             "warnings": fixed_slot_warnings,
+            "config": applied_config,
         }
 
     # Build outputs
@@ -502,7 +610,7 @@ async def solve(request: Request) -> Dict[str, Any]:
             continue
         combo = combo_by_id[combo_id]
         subj = subject_by_id[combo["subject_id"]]
-        block = 2 if subj.get("type") == "lab" else 1
+        block = lab_block_size if subj.get("type") == "lab" else theory_block_size
         for h in range(hour, hour + block):
             class_timetables[class_id][day][h] = combo_id
             for fid in combo.get("faculty_ids", []):
@@ -549,4 +657,5 @@ async def solve(request: Request) -> Dict[str, Any]:
         "classes": classes,
         "unmet_requirements": unmet_requirements,
         "warnings": fixed_slot_warnings,
+        "config": applied_config,
     }

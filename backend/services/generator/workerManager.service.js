@@ -78,6 +78,7 @@ export function startGenerationWorker({ payload }) {
             score: resultData.score,
             combos: resultData.combos,
             allocations_report: resultData.allocations_report,
+            config: resultData.config,
           });
           await rec.save();
         } catch (saveErr) {
