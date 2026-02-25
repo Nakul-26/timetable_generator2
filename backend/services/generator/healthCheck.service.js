@@ -35,6 +35,29 @@ function getComboFacultyIds(combo) {
   return [];
 }
 
+function normalizeSlotList(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const out = new Set();
+  for (const slot of list) {
+    const day = toInt(slot?.day, -1);
+    const hour = toInt(slot?.hour, -1);
+    if (day < 0 || hour < 0) continue;
+    out.add(`${day}|${hour}`);
+  }
+  return out;
+}
+
+function normalizeTeacherSlotMap(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return new Map();
+  const out = new Map();
+  for (const [teacherId, slots] of Object.entries(raw)) {
+    const key = String(teacherId || "");
+    if (!key) continue;
+    out.set(key, normalizeSlotList(slots));
+  }
+  return out;
+}
+
 export function buildConstraintHealthReport({
   faculties = [],
   subjects = [],
@@ -55,6 +78,10 @@ export function buildConstraintHealthReport({
 
   const potentialTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
   const forcedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
+  const teacherAvailabilityCfg = constraintConfig?.teacherAvailability || {};
+  const weeklyBalanceCfg = constraintConfig?.teacherWeeklyLoadBalance || {};
+  const classDailyMinCfg = constraintConfig?.classDailyMinimumLoad || {};
+  const weeklySubjectHoursCfg = constraintConfig?.weeklySubjectHours || {};
 
   let totalClassRequired = 0;
   let totalClassCapacity = 0;
@@ -125,10 +152,40 @@ export function buildConstraintHealthReport({
   }
 
   const teacherWeeklyCapacity = schedule.daysPerWeek * usableSlotsPerDay;
+  const globalUnavailable = normalizeSlotList(teacherAvailabilityCfg.globallyUnavailableSlots);
+  const unavailableByTeacher = normalizeTeacherSlotMap(
+    teacherAvailabilityCfg.unavailableSlotsByTeacher
+  );
+  const teacherAvailabilityEnabled = Boolean(teacherAvailabilityCfg.enabled);
+  const teacherAvailabilityHard = teacherAvailabilityCfg.hard !== false;
+
   for (const faculty of faculties) {
     const fid = String(faculty._id);
     const forced = forcedTeacherLoad.get(fid) || 0;
     const potential = potentialTeacherLoad.get(fid) || 0;
+    const teacherUnavailable = unavailableByTeacher.get(fid) || new Set();
+    let unavailableCount = 0;
+    for (const dayHour of globalUnavailable) {
+      const [, hourText] = String(dayHour).split("|");
+      const hour = toInt(hourText, -1);
+      if (hour >= 0 && hour < schedule.hoursPerDay) unavailableCount += 1;
+    }
+    for (const dayHour of teacherUnavailable) {
+      const [, hourText] = String(dayHour).split("|");
+      const hour = toInt(hourText, -1);
+      if (hour >= 0 && hour < schedule.hoursPerDay && !globalUnavailable.has(dayHour)) {
+        unavailableCount += 1;
+      }
+    }
+    const teacherEffectiveCapacity = Math.max(0, teacherWeeklyCapacity - unavailableCount);
+
+    if (teacherAvailabilityEnabled && teacherAvailabilityHard && forced > teacherEffectiveCapacity) {
+      warnings.push({
+        severity: "error",
+        type: "teacher_availability_forced_overload",
+        message: `Teacher "${faculty.name || fid}" forced load ${forced} exceeds available capacity ${teacherEffectiveCapacity} after availability blocks.`,
+      });
+    }
     if (forced > teacherWeeklyCapacity) {
       warnings.push({
         severity: "error",
@@ -141,6 +198,45 @@ export function buildConstraintHealthReport({
         type: "teacher_potential_overload",
         message: `Teacher "${faculty.name || fid}" potential load ${potential} exceeds capacity ${teacherWeeklyCapacity}.`,
       });
+    }
+  }
+
+  const weeklyBalanceEnabled = Boolean(weeklyBalanceCfg.enabled);
+  if (weeklyBalanceEnabled) {
+    const minWeeklyLoad = Math.max(0, toInt(weeklyBalanceCfg.minWeeklyLoad, 0));
+    const maxWeeklyLoad = Math.max(0, toInt(weeklyBalanceCfg.maxWeeklyLoad, teacherWeeklyCapacity));
+    const hardMin = Boolean(weeklyBalanceCfg.hardMin);
+    const hardMax = Boolean(weeklyBalanceCfg.hardMax);
+
+    if (hardMin) {
+      const requiredMinLoad = faculties.length * minWeeklyLoad;
+      if (requiredMinLoad > totalClassRequired) {
+        warnings.push({
+          severity: "warning",
+          type: "weekly_min_load_high",
+          message: `Hard minimum weekly load requires ${requiredMinLoad} teacher-hours but classes require ${totalClassRequired}.`,
+        });
+      }
+    }
+    if (hardMax && maxWeeklyLoad > teacherWeeklyCapacity) {
+      warnings.push({
+        severity: "warning",
+        type: "weekly_max_exceeds_capacity",
+        message: `Hard max weekly load ${maxWeeklyLoad} exceeds per-teacher slot capacity ${teacherWeeklyCapacity}.`,
+      });
+    }
+    if (hardMax) {
+      for (const faculty of faculties) {
+        const fid = String(faculty._id);
+        const forced = forcedTeacherLoad.get(fid) || 0;
+        if (forced > maxWeeklyLoad) {
+          warnings.push({
+            severity: "error",
+            type: "teacher_forced_above_hard_weekly_max",
+            message: `Teacher "${faculty.name || fid}" has forced load ${forced}, above hard max weekly load ${maxWeeklyLoad}.`,
+          });
+        }
+      }
     }
   }
 
@@ -223,6 +319,31 @@ export function buildConstraintHealthReport({
     }
   }
 
+  if (classDailyMinCfg.enabled && classDailyMinCfg.hard) {
+    const minPerDay = Math.max(0, toInt(classDailyMinCfg.minPerDay, 0));
+    for (const cls of classes) {
+      const days = Math.max(1, toInt(cls.days_per_week, schedule.daysPerWeek));
+      const classRequired = subjects.reduce(
+        (acc, subj) => acc + requiredHoursFor(cls, subj),
+        0
+      );
+      if (minPerDay > usableSlotsPerDay) {
+        warnings.push({
+          severity: "error",
+          type: "class_daily_min_exceeds_capacity",
+          message: `Class "${cls.name || cls._id}" hard minimum ${minPerDay} per day exceeds usable daily slots ${usableSlotsPerDay}.`,
+        });
+      }
+      if (weeklySubjectHoursCfg.hard !== false && classRequired < days * minPerDay) {
+        warnings.push({
+          severity: "warning",
+          type: "class_daily_min_conflicts_with_required_hours",
+          message: `Class "${cls.name || cls._id}" required ${classRequired} hours is below hard daily minimum total ${days * minPerDay}.`,
+        });
+      }
+    }
+  }
+
   const summary = {
     totalClasses: classes.length,
     totalTeachers: faculties.length,
@@ -247,4 +368,3 @@ export function buildConstraintHealthReport({
     warnings,
   };
 }
-

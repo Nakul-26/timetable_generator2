@@ -33,7 +33,7 @@ function AddSubject() {
   const validate = () => {
     if (!name.trim()) return "Subject name is required.";
     if (!code.trim()) return "Subject code is required.";
-    if (!sem.trim()) return "Semester is required.";
+    if (!sem.trim()) return "Semester/Class is required.";
     if (!type.trim()) return "subject type are required";
     return "";
   };
@@ -98,11 +98,11 @@ function AddSubject() {
           />
         </div>
         <div className="form-group">
-          <label>Semester</label>
+          <label>Semester/Class</label>
           <input
             type="text"
             name="sem"
-            placeholder="Semester"
+            placeholder="Semester/Class"
             value={sem}
             onChange={handleChange}
             required
@@ -121,8 +121,8 @@ function AddSubject() {
           <option value="lab">Lab</option>
         </select>
       </div>
-      <div className="form-group">
-        <label className="checkbox-label">
+      <div className="form-group elective-highlight-group">
+        <label className="checkbox-label elective-highlight-label">
           <input
             type="checkbox"
             name="isElective"
@@ -131,6 +131,7 @@ function AddSubject() {
           />
           Mark as Elective Subject
         </label>
+        <small>This subject will be treated as elective in timetable rules.</small>
       </div>
       <div className="form-group">
           <label>Combined Classes</label>

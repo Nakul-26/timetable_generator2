@@ -38,6 +38,36 @@
   font-size: 0.95rem;
 }
 
+.elective-highlight-group {
+  padding: 14px 16px;
+  border: 2px solid #ffd5ba;
+  border-radius: 10px;
+  background: #fff7f2;
+}
+
+.elective-highlight-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+  cursor: pointer;
+}
+
+.elective-highlight-label input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.elective-highlight-group small {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin-top: 2px;
+}
+
 /* Inputs & Selects */
 .form-group input,
 .form-group select {
@@ -520,6 +550,20 @@ h2 {
 
 .elective-class-picker {
   margin-bottom: 20px;
+}
+
+.elective-help-box {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid #ffd8bf;
+  background: #fff7f2;
+  border-radius: 8px;
+}
+
+.elective-help-box p {
+  margin: 4px 0;
+  color: #4b5563;
+  font-size: 0.94rem;
 }
 
 .elective-class-picker label {

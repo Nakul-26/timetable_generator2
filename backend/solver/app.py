@@ -70,6 +70,39 @@ def _to_bool(value: Any, default: bool) -> bool:
     return default
 
 
+def _normalize_slot_list(raw: Any) -> List[Tuple[int, int]]:
+    if not isinstance(raw, list):
+        return []
+    out: List[Tuple[int, int]] = []
+    seen = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            day = int(item.get("day"))
+            hour = int(item.get("hour"))
+        except Exception:
+            continue
+        key = (day, hour)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
+def _normalize_teacher_slot_map(raw: Any) -> Dict[str, set]:
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, set] = {}
+    for teacher_id, slots in raw.items():
+        tid = str(teacher_id)
+        norm = set(_normalize_slot_list(slots))
+        if norm:
+            out[tid] = norm
+    return out
+
+
 @app.on_event("startup")
 async def _install_loop_handler():
     loop = asyncio.get_running_loop()
@@ -172,6 +205,81 @@ async def solve(request: Request) -> Dict[str, Any]:
     )
     front_loading_weight = max(0, int(_cfg_get(constraint_config, ["frontLoading", "weight"], 400)))
 
+    teacher_avail_enabled = _to_bool(
+        _cfg_get(constraint_config, ["teacherAvailability", "enabled"], False), False
+    )
+    teacher_avail_hard = _to_bool(
+        _cfg_get(constraint_config, ["teacherAvailability", "hard"], True), True
+    )
+    teacher_avail_weight = max(
+        0, int(_cfg_get(constraint_config, ["teacherAvailability", "weight"], 250))
+    )
+    teacher_avail_global = set(
+        _normalize_slot_list(
+            _cfg_get(constraint_config, ["teacherAvailability", "globallyUnavailableSlots"], [])
+        )
+    )
+    teacher_avail_by_teacher = _normalize_teacher_slot_map(
+        _cfg_get(constraint_config, ["teacherAvailability", "unavailableSlotsByTeacher"], {})
+    )
+
+    teacher_weekly_enabled = _to_bool(
+        _cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "enabled"], False), False
+    )
+    teacher_weekly_min = max(
+        0, int(_cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "minWeeklyLoad"], 0))
+    )
+    teacher_weekly_target = max(
+        0, int(_cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "targetWeeklyLoad"], 0))
+    )
+    teacher_weekly_max = max(
+        0, int(_cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "maxWeeklyLoad"], 48))
+    )
+    teacher_weekly_hard_min = _to_bool(
+        _cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "hardMin"], False), False
+    )
+    teacher_weekly_hard_max = _to_bool(
+        _cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "hardMax"], False), False
+    )
+    teacher_weekly_under_weight = max(
+        0, int(_cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "underWeight"], 40))
+    )
+    teacher_weekly_over_weight = max(
+        0, int(_cfg_get(constraint_config, ["teacherWeeklyLoadBalance", "overWeight"], 40))
+    )
+
+    class_daily_min_enabled = _to_bool(
+        _cfg_get(constraint_config, ["classDailyMinimumLoad", "enabled"], False), False
+    )
+    class_daily_min_hard = _to_bool(
+        _cfg_get(constraint_config, ["classDailyMinimumLoad", "hard"], False), False
+    )
+    class_daily_min_value = max(
+        0, int(_cfg_get(constraint_config, ["classDailyMinimumLoad", "minPerDay"], 1))
+    )
+    class_daily_min_weight = max(
+        0, int(_cfg_get(constraint_config, ["classDailyMinimumLoad", "weight"], 100))
+    )
+
+    teacher_boundary_enabled = _to_bool(
+        _cfg_get(constraint_config, ["teacherBoundaryPreference", "enabled"], False), False
+    )
+    teacher_boundary_avoid_first = _to_bool(
+        _cfg_get(constraint_config, ["teacherBoundaryPreference", "avoidFirstPeriod"], True), True
+    )
+    teacher_boundary_avoid_last = _to_bool(
+        _cfg_get(constraint_config, ["teacherBoundaryPreference", "avoidLastPeriod"], True), True
+    )
+    teacher_boundary_weight = max(
+        0, int(_cfg_get(constraint_config, ["teacherBoundaryPreference", "weight"], 60))
+    )
+    teacher_boundary_overrides_raw = _cfg_get(
+        constraint_config, ["teacherBoundaryPreference", "teacherOverrides"], {}
+    )
+    teacher_boundary_overrides = (
+        teacher_boundary_overrides_raw if isinstance(teacher_boundary_overrides_raw, dict) else {}
+    )
+
     applied_config = {
         "schedule": {"daysPerWeek": DAYS_PER_WEEK, "hoursPerDay": HOURS_PER_DAY, "breakHours": BREAK_HOURS},
         "structural": {"labBlockSize": lab_block_size, "theoryBlockSize": theory_block_size},
@@ -182,12 +290,56 @@ async def solve(request: Request) -> Dict[str, Any]:
         "teacherDailyOverload": {"enabled": teacher_daily_enabled, "max": teacher_daily_max, "weight": teacher_daily_weight},
         "subjectClustering": {"enabled": subject_cluster_enabled, "maxPerDay": subject_cluster_max, "weight": subject_cluster_weight},
         "frontLoading": {"enabled": front_loading_enabled, "weight": front_loading_weight},
+        "teacherAvailability": {
+            "enabled": teacher_avail_enabled,
+            "hard": teacher_avail_hard,
+            "weight": teacher_avail_weight,
+            "globallyUnavailableSlots": [
+                {"day": day, "hour": hour} for (day, hour) in sorted(teacher_avail_global)
+            ],
+            "unavailableSlotsByTeacher": {
+                tid: [{"day": day, "hour": hour} for (day, hour) in sorted(list(slots))]
+                for tid, slots in teacher_avail_by_teacher.items()
+            },
+        },
+        "teacherWeeklyLoadBalance": {
+            "enabled": teacher_weekly_enabled,
+            "minWeeklyLoad": teacher_weekly_min,
+            "targetWeeklyLoad": teacher_weekly_target,
+            "maxWeeklyLoad": teacher_weekly_max,
+            "hardMin": teacher_weekly_hard_min,
+            "hardMax": teacher_weekly_hard_max,
+            "underWeight": teacher_weekly_under_weight,
+            "overWeight": teacher_weekly_over_weight,
+        },
+        "classDailyMinimumLoad": {
+            "enabled": class_daily_min_enabled,
+            "hard": class_daily_min_hard,
+            "minPerDay": class_daily_min_value,
+            "weight": class_daily_min_weight,
+        },
+        "teacherBoundaryPreference": {
+            "enabled": teacher_boundary_enabled,
+            "avoidFirstPeriod": teacher_boundary_avoid_first,
+            "avoidLastPeriod": teacher_boundary_avoid_last,
+            "weight": teacher_boundary_weight,
+            "teacherOverrides": teacher_boundary_overrides,
+        },
         "solver": {"timeLimitSec": solver_time_limit_sec},
     }
 
     subject_by_id = {s["_id"]: s for s in subjects}
     class_by_id = {c["_id"]: c for c in classes}
     combo_by_id = {c["_id"]: c for c in combos}
+    faculty_ids = [f["_id"] for f in faculties]
+
+    def _is_teacher_unavailable(fid: str, day: int, hour: int) -> bool:
+        key = (day, hour)
+        if key in teacher_avail_global:
+            return True
+        teacher_slots = teacher_avail_by_teacher.get(fid)
+        return bool(teacher_slots and key in teacher_slots)
+
     required_hours_by_class_subject: Dict[str, Dict[str, int]] = {}
     for cls in classes:
         cid = cls["_id"]
@@ -229,6 +381,21 @@ async def solve(request: Request) -> Dict[str, Any]:
                 f"Fixed slot falls in break hour for class {class_id} at {day},{hour}"
             )
             continue
+        if teacher_avail_enabled and teacher_avail_hard:
+            combo = combo_by_id.get(combo_id)
+            if combo:
+                subj = subject_by_id.get(combo.get("subject_id"))
+                block = lab_block_size if subj and subj.get("type") == "lab" else theory_block_size
+                availability_conflict = False
+                for fid in combo.get("faculty_ids", []):
+                    if any(_is_teacher_unavailable(fid, day, h) for h in range(hour, min(HOURS_PER_DAY, hour + block))):
+                        availability_conflict = True
+                        break
+                if availability_conflict:
+                    fixed_slot_warnings.append(
+                        f"Fixed slot violates teacher availability for class {class_id} at {day},{hour}"
+                    )
+                    continue
         valid_fixed_slots.append(
             {"class": class_id, "day": day, "hour": hour, "combo": combo_id}
         )
@@ -284,8 +451,25 @@ async def solve(request: Request) -> Dict[str, Any]:
                         continue
                     if any(h in break_hours_set for h in range(hour, hour + block)):
                         continue
+
+                    violates_availability = False
+                    if teacher_avail_enabled:
+                        for fid in combo.get("faculty_ids", []):
+                            if any(_is_teacher_unavailable(fid, day, h) for h in range(hour, hour + block)):
+                                violates_availability = True
+                                break
+                        if teacher_avail_hard and violates_availability:
+                            continue
+
                     var = model.NewBoolVar(f"x_{class_id}_{day}_{hour}_{combo_id}")
                     x[(class_id, day, hour, combo_id)] = var
+                    if (
+                        teacher_avail_enabled
+                        and not teacher_avail_hard
+                        and teacher_avail_weight > 0
+                        and violates_availability
+                    ):
+                        objective_terms.append(var * teacher_avail_weight)
 
                     for h in range(hour, hour + block):
                         covers.setdefault((class_id, day, h), []).append(var)
@@ -306,7 +490,7 @@ async def solve(request: Request) -> Dict[str, Any]:
                     model.AddAtMostOne(vars_here)
 
     # Constraint: teacher clash
-    for fid in [f["_id"] for f in faculties]:
+    for fid in faculty_ids:
         for day in range(DAYS_PER_WEEK):
             for hour in range(HOURS_PER_DAY):
                 if hour in break_hours_set:
@@ -333,7 +517,7 @@ async def solve(request: Request) -> Dict[str, Any]:
                 class_occ[(class_id, day, hour)] = occ
 
     teacher_occ: Dict[Tuple[str, int, int], cp_model.IntVar] = {}
-    for fid in [f["_id"] for f in faculties]:
+    for fid in faculty_ids:
         for day in range(DAYS_PER_WEEK):
             for hour in range(HOURS_PER_DAY):
                 if hour in break_hours_set:
@@ -355,10 +539,10 @@ async def solve(request: Request) -> Dict[str, Any]:
         subj = subject_by_id.get(combo["subject_id"])
         if not subj:
             continue
-            block = lab_block_size if subj.get("type") == "lab" else theory_block_size
-            x_by_class_subject.setdefault((c_id, combo["subject_id"]), []).append(
-                (var, block)
-            )
+        block = lab_block_size if subj.get("type") == "lab" else theory_block_size
+        x_by_class_subject.setdefault((c_id, combo["subject_id"]), []).append(
+            (var, block)
+        )
 
     for cls in classes:
         class_id = cls["_id"]
@@ -385,7 +569,7 @@ async def solve(request: Request) -> Dict[str, Any]:
     # Soft constraint: teacher continuity.
     if teacher_cont_enabled and teacher_cont_weight > 0:
         win_len = teacher_cont_max + 1
-        for fid in [f["_id"] for f in faculties]:
+        for fid in faculty_ids:
             for day in range(DAYS_PER_WEEK):
                 for start in range(HOURS_PER_DAY - win_len + 1):
                     if any(h in break_hours_set for h in range(start, start + win_len)):
@@ -476,7 +660,7 @@ async def solve(request: Request) -> Dict[str, Any]:
     # Soft cap: teacher daily load.
     if teacher_daily_enabled and teacher_daily_weight > 0:
         teacher_day_load: Dict[Tuple[str, int], cp_model.IntVar] = {}
-        for fid in [f["_id"] for f in faculties]:
+        for fid in faculty_ids:
             for day in range(DAYS_PER_WEEK):
                 day_terms = [
                     teacher_occ[(fid, day, h)]
@@ -493,6 +677,100 @@ async def solve(request: Request) -> Dict[str, Any]:
                 )
                 model.Add(overload >= load - teacher_daily_max)
                 objective_terms.append(overload * teacher_daily_weight)
+
+    # Class daily minimum load.
+    if class_daily_min_enabled and class_daily_min_value > 0:
+        for cls in classes:
+            class_id = cls["_id"]
+            days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+            for day in range(days):
+                day_terms = [
+                    class_occ[(class_id, day, h)]
+                    for h in range(HOURS_PER_DAY)
+                    if h not in break_hours_set
+                ]
+                if not day_terms:
+                    continue
+                day_load = model.NewIntVar(
+                    0, len(day_terms), f"class_day_load_{class_id}_{day}"
+                )
+                model.Add(day_load == sum(day_terms))
+                if class_daily_min_hard:
+                    model.Add(day_load >= class_daily_min_value)
+                elif class_daily_min_weight > 0:
+                    shortage = model.NewIntVar(
+                        0, class_daily_min_value, f"class_day_shortage_{class_id}_{day}"
+                    )
+                    model.Add(shortage >= class_daily_min_value - day_load)
+                    objective_terms.append(shortage * class_daily_min_weight)
+
+    # Teacher weekly load balancing: configurable min/target/max controls.
+    if teacher_weekly_enabled:
+        weekly_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
+        weekly_capacity = DAYS_PER_WEEK * len(weekly_hours)
+        for fid in faculty_ids:
+            weekly_terms = [
+                teacher_occ[(fid, day, hour)]
+                for day in range(DAYS_PER_WEEK)
+                for hour in weekly_hours
+            ]
+            if not weekly_terms:
+                continue
+
+            weekly_load = model.NewIntVar(0, weekly_capacity, f"teacher_week_load_{fid}")
+            model.Add(weekly_load == sum(weekly_terms))
+
+            if teacher_weekly_hard_min:
+                model.Add(weekly_load >= teacher_weekly_min)
+            elif teacher_weekly_under_weight > 0 and teacher_weekly_min > 0:
+                under_min = model.NewIntVar(0, teacher_weekly_min, f"teacher_under_min_{fid}")
+                model.Add(under_min >= teacher_weekly_min - weekly_load)
+                objective_terms.append(under_min * teacher_weekly_under_weight)
+
+            if teacher_weekly_hard_max:
+                model.Add(weekly_load <= teacher_weekly_max)
+            elif teacher_weekly_over_weight > 0:
+                over_max = model.NewIntVar(0, weekly_capacity, f"teacher_over_max_{fid}")
+                model.Add(over_max >= weekly_load - teacher_weekly_max)
+                objective_terms.append(over_max * teacher_weekly_over_weight)
+
+            if teacher_weekly_target > 0:
+                if teacher_weekly_under_weight > 0:
+                    under_target = model.NewIntVar(
+                        0, teacher_weekly_target, f"teacher_under_target_{fid}"
+                    )
+                    model.Add(under_target >= teacher_weekly_target - weekly_load)
+                    objective_terms.append(under_target * teacher_weekly_under_weight)
+                if teacher_weekly_over_weight > 0:
+                    over_target = model.NewIntVar(
+                        0, weekly_capacity, f"teacher_over_target_{fid}"
+                    )
+                    model.Add(over_target >= weekly_load - teacher_weekly_target)
+                    objective_terms.append(over_target * teacher_weekly_over_weight)
+
+    # Avoid first/last period assignment for teachers.
+    if teacher_boundary_enabled and teacher_boundary_weight > 0:
+        valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
+        if valid_hours:
+            first_hour = valid_hours[0]
+            last_hour = valid_hours[-1]
+            for fid in faculty_ids:
+                override = (
+                    teacher_boundary_overrides.get(fid)
+                    if isinstance(teacher_boundary_overrides.get(fid), dict)
+                    else {}
+                )
+                avoid_first = _to_bool(override.get("avoidFirstPeriod"), teacher_boundary_avoid_first)
+                avoid_last = _to_bool(override.get("avoidLastPeriod"), teacher_boundary_avoid_last)
+                for day in range(DAYS_PER_WEEK):
+                    if avoid_first:
+                        objective_terms.append(
+                            teacher_occ[(fid, day, first_hour)] * teacher_boundary_weight
+                        )
+                    if avoid_last and last_hour != first_hour:
+                        objective_terms.append(
+                            teacher_occ[(fid, day, last_hour)] * teacher_boundary_weight
+                        )
 
     # Soft objective: reduce subject clustering within a day.
     if subject_cluster_enabled and subject_cluster_weight > 0:

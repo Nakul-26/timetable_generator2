@@ -17,7 +17,7 @@ const AddClass = () => {
   const validate = () => {
     if (!name.trim()) return "Class name is required.";
     if (!classId.trim()) return "Class ID is required.";
-    if (!semester.trim()) return "Semester is required.";
+    if (!semester.trim()) return "Semester/Class is required.";
     if (!section.trim()) return "Section is required.";
     return "";
   };
@@ -80,11 +80,11 @@ const AddClass = () => {
           />
         </div>
         <div className="form-group">
-          <label>Semester</label>
+          <label>Semester/Class</label>
           <input
             type="text"
             name="semester"
-            placeholder="Semester (e.g. Fall)"
+            placeholder="Semester/Class (e.g. 6 or Grade 6)"
             value={semester}
             onChange={(e) => setSemester(e.target.value)}
             required

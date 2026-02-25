@@ -118,10 +118,10 @@ function ManageSubject() {
             value={filterSem}
             onChange={(e) => setFilterSem(e.target.value)}
           >
-            <option value="">All Semesters</option>
+            <option value="">All Semester/Class</option>
             {[...new Set(subjects.map((s) => s.sem))].map((sem) => (
               <option key={sem} value={sem}>
-                Semester {sem}
+                Semester/Class {sem}
               </option>
             ))}
           </select>
@@ -138,7 +138,7 @@ function ManageSubject() {
             <tr>
               <th>Name</th>
               <th>Code</th>
-              <th>Semester</th>
+              <th>Semester/Class</th>
               <th>Subject Type</th>
               <th>Combined Classes</th>
               <th>Assigned Classes</th>

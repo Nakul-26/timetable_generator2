@@ -135,6 +135,13 @@ const ManageElectiveSubjects = () => {
     return (
         <div className="manage-container">
             <h2>Manage Elective Teacher Requirements</h2>
+            <div className="elective-help-box">
+                <p><b>How to use this page:</b></p>
+                <p>1. Select a class to load its elective subjects.</p>
+                <p>2. For each elective, enter how many teachers are needed from each subject expertise. Like for some classes you can have two choices in one elective and in some you can have more then 2 choices.</p>
+                <p>3. Keep the total teachers per slot aligned with how you want that elective to run.</p>
+                <p>4. Click Save Settings. Use Cancel to discard unsaved edits.</p>
+            </div>
 
             <div className="elective-class-picker">
                 <label htmlFor="class-select">Select Class</label>

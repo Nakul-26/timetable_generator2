@@ -124,7 +124,7 @@ function ManageClass() {
           />
           <input
             type="text"
-            placeholder="Search by Semester"
+            placeholder="Search by Semester/Class"
             value={filterSemester}
             onChange={(e) => setFilterSemester(e.target.value)}
           />
@@ -145,7 +145,7 @@ function ManageClass() {
               <th>Class ID</th>
               <th>Name</th>
               <th>Section</th>
-              <th>Semester</th>
+              <th>Semester/Class</th>
               <th>Days/Week</th>
               <th>Assigned Subjects</th>
               <th>Assigned Faculties</th>

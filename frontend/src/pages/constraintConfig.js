@@ -42,6 +42,36 @@ export const DEFAULT_CONSTRAINT_CONFIG = {
     enabled: true,
     weight: 400,
   },
+  teacherAvailability: {
+    enabled: false,
+    hard: true,
+    weight: 250,
+    globallyUnavailableSlots: [],
+    unavailableSlotsByTeacher: {},
+  },
+  teacherWeeklyLoadBalance: {
+    enabled: false,
+    minWeeklyLoad: 0,
+    targetWeeklyLoad: 0,
+    maxWeeklyLoad: 48,
+    hardMin: false,
+    hardMax: false,
+    underWeight: 40,
+    overWeight: 40,
+  },
+  classDailyMinimumLoad: {
+    enabled: false,
+    hard: false,
+    minPerDay: 1,
+    weight: 100,
+  },
+  teacherBoundaryPreference: {
+    enabled: false,
+    avoidFirstPeriod: true,
+    avoidLastPeriod: true,
+    weight: 60,
+    teacherOverrides: {},
+  },
   solver: {
     timeLimitSec: 180,
   },
@@ -68,6 +98,57 @@ function toBool(value, fallback) {
   return fallback;
 }
 
+function normalizeSlot(slot) {
+  if (!slot || typeof slot !== "object") return null;
+  const day = safeInt(slot.day, null, 0);
+  const hour = safeInt(slot.hour, null, 0);
+  if (!Number.isInteger(day) || !Number.isInteger(hour)) return null;
+  return { day, hour };
+}
+
+function normalizeSlotArray(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const out = [];
+  const seen = new Set();
+  for (const slot of list) {
+    const normalized = normalizeSlot(slot);
+    if (!normalized) continue;
+    const key = `${normalized.day}|${normalized.hour}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function normalizeSlotMap(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [teacherIdRaw, slotsRaw] of Object.entries(raw)) {
+    const teacherId = String(teacherIdRaw || "").trim();
+    if (!teacherId) continue;
+    const slots = normalizeSlotArray(slotsRaw);
+    if (slots.length > 0) {
+      out[teacherId] = slots;
+    }
+  }
+  return out;
+}
+
+function normalizeTeacherOverrides(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [teacherIdRaw, value] of Object.entries(raw)) {
+    const teacherId = String(teacherIdRaw || "").trim();
+    if (!teacherId || !value || typeof value !== "object" || Array.isArray(value)) continue;
+    out[teacherId] = {
+      avoidFirstPeriod: toBool(value.avoidFirstPeriod, DEFAULT_CONSTRAINT_CONFIG.teacherBoundaryPreference.avoidFirstPeriod),
+      avoidLastPeriod: toBool(value.avoidLastPeriod, DEFAULT_CONSTRAINT_CONFIG.teacherBoundaryPreference.avoidLastPeriod),
+    };
+  }
+  return out;
+}
+
 export function normalizeConstraintConfig(input = {}) {
   const cfg = input || {};
   const schedule = cfg.schedule || {};
@@ -79,6 +160,10 @@ export function normalizeConstraintConfig(input = {}) {
   const teacherDailyOverload = cfg.teacherDailyOverload || {};
   const subjectClustering = cfg.subjectClustering || {};
   const frontLoading = cfg.frontLoading || {};
+  const teacherAvailability = cfg.teacherAvailability || {};
+  const teacherWeeklyLoadBalance = cfg.teacherWeeklyLoadBalance || {};
+  const classDailyMinimumLoad = cfg.classDailyMinimumLoad || {};
+  const teacherBoundaryPreference = cfg.teacherBoundaryPreference || {};
   const solver = cfg.solver || {};
 
   const breakHoursRaw = Array.isArray(schedule.breakHours) ? schedule.breakHours : [];
@@ -154,6 +239,83 @@ export function normalizeConstraintConfig(input = {}) {
     frontLoading: {
       enabled: toBool(frontLoading.enabled, DEFAULT_CONSTRAINT_CONFIG.frontLoading.enabled),
       weight: safeInt(frontLoading.weight, DEFAULT_CONSTRAINT_CONFIG.frontLoading.weight, 0),
+    },
+    teacherAvailability: {
+      enabled: toBool(teacherAvailability.enabled, DEFAULT_CONSTRAINT_CONFIG.teacherAvailability.enabled),
+      hard: toBool(teacherAvailability.hard, DEFAULT_CONSTRAINT_CONFIG.teacherAvailability.hard),
+      weight: safeInt(teacherAvailability.weight, DEFAULT_CONSTRAINT_CONFIG.teacherAvailability.weight, 0),
+      globallyUnavailableSlots: normalizeSlotArray(teacherAvailability.globallyUnavailableSlots),
+      unavailableSlotsByTeacher: normalizeSlotMap(teacherAvailability.unavailableSlotsByTeacher),
+    },
+    teacherWeeklyLoadBalance: {
+      enabled: toBool(
+        teacherWeeklyLoadBalance.enabled,
+        DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.enabled
+      ),
+      minWeeklyLoad: safeInt(
+        teacherWeeklyLoadBalance.minWeeklyLoad,
+        DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.minWeeklyLoad,
+        0
+      ),
+      targetWeeklyLoad: safeInt(
+        teacherWeeklyLoadBalance.targetWeeklyLoad,
+        DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.targetWeeklyLoad,
+        0
+      ),
+      maxWeeklyLoad: safeInt(
+        teacherWeeklyLoadBalance.maxWeeklyLoad,
+        DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.maxWeeklyLoad,
+        0
+      ),
+      hardMin: toBool(teacherWeeklyLoadBalance.hardMin, DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.hardMin),
+      hardMax: toBool(teacherWeeklyLoadBalance.hardMax, DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.hardMax),
+      underWeight: safeInt(
+        teacherWeeklyLoadBalance.underWeight,
+        DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.underWeight,
+        0
+      ),
+      overWeight: safeInt(
+        teacherWeeklyLoadBalance.overWeight,
+        DEFAULT_CONSTRAINT_CONFIG.teacherWeeklyLoadBalance.overWeight,
+        0
+      ),
+    },
+    classDailyMinimumLoad: {
+      enabled: toBool(
+        classDailyMinimumLoad.enabled,
+        DEFAULT_CONSTRAINT_CONFIG.classDailyMinimumLoad.enabled
+      ),
+      hard: toBool(classDailyMinimumLoad.hard, DEFAULT_CONSTRAINT_CONFIG.classDailyMinimumLoad.hard),
+      minPerDay: safeInt(
+        classDailyMinimumLoad.minPerDay,
+        DEFAULT_CONSTRAINT_CONFIG.classDailyMinimumLoad.minPerDay,
+        0
+      ),
+      weight: safeInt(
+        classDailyMinimumLoad.weight,
+        DEFAULT_CONSTRAINT_CONFIG.classDailyMinimumLoad.weight,
+        0
+      ),
+    },
+    teacherBoundaryPreference: {
+      enabled: toBool(
+        teacherBoundaryPreference.enabled,
+        DEFAULT_CONSTRAINT_CONFIG.teacherBoundaryPreference.enabled
+      ),
+      avoidFirstPeriod: toBool(
+        teacherBoundaryPreference.avoidFirstPeriod,
+        DEFAULT_CONSTRAINT_CONFIG.teacherBoundaryPreference.avoidFirstPeriod
+      ),
+      avoidLastPeriod: toBool(
+        teacherBoundaryPreference.avoidLastPeriod,
+        DEFAULT_CONSTRAINT_CONFIG.teacherBoundaryPreference.avoidLastPeriod
+      ),
+      weight: safeInt(
+        teacherBoundaryPreference.weight,
+        DEFAULT_CONSTRAINT_CONFIG.teacherBoundaryPreference.weight,
+        0
+      ),
+      teacherOverrides: normalizeTeacherOverrides(teacherBoundaryPreference.teacherOverrides),
     },
     solver: {
       timeLimitSec: safeInt(solver.timeLimitSec, DEFAULT_CONSTRAINT_CONFIG.solver.timeLimitSec, 1),
