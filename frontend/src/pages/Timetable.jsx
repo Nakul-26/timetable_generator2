@@ -43,6 +43,7 @@ function Timetable() {
 
   // Fixed slots
   const [fixedSlots, setFixedSlots] = useState({});
+  const [fixedClassId, setFixedClassId] = useState("");
   const [constraintConfig, setConstraintConfig] = useState(() => loadConstraintConfig());
   const DAYS_PER_WEEK = Number(constraintConfig?.schedule?.daysPerWeek) || 6;
   const HOURS_PER_DAY = Number(constraintConfig?.schedule?.hoursPerDay) || 8;
@@ -56,6 +57,39 @@ function Timetable() {
     () => new Map(subjects.map((s) => [String(s._id), s])),
     [subjects]
   );
+  const comboById = useMemo(
+    () => new Map(combos.map((c) => [String(c._id), c])),
+    [combos]
+  );
+  const fixedClassComboOptionsByClass = useMemo(() => {
+    const out = new Map();
+    const allClassIds = classes.map((c) => String(c._id));
+
+    for (const classId of allClassIds) {
+      const classOptions = [];
+      for (const combo of combos) {
+        const classIds = Array.isArray(combo.class_ids)
+          ? combo.class_ids.map((id) => String(id))
+          : [];
+        const appliesToClass = classIds.length === 0 || classIds.includes(classId);
+        if (!appliesToClass) continue;
+
+        const subject = subjectById.get(String(combo.subject_id));
+        const subjectName = subject ? subject.name : "N/A";
+        const facultyNames = (Array.isArray(combo.faculty_ids) ? combo.faculty_ids : [])
+          .map((fid) => facultyById.get(String(fid))?.name || "N/A")
+          .join(" & ");
+
+        classOptions.push({
+          id: String(combo._id),
+          label: `${facultyNames || "N/A"} : ${subjectName}`,
+        });
+      }
+      out.set(classId, classOptions);
+    }
+
+    return out;
+  }, [classes, combos, subjectById, facultyById]);
 
   const normalizeTableShape = (table) => {
     if (!table || typeof table !== "object") return null;
@@ -171,6 +205,12 @@ function Timetable() {
       // ignore localStorage failures
     }
   }, [blockGenerateOnHealthErrors]);
+
+  useEffect(() => {
+    if (!fixedClassId && classes.length > 0) {
+      setFixedClassId(String(classes[0]._id));
+    }
+  }, [classes, fixedClassId]);
 
   const sortedHealthWarnings = useMemo(() => {
     const list = Array.isArray(healthReport?.warnings) ? [...healthReport.warnings] : [];
@@ -402,7 +442,7 @@ function Timetable() {
           /* ===================== HELPERS ===================== */
         
   const getClassName = id => {
-    const cls = classes.find(c => String(c._id) === String(id));
+    const cls = classById.get(String(id));
     if (!cls) return id;
     const name = cls.name || cls.id || id;
     const semPart = cls.sem != null ? `Sem ${cls.sem}` : null;
@@ -420,17 +460,14 @@ function Timetable() {
       .replace(/'/g, "&#39;");
   };
         
-          const getFacultyName = id => {
-            const fac = faculties.find(f => String(f._id) === String(id));
-            return fac ? fac.name : id;
-          };
+          const getFacultyName = id => facultyById.get(String(id))?.name || id;
 
   const getSlotDisplay = (slot) => {
     if (!slot || slot === -1 || slot === "BREAK") {
       return { subjectName: "-", facultyNames: [] };
     }
 
-    const combo = combos.find((c) => String(c._id) === String(slot));
+    const combo = comboById.get(String(slot));
     if (!combo) {
       return { subjectName: "?", facultyNames: [] };
     }
@@ -590,6 +627,7 @@ function Timetable() {
 
 
   const renderEmptyTable = (classId) => {
+    const classOptions = fixedClassComboOptionsByClass.get(String(classId)) || [];
     return (
       <div key={classId} style={{ marginBottom: "30px" }}>
         <h3>
@@ -622,22 +660,11 @@ function Timetable() {
                         <option value="">
                           --Select faculty-subject--
                         </option>
-                        {combos && combos
-                          .map((c) => {
-                            const facultyNames = (c.faculty_ids || []).map(fid => {
-                              const fac = faculties && faculties.find(f => String(f._id) === String(fid));
-                              return fac ? fac.name : 'N/A'
-                            }).join(' & ');
-
-                            const subject = subjects && subjects.find(s => String(s._id) === String(c.subject_id));
-                            const subjectName = subject ? subject.name : "N/A";
-
-                            return (
-                              <option key={c._id} value={c._id}>
-                                {facultyNames} : {subjectName}
-                              </option>
-                            );
-                          })}
+                        {classOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     </td>
                   );
@@ -676,7 +703,7 @@ function Timetable() {
       return false;
     }
 
-    const combo = combos.find(c => String(c._id) === String(slotComboId));
+    const combo = comboById.get(String(slotComboId));
     if (!combo) {
       return false;
     }
@@ -684,9 +711,9 @@ function Timetable() {
     const facultyMatch = () => {
         if (!selectedFaculty) return true;
         if (combo.faculty_ids) {
-            return combo.faculty_ids.includes(selectedFaculty);
+            return combo.faculty_ids.some((fid) => String(fid) === String(selectedFaculty));
         } else if (combo.faculty_id) {
-            return String(combo.faculty_id) === selectedFaculty;
+            return String(combo.faculty_id) === String(selectedFaculty);
         }
         return false;
     }
@@ -701,12 +728,12 @@ function Timetable() {
 
   const calculateAssignedHours = (slots) => {
     const assignedHours = {};
-    if (!slots || !combos) return assignedHours;
+    if (!slots) return assignedHours;
 
     slots.forEach(dayRow => {
       dayRow.forEach(slot => {
         if (slot && slot !== -1 && slot !== "BREAK") {
-          const combo = combos.find(c => String(c._id) === String(slot));
+          const combo = comboById.get(String(slot));
           if (combo) {
             const subjectId = combo.subject_id;
             if (!assignedHours[subjectId]) {
@@ -923,11 +950,28 @@ function Timetable() {
         <button className="secondary-btn" onClick={clearFixedSlots} disabled={loading}>
           Clear Fixed Classes
         </button>
+        <div className="filters-container" style={{ marginTop: 10 }}>
+          <label>
+            Fixed Class
+            <select
+              value={fixedClassId}
+              onChange={(e) => setFixedClassId(e.target.value)}
+              style={{ marginLeft: 8 }}
+            >
+              {classes.map((cls) => (
+                <option key={cls._id} value={cls._id}>
+                  {getClassName(cls._id)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div style={{ marginTop: 14 }}>
-          {(selectedClass
-            ? classes.filter((cls) => String(cls._id) === String(selectedClass))
-            : classes
-          ).map((cls) => renderEmptyTable(cls._id))}
+          {fixedClassId
+            ? classes
+                .filter((cls) => String(cls._id) === String(fixedClassId))
+                .map((cls) => renderEmptyTable(cls._id))
+            : <p>Select a class to assign fixed slots.</p>}
         </div>
       </div>
 
@@ -961,22 +1005,22 @@ function Timetable() {
                             return <td key={h} style={cellStyle}>-</td>;
                           }
 
-                          const combo = combos && combos.find(c => String(c._id) === String(slot));
+                          const combo = comboById.get(String(slot));
                           if (!combo) {
                             return <td key={h} style={cellStyle}>?</td>;
                           }
 
-                          const subject = subjects && subjects.find(s => String(s._id) === String(combo.subject_id));
+                          const subject = subjectById.get(String(combo.subject_id));
                           const subjectName = subject ? subject.name : `Elective ${combo.subject_id.slice(-4)}`;
 
                           let facultyNames = [];
                           if (combo.faculty_ids) {
                               facultyNames = (combo.faculty_ids || []).map(tid => {
-                                  const faculty = faculties && faculties.find(f => String(f._id) === String(tid));
+                                  const faculty = facultyById.get(String(tid));
                                   return faculty ? faculty.name : "N/A";
                               });
                           } else if (combo.faculty_id) {
-                              const faculty = faculties && faculties.find(f => String(f._id) === String(combo.faculty_id));
+                              const faculty = facultyById.get(String(combo.faculty_id));
                               if (faculty) {
                                   facultyNames.push(faculty.name);
                               } else {
@@ -1005,8 +1049,8 @@ function Timetable() {
                         const assignedElectiveIds = new Set();
                         slots.flat().forEach(slot => {
                             if(!slot || slot === -1 || slot === "BREAK") return;
-                            const combo = combos.find(c => String(c._id) === String(slot));
-                            if (combo && !subjects.find(s => s._id === combo.subject_id)) {
+                            const combo = comboById.get(String(slot));
+                            if (combo && !subjectById.get(String(combo.subject_id))) {
                                 assignedElectiveIds.add(combo.subject_id);
                             }
                         });
@@ -1014,7 +1058,7 @@ function Timetable() {
                         return (
                             <>
                                 {currentClass.subject_hours && Object.entries(currentClass.subject_hours).map(([subjectId, requiredHours]) => {
-                                    const subject = subjects.find(s => String(s._id) === String(subjectId));
+                                    const subject = subjectById.get(String(subjectId));
                                     if (!subject) return null;
                                     const assigned = assignedHours[subjectId] || 0;
                                     

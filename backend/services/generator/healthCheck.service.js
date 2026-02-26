@@ -77,6 +77,7 @@ export function buildConstraintHealthReport({
   const comboById = new Map(combos.map((c) => [String(c._id), c]));
 
   const potentialTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
+  const estimatedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
   const forcedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
   const teacherAvailabilityCfg = constraintConfig?.teacherAvailability || {};
   const weeklyBalanceCfg = constraintConfig?.teacherWeeklyLoadBalance || {};
@@ -103,6 +104,7 @@ export function buildConstraintHealthReport({
     }
 
     const eligibleBySubject = new Map();
+    const comboFacultyGroupsBySubject = new Map();
     for (const comboId of allowedComboIds) {
       const combo = comboById.get(comboId);
       if (!combo) continue;
@@ -110,15 +112,34 @@ export function buildConstraintHealthReport({
       if (classIds.length > 0 && !classIds.includes(classId)) continue;
       const subjectId = String(combo.subject_id);
       if (!eligibleBySubject.has(subjectId)) eligibleBySubject.set(subjectId, new Set());
-      for (const fid of getComboFacultyIds(combo)) {
+      const facultyIds = Array.from(new Set(getComboFacultyIds(combo)));
+      if (!comboFacultyGroupsBySubject.has(subjectId)) comboFacultyGroupsBySubject.set(subjectId, []);
+      if (facultyIds.length > 0) comboFacultyGroupsBySubject.get(subjectId).push(facultyIds);
+      for (const fid of facultyIds) {
         eligibleBySubject.get(subjectId).add(fid);
       }
     }
 
+    const classSubjectHours =
+      cls?.subject_hours && typeof cls.subject_hours === "object" && !Array.isArray(cls.subject_hours)
+        ? cls.subject_hours
+        : null;
+    const classSubjectIds = classSubjectHours
+      ? Object.keys(classSubjectHours).filter((sid) => toInt(classSubjectHours[sid], 0) > 0)
+      : [];
+
     let classRequired = 0;
-    for (const subject of subjects) {
+    const subjectScope =
+      classSubjectIds.length > 0
+        ? classSubjectIds.map((sid) => subjectById.get(String(sid)) || { _id: String(sid), name: String(sid) })
+        : subjects;
+
+    for (const subject of subjectScope) {
       const subjectId = String(subject._id);
-      const req = requiredHoursFor(cls, subject);
+      const req =
+        classSubjectIds.length > 0
+          ? Math.max(0, toInt(classSubjectHours?.[subjectId], 0))
+          : requiredHoursFor(cls, subject);
       if (req <= 0) continue;
       classRequired += req;
 
@@ -132,10 +153,45 @@ export function buildConstraintHealthReport({
         continue;
       }
 
+      // Upper bound (legacy metric): a teacher might take all required hours if selected.
       for (const fid of eligibleSet) {
         potentialTeacherLoad.set(fid, (potentialTeacherLoad.get(fid) || 0) + req);
       }
-      if (eligibleSet.size === 1) {
+
+      const comboGroups = comboFacultyGroupsBySubject.get(subjectId) || [];
+      if (comboGroups.length > 0) {
+        // Estimate load by equally distributing a subject's hours across candidate combos,
+        // and across teachers participating in each combo.
+        const perComboWeight = req / comboGroups.length;
+        const presenceCount = new Map();
+        for (const group of comboGroups) {
+          const uniqueGroup = Array.from(new Set(group));
+          const perTeacherShare = uniqueGroup.length > 0 ? perComboWeight / uniqueGroup.length : 0;
+          for (const fid of uniqueGroup) {
+            estimatedTeacherLoad.set(
+              fid,
+              (estimatedTeacherLoad.get(fid) || 0) + perTeacherShare
+            );
+            presenceCount.set(fid, (presenceCount.get(fid) || 0) + 1);
+          }
+        }
+        // If a teacher appears in every feasible combo, their load for this subject is forced.
+        for (const [fid, count] of presenceCount.entries()) {
+          if (count === comboGroups.length) {
+            forcedTeacherLoad.set(fid, (forcedTeacherLoad.get(fid) || 0) + req);
+          }
+        }
+      } else if (eligibleSet.size > 0) {
+        const perTeacherShare = req / eligibleSet.size;
+        for (const fid of eligibleSet) {
+          estimatedTeacherLoad.set(
+            fid,
+            (estimatedTeacherLoad.get(fid) || 0) + perTeacherShare
+          );
+        }
+      }
+
+      if (comboGroups.length === 0 && eligibleSet.size === 1) {
         const [onlyFid] = Array.from(eligibleSet);
         forcedTeacherLoad.set(onlyFid, (forcedTeacherLoad.get(onlyFid) || 0) + req);
       }
@@ -162,6 +218,7 @@ export function buildConstraintHealthReport({
   for (const faculty of faculties) {
     const fid = String(faculty._id);
     const forced = forcedTeacherLoad.get(fid) || 0;
+    const estimated = estimatedTeacherLoad.get(fid) || 0;
     const potential = potentialTeacherLoad.get(fid) || 0;
     const teacherUnavailable = unavailableByTeacher.get(fid) || new Set();
     let unavailableCount = 0;
@@ -192,11 +249,11 @@ export function buildConstraintHealthReport({
         type: "teacher_forced_overload",
         message: `Teacher "${faculty.name || fid}" forced load ${forced} exceeds capacity ${teacherWeeklyCapacity}.`,
       });
-    } else if (potential > teacherWeeklyCapacity) {
+    } else if (estimated > teacherWeeklyCapacity) {
       warnings.push({
         severity: "warning",
         type: "teacher_potential_overload",
-        message: `Teacher "${faculty.name || fid}" potential load ${potential} exceeds capacity ${teacherWeeklyCapacity}.`,
+        message: `Teacher "${faculty.name || fid}" estimated load ${Math.ceil(estimated)} exceeds capacity ${teacherWeeklyCapacity} (upper-bound potential: ${potential}).`,
       });
     }
   }
@@ -323,10 +380,14 @@ export function buildConstraintHealthReport({
     const minPerDay = Math.max(0, toInt(classDailyMinCfg.minPerDay, 0));
     for (const cls of classes) {
       const days = Math.max(1, toInt(cls.days_per_week, schedule.daysPerWeek));
-      const classRequired = subjects.reduce(
-        (acc, subj) => acc + requiredHoursFor(cls, subj),
-        0
-      );
+      const classSubjectHours =
+        cls?.subject_hours && typeof cls.subject_hours === "object" && !Array.isArray(cls.subject_hours)
+          ? cls.subject_hours
+          : null;
+      const classRequired =
+        classSubjectHours && Object.keys(classSubjectHours).length > 0
+          ? Object.values(classSubjectHours).reduce((acc, val) => acc + Math.max(0, toInt(val, 0)), 0)
+          : subjects.reduce((acc, subj) => acc + requiredHoursFor(cls, subj), 0);
       if (minPerDay > usableSlotsPerDay) {
         warnings.push({
           severity: "error",

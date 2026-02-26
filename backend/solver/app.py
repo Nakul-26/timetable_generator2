@@ -40,8 +40,12 @@ def _normalize_id(item: Dict[str, Any]) -> Dict[str, Any]:
 def _required_hours(class_obj: Dict[str, Any], subject_obj: Dict[str, Any]) -> int:
     subj_id = subject_obj["_id"]
     subj_hours = class_obj.get("subject_hours") or {}
-    if subj_id in subj_hours and subj_hours[subj_id] is not None:
-        return int(subj_hours[subj_id])
+    # When class-specific subject hours are present, they are authoritative:
+    # subjects not listed for the class must be treated as 0 required hours.
+    if isinstance(subj_hours, dict) and len(subj_hours) > 0:
+        if subj_id in subj_hours and subj_hours[subj_id] is not None:
+            return int(subj_hours[subj_id])
+        return 0
     return int(subject_obj.get("no_of_hours_per_week") or 0)
 
 
@@ -801,9 +805,11 @@ async def solve(request: Request) -> Dict[str, Any]:
                     objective_terms.append(excess * subject_cluster_weight)
 
     # Medium soft constraint: global front-loading per class across the full week.
-    # Flatten class occupancy by (day, hour) order (excluding breaks) and penalize
-    # any 0 -> 1 transition, which means an occupied slot after an empty slot.
-    # This drives patterns toward: 111111000000 (empties at the end of the week).
+    # Flatten class occupancy by (day, hour) order (excluding breaks).
+    # 1) Penalize any 0 -> 1 transition (occupied after empty).
+    # 2) Penalize occupied slots with larger position index.
+    # Together this strongly pushes empty slots toward the end of the week,
+    # while still respecting hard constraints and fixed slots.
     if front_loading_enabled and front_loading_weight > 0:
         for cls in classes:
             class_id = cls["_id"]
@@ -830,6 +836,11 @@ async def solve(request: Request) -> Dict[str, Any]:
                 model.Add(violation <= next_occ)
                 model.Add(violation <= 1 - prev_occ)
                 objective_terms.append(violation * front_loading_weight)
+
+            # Additional compaction pressure: later occupied positions are costlier.
+            # This improves week-end empty-slot packing, especially when fixed slots exist.
+            for i, occ in enumerate(flat_occ):
+                objective_terms.append(occ * front_loading_weight * (i + 1))
 
     if objective_terms:
         model.Minimize(sum(objective_terms))
