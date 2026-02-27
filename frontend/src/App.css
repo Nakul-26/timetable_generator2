@@ -229,6 +229,9 @@
 .primary-btn,
 .secondary-btn,
 .danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 8px 12px;
   border: none;
   border-radius: 6px;
@@ -236,6 +239,8 @@
   font-weight: 500;
   cursor: pointer;
   margin-right: 8px;
+  text-decoration: none;
+  line-height: 1.2;
   transition: background 0.3s ease, transform 0.2s ease;
 }
 
@@ -259,6 +264,13 @@
 .secondary-btn:hover {
   background: #bbb;
   transform: translateY(-1px);
+}
+
+.secondary-btn:visited,
+.secondary-btn:link,
+.primary-btn:visited,
+.primary-btn:link {
+  color: inherit;
 }
 
 /* Delete */
@@ -688,6 +700,130 @@ h2 {
   -webkit-overflow-scrolling: touch;
 }
 
+.tt-progress-wrap {
+  margin: 10px 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tt-progress-bar {
+  width: 100%;
+}
+
+.tt-inline-toggle {
+  background: #fff;
+  border: 1px solid #ffd8bf;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #333;
+  font-weight: 600;
+}
+
+.tt-inline-toggle input[type="checkbox"] {
+  accent-color: #ff8c42;
+}
+
+.tt-options-row {
+  margin: -6px 0 12px;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.tt-section-card .secondary-btn,
+.tt-section-card .primary-btn {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.tt-section-card {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  background: #fffaf7;
+}
+
+.tt-subtext {
+  margin-top: 0;
+  color: #555;
+}
+
+.tt-tight-message {
+  margin-top: 10px;
+}
+
+.tt-health-list {
+  margin-top: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.tt-health-group {
+  margin-bottom: 10px;
+}
+
+.tt-health-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.tt-health-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.tt-health-error {
+  background: #ffe9e9;
+  border: 1px solid #e0b4b4;
+}
+
+.tt-health-warning {
+  background: #fff8e5;
+  border: 1px solid #e6d6a8;
+}
+
+.tt-health-info {
+  background: #eaf4ff;
+  border: 1px solid #b6d4ef;
+}
+
+.tt-top-gap {
+  margin-top: 10px;
+}
+
+.tt-fixed-class-select {
+  margin-left: 8px;
+}
+
+.tt-table-gap {
+  margin-top: 14px;
+}
+
+.tt-class-block {
+  margin-bottom: 30px;
+}
+
+.tt-cell-dim {
+  opacity: 0.3;
+}
+
+.tt-hours-report {
+  margin-top: 10px;
+}
+
+.tt-hours-report h4 {
+  margin: 0 0 6px;
+}
+
+.tt-hours-row {
+  margin-bottom: 4px;
+}
+
 .manual-header {
   display: flex;
   justify-content: space-between;
@@ -772,6 +908,99 @@ h2 {
   margin-bottom: 0;
 }
 
+.tt-settings-page {
+  max-width: 1280px;
+  background: linear-gradient(180deg, #fffefb 0%, #ffffff 220px);
+}
+
+.tt-settings-hero {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid #ffe3d0;
+  border-radius: 10px;
+  background: #fff8f2;
+}
+
+.tt-settings-hero h2 {
+  margin: 0 0 6px;
+  text-align: left;
+}
+
+.tt-settings-hero p {
+  margin: 0;
+  color: #57534e;
+}
+
+.tt-settings-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.tt-settings-saved {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-weight: 600;
+}
+
+.tt-settings-section {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #f2f2f2;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.tt-settings-section h3 {
+  margin: 0 0 6px;
+  color: #2f2a26;
+}
+
+.tt-settings-help {
+  margin: 0 0 12px;
+  color: #6b7280;
+  font-size: 0.92rem;
+}
+
+.tt-settings-row {
+  margin: 0;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.tt-settings-row + .tt-settings-row {
+  margin-top: 10px;
+}
+
+.tt-settings-row label {
+  min-width: 200px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #374151;
+  font-weight: 600;
+  font-size: 0.93rem;
+}
+
+.tt-settings-row input,
+.tt-settings-row select {
+  width: 100%;
+}
+
+.tt-settings-json {
+  margin-top: 12px;
+}
+
+.tt-settings-json small {
+  display: block;
+  margin-top: 6px;
+  color: #6b7280;
+}
+
 @media (max-width: 1024px) {
   .form-container,
   .manage-container,
@@ -850,6 +1079,10 @@ h2 {
   .manual-header-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .tt-settings-section {
+    padding: 12px;
   }
 }
 

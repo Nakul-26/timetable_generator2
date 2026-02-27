@@ -1,5 +1,9 @@
 // runGenerator.js
-import Generator from "./generator.js";
+const DEFAULT_SOLVER_URL = process.env.SOLVER_URL || "http://localhost:8001";
+const DEFAULT_SOLVER_TIME_LIMIT_SEC = Number(process.env.SOLVER_TIME_LIMIT_SEC || 180);
+const DEFAULT_TIMEOUT_MS = Number(
+  process.env.SOLVER_TIMEOUT_MS || (DEFAULT_SOLVER_TIME_LIMIT_SEC * 1000 + 30000)
+);
 
 function analyzeClassInternalGaps(classTimetables) {
   let gapCount = 0;
@@ -41,133 +45,109 @@ function analyzeClassInternalGaps(classTimetables) {
   return { gapCount };
 }
 
-function buildGreedyPartial({
+async function callCpSatSolver({
+  faculties,
+  subjects,
   classes,
   combos,
-  faculties,
-  fixedSlots = [],
-  DAYS_PER_WEEK = 6,
-  HOURS_PER_DAY = 8,
+  fixedSlots,
+  DAYS_PER_WEEK,
+  HOURS_PER_DAY,
+  constraintConfig,
+  random_seed,
+  onProgress,
+  stopFlag,
 }) {
-  const EMPTY = -1;
-
-  const class_timetables = {};
-  const maxDays = Math.max(
-    1,
-    ...classes.map((c) => Number(c.days_per_week || DAYS_PER_WEEK))
-  );
-  const faculty_timetables = {};
-  const comboById = new Map((combos || []).map((c) => [String(c._id), c]));
-  const subjectHoursByClass = new Map(
-    (classes || []).map((c) => [String(c._id), c.subject_hours || {}])
-  );
-
-  for (const cls of classes || []) {
-    const classId = String(cls._id);
-    const days = Number(cls.days_per_week || DAYS_PER_WEEK);
-    class_timetables[classId] = Array.from({ length: days }, () =>
-      Array(HOURS_PER_DAY).fill(EMPTY)
-    );
+  if (stopFlag?.is_set) {
+    return {
+      ok: false,
+      error: "Stopped by user",
+      class_timetables: {},
+      faculty_timetables: {},
+      classes: classes || [],
+      config: constraintConfig || {},
+    };
   }
 
-  for (const f of faculties || []) {
-    const fid = String(f._id);
-    faculty_timetables[fid] = Array.from({ length: maxDays }, () =>
-      Array(HOURS_PER_DAY).fill(EMPTY)
-    );
-  }
+  onProgress?.({ progress: 0, phase: "start" });
 
-  const canPlace = (classId, combo, day, hour) => {
-    if (!class_timetables[classId] || !class_timetables[classId][day]) return false;
-    if (class_timetables[classId][day][hour] !== EMPTY) return false;
-    for (const fid of combo.faculty_ids || []) {
-      if (!faculty_timetables[fid] || !faculty_timetables[fid][day]) return false;
-      if (faculty_timetables[fid][day][hour] !== EMPTY) return false;
-    }
-    return true;
-  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
 
-  const place = (classId, comboId, day, hour) => {
-    const combo = comboById.get(String(comboId));
-    if (!combo) return false;
-    if (!canPlace(classId, combo, day, hour)) return false;
-    class_timetables[classId][day][hour] = comboId;
-    for (const fid of combo.faculty_ids || []) {
-      faculty_timetables[fid][day][hour] = comboId;
-    }
-    return true;
-  };
+  try {
+    const solverTimeLimitSec =
+      Number(constraintConfig?.solver?.timeLimitSec) || DEFAULT_SOLVER_TIME_LIMIT_SEC;
 
-  // Place fixed slots first when valid.
-  for (const fs of fixedSlots || []) {
-    const classId = String(fs.class);
-    const day = Number(fs.day);
-    const hour = Number(fs.hour);
-    const comboId = String(fs.combo);
-    place(classId, comboId, day, hour);
-  }
-
-  const unmet_requirements = [];
-
-  for (const cls of classes || []) {
-    const classId = String(cls._id);
-    const days = Number(cls.days_per_week || DAYS_PER_WEEK);
-    const assignedSet = new Set((cls.assigned_teacher_subject_combos || []).map(String));
-    const classCombos = (combos || []).filter((cb) => {
-      const cidList = (cb.class_ids || []).map(String);
-      return assignedSet.has(String(cb._id)) || cidList.includes(classId);
+    const res = await fetch(`${DEFAULT_SOLVER_URL}/solve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        faculties,
+        subjects,
+        classes,
+        combos,
+        DAYS_PER_WEEK,
+        HOURS_PER_DAY,
+        fixed_slots: fixedSlots || [],
+        constraintConfig,
+        random_seed,
+        solver_time_limit_sec: solverTimeLimitSec,
+      }),
+      signal: controller.signal,
     });
 
-    const comboBySubject = new Map();
-    for (const cb of classCombos) {
-      const sid = String(cb.subject_id);
-      if (!comboBySubject.has(sid)) comboBySubject.set(sid, []);
-      comboBySubject.get(sid).push(cb);
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      return {
+        ok: false,
+        error: data?.error || `Solver HTTP ${res.status}`,
+        class_timetables: {},
+        faculty_timetables: {},
+        classes: classes || [],
+        config: constraintConfig || {},
+      };
     }
 
-    const subjectHours = subjectHoursByClass.get(classId) || {};
-    for (const [subjectId, required] of Object.entries(subjectHours)) {
-      let remaining = Number(required || 0);
-      if (remaining <= 0) continue;
-      const candidates = comboBySubject.get(String(subjectId)) || [];
-      if (candidates.length === 0) {
-        unmet_requirements.push({
-          class_id: classId,
-          subject_id: String(subjectId),
-          required_hours: remaining,
-          scheduled_hours: 0,
-          reason: "no_eligible_combos_or_slots",
-        });
-        continue;
-      }
-
-      let scheduled = 0;
-      outer: for (let day = 0; day < days; day++) {
-        for (let hour = 0; hour < HOURS_PER_DAY; hour++) {
-          for (const cb of candidates) {
-            if (place(classId, cb._id, day, hour)) {
-              scheduled += 1;
-              remaining -= 1;
-              break;
-            }
-          }
-          if (remaining <= 0) break outer;
-        }
-      }
-
-      if (remaining > 0) {
-        unmet_requirements.push({
-          class_id: classId,
-          subject_id: String(subjectId),
-          required_hours: Number(required || 0),
-          scheduled_hours: scheduled,
-          reason: "infeasible_under_current_constraints",
-        });
-      }
+    if (!data.ok) {
+      return {
+        ok: false,
+        error: data.error || "Solver error",
+        class_timetables: data.class_timetables || {},
+        faculty_timetables: data.faculty_timetables || {},
+        classes: data.classes || classes || [],
+        unmet_requirements: data.unmet_requirements || [],
+        warnings: data.warnings || [],
+        config: data.config || constraintConfig || {},
+      };
     }
+
+    onProgress?.({ progress: 100, phase: "done" });
+
+    return {
+      ok: true,
+      class_timetables: data.class_timetables || {},
+      faculty_timetables: data.faculty_timetables || {},
+      faculty_daily_hours: data.faculty_daily_hours || null,
+      classes: data.classes || classes || [],
+      unmet_requirements: data.unmet_requirements || [],
+      warnings: data.warnings || [],
+      config: data.config || constraintConfig || {},
+      allocations_report: data.allocations_report || null,
+    };
+  } catch (err) {
+    const msg =
+      err?.name === "AbortError" ? "Solver timeout" : (err?.message || "Solver request failed");
+    return {
+      ok: false,
+      error: msg,
+      class_timetables: {},
+      faculty_timetables: {},
+      classes: classes || [],
+      config: constraintConfig || {},
+    };
+  } finally {
+    clearTimeout(timeout);
   }
-
-  return { class_timetables, faculty_timetables, unmet_requirements };
 }
 
 async function runGenerate({
@@ -224,17 +204,17 @@ async function runGenerate({
     const shuffledFaculties = [...faculties];
     const shuffledSubjects = [...subjects];
 
-    const result = await Generator.generate({
+    const result = await callCpSatSolver({
       faculties: shuffledFaculties,
       subjects: shuffledSubjects,
       classes: shuffledClasses,
       combos: shuffledCombos,
-      fixed_slots: fixedSlots,
+      fixedSlots,
       DAYS_PER_WEEK,
       HOURS_PER_DAY,
       constraintConfig,
       random_seed: attempt + 1,
-      progressCallback: onProgress,
+      onProgress,
     });
 
     if (!result.ok) {
@@ -267,10 +247,7 @@ async function runGenerate({
       continue;
     }
 
-    const score = Generator.scoreTimetable(
-      result.class_timetables,
-      classes.map((c) => c._id)
-    );
+    const score = gapCount;
 
     if (process.env.NODE_ENV !== "production") {
       console.log(`Attempt ${attempt + 1}: Score = ${score}`);
@@ -299,26 +276,7 @@ async function runGenerate({
   }
 
   if (!best_class_timetables && (!bestPartial || bestPartialFilled <= 0)) {
-    // Do not auto-return greedy partial timetables when strict no-gap mode is enabled.
-    if (!enforceHardNoGaps) {
-      const fallback = buildGreedyPartial({
-        classes,
-        combos,
-        faculties,
-        fixedSlots,
-        DAYS_PER_WEEK,
-        HOURS_PER_DAY,
-      });
-      bestPartial = {
-        class_timetables: fallback.class_timetables,
-        faculty_timetables: fallback.faculty_timetables,
-        classes,
-        combos,
-        config: constraintConfig || {},
-        unmet_requirements: fallback.unmet_requirements,
-        warnings: [],
-      };
-    }
+    bestPartial = null;
   }
 
   return {

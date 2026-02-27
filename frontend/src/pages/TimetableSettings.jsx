@@ -171,9 +171,16 @@ function TimetableSettings() {
   };
 
   return (
-    <div className="manage-container">
-      <h2>Timetable Settings</h2>
-      <div className="actions-bar">
+    <div className="manage-container tt-settings-page">
+      <div className="tt-settings-hero">
+        <h2>Timetable Settings</h2>
+        <p>
+          Start with schedule basics, then tune constraints. Use soft rules for flexibility and
+          hard rules only when absolutely required.
+        </p>
+      </div>
+
+      <div className="actions-bar tt-settings-actions">
         <button className="primary-btn" onClick={save}>Save Settings</button>
         <button className="secondary-btn" onClick={resetDefaults}>Reset Defaults</button>
         <button className="secondary-btn" onClick={() => setJsonMode((v) => !v)}>
@@ -181,9 +188,15 @@ function TimetableSettings() {
         </button>
         <Link className="secondary-btn" to="/timetable">Go To Generate</Link>
       </div>
-      {savedAt ? <div>Saved at: {savedAt}</div> : null}
+      {savedAt ? <div className="tt-settings-saved">Saved at: {savedAt}</div> : null}
 
-      <div className="filters-container" style={{ marginTop: 16 }}>
+      <section className="tt-settings-section">
+        <h3>Schedule Basics</h3>
+        <p className="tt-settings-help">
+          Define the timetable shape first. Slot indexes are zero-based, so first period is hour
+          0.
+        </p>
+        <div className="filters-container tt-settings-row">
         <label>
           Days Per Week
           <input
@@ -232,9 +245,15 @@ function TimetableSettings() {
             }
           />
         </label>
-      </div>
+        </div>
+      </section>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+      <section className="tt-settings-section">
+        <h3>Core Rules</h3>
+        <p className="tt-settings-help">
+          Use hard mode for strict compliance. Soft mode allows violations with penalties.
+        </p>
+        <div className="filters-container tt-settings-row">
         <label>
           Weekly Subject Hours
           <select
@@ -277,9 +296,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+        <div className="filters-container tt-settings-row">
         <label>
           No Gaps Rule
           <select
@@ -334,9 +353,15 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
+      </section>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+      <section className="tt-settings-section">
+        <h3>Daily Flow And Continuity</h3>
+        <p className="tt-settings-help">
+          These settings prevent overloaded days and too many back-to-back periods.
+        </p>
+        <div className="filters-container tt-settings-row">
         <label>
           Teacher Max Daily Load
           <input
@@ -377,9 +402,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+        <div className="filters-container tt-settings-row">
         <label>
           Teacher Max Consecutive
           <input
@@ -420,9 +445,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+        <div className="filters-container tt-settings-row">
         <label>
           Class Max Consecutive
           <input
@@ -463,9 +488,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+        <div className="filters-container tt-settings-row">
         <label>
           Subject Max Per Day
           <input
@@ -506,9 +531,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+        <div className="filters-container tt-settings-row">
         <label>
           Front Loading
           <select
@@ -551,9 +576,15 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
+      </section>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+      <section className="tt-settings-section">
+        <h3>Teacher Availability</h3>
+        <p className="tt-settings-help">
+          Keep this enabled if faculty leaves/blocks should be respected globally or per teacher.
+        </p>
+        <div className="filters-container tt-settings-row">
         <label>
           Teacher Availability
           <select
@@ -615,9 +646,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div style={{ marginTop: 12 }}>
+        <div className="tt-settings-json">
         <label style={{ display: "block", marginBottom: 6 }}>
           {'Global Unavailable Slots JSON ([{ "day": 5, "hour": 0 }])'}
         </label>
@@ -636,9 +667,10 @@ function TimetableSettings() {
           rows={4}
           style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
         />
-      </div>
+          <small>Example: block first period on Saturday with {`[{ "day": 5, "hour": 0 }]`}.</small>
+        </div>
 
-      <div style={{ marginTop: 12 }}>
+        <div className="tt-settings-json">
         <label style={{ display: "block", marginBottom: 6 }}>
           {'Teacher Unavailable Slots JSON ({"teacherId":[{"day":0,"hour":2}]})'}
         </label>
@@ -657,9 +689,16 @@ function TimetableSettings() {
           rows={6}
           style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
         />
-      </div>
+          <small>Use teacher IDs as keys and provide a list of blocked slots for each teacher.</small>
+        </div>
+      </section>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+      <section className="tt-settings-section">
+        <h3>Weekly Teacher Load</h3>
+        <p className="tt-settings-help">
+          Keep min, target and max close to realistic workload to reduce impossible schedules.
+        </p>
+        <div className="filters-container tt-settings-row">
         <label>
           Teacher Weekly Load Balance
           <select
@@ -732,9 +771,9 @@ function TimetableSettings() {
             disabled={!config.teacherWeeklyLoadBalance.enabled}
           />
         </label>
-      </div>
+        </div>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+        <div className="filters-container tt-settings-row">
         <label>
           Min Weekly Load Rule
           <select
@@ -821,9 +860,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+        <div className="filters-container tt-settings-row">
         <label>
           Class Daily Minimum Load
           <select
@@ -903,9 +942,16 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
+      </section>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+      <section className="tt-settings-section">
+        <h3>Boundary Preferences</h3>
+        <p className="tt-settings-help">
+          Use this when some teachers should avoid first/last periods. Add per-teacher overrides
+          only if needed.
+        </p>
+        <div className="filters-container tt-settings-row">
         <label>
           Teacher First/Last Period Preference
           <select
@@ -986,9 +1032,9 @@ function TimetableSettings() {
             <option value="very_high">Very High</option>
           </select>
         </label>
-      </div>
+        </div>
 
-      <div style={{ marginTop: 12 }}>
+        <div className="tt-settings-json">
         <label style={{ display: "block", marginBottom: 6 }}>
           {'Teacher First/Last Overrides JSON ({"teacherId":{"avoidFirstPeriod":true,"avoidLastPeriod":false}})'}
         </label>
@@ -1007,9 +1053,19 @@ function TimetableSettings() {
           rows={5}
           style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
         />
-      </div>
+          <small>
+            Override only exceptions. If a teacher is missing here, global boundary settings apply.
+          </small>
+        </div>
+      </section>
 
-      <div className="filters-container" style={{ marginTop: 12 }}>
+      <section className="tt-settings-section">
+        <h3>Structural And Solver</h3>
+        <p className="tt-settings-help">
+          Tune these for performance and timetable shape. Increase solver time limit only if runs
+          often fail to find a solution.
+        </p>
+        <div className="filters-container tt-settings-row">
         <label>
           Lab Block Size
           <input
@@ -1052,12 +1108,13 @@ function TimetableSettings() {
             }
           />
         </label>
-      </div>
+        </div>
+      </section>
 
       {jsonMode ? (
-        <div style={{ marginTop: 16 }}>
+        <section className="tt-settings-section">
           <h3>Advanced JSON</h3>
-          <p style={{ marginTop: 0 }}>
+          <p className="tt-settings-help">
             Advanced mode exposes raw numeric weights. Use only for expert tuning.
           </p>
           <textarea
@@ -1076,7 +1133,7 @@ function TimetableSettings() {
             </button>
           </div>
           {jsonError ? <div className="error-message">{jsonError}</div> : null}
-        </div>
+        </section>
       ) : null}
     </div>
   );

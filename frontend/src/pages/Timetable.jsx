@@ -629,50 +629,52 @@ function Timetable() {
   const renderEmptyTable = (classId) => {
     const classOptions = fixedClassComboOptionsByClass.get(String(classId)) || [];
     return (
-      <div key={classId} style={{ marginBottom: "30px" }}>
+      <div key={classId} className="tt-class-block">
         <h3>
           Class: {getClassName(classId)}
         </h3>
-        <table className="styled-table">
-          <thead>
-            <tr>
-              <th>Day / Period</th>
-              {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
-                <th key={p}>P{p + 1}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: DAYS_PER_WEEK }).map((_, d) => (
-              <tr key={d}>
-                <td>Day {d + 1}</td>
-                {Array.from({ length: HOURS_PER_DAY }).map((_, h) => {
-                  const selected =
-                    fixedSlots[classId]?.[d]?.[h] || "";
-                  return (
-                    <td key={h}>
-                      <select
-                        value={selected}
-                        onChange={(e) =>
-                          handleSlotChange(classId, d, h, e.target.value)
-                        }
-                      >
-                        <option value="">
-                          --Select faculty-subject--
-                        </option>
-                        {classOptions.map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  );
-                })}
+        <div className="table-responsive">
+          <table className="styled-table">
+            <thead>
+              <tr>
+                <th>Day / Period</th>
+                {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
+                  <th key={p}>P{p + 1}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {Array.from({ length: DAYS_PER_WEEK }).map((_, d) => (
+                <tr key={d}>
+                  <td>Day {d + 1}</td>
+                  {Array.from({ length: HOURS_PER_DAY }).map((_, h) => {
+                    const selected =
+                      fixedSlots[classId]?.[d]?.[h] || "";
+                    return (
+                      <td key={h}>
+                        <select
+                          value={selected}
+                          onChange={(e) =>
+                            handleSlotChange(classId, d, h, e.target.value)
+                          }
+                        >
+                          <option value="">
+                            --Select faculty-subject--
+                          </option>
+                          {classOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -764,9 +766,9 @@ function Timetable() {
       <h2>Timetable Generator</h2>
 
       {loading && (
-        <div style={{ margin: "10px 0" }}>
-          <progress value={progress} max="100" style={{ width: "100%" }} />
-          <span> {progress}%</span>
+        <div className="tt-progress-wrap">
+          <progress value={progress} max="100" className="tt-progress-bar" />
+          <span>{progress}%</span>
         </div>
       )}
 
@@ -786,14 +788,6 @@ function Timetable() {
         >
           Generate
         </button>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={blockGenerateOnHealthErrors}
-            onChange={(e) => setBlockGenerateOnHealthErrors(e.target.checked)}
-          />
-          Block generate on health errors
-        </label>
         {/* <button className="danger-btn" onClick={stopGeneration} disabled={!loading}>
           Stop
         </button> */}
@@ -818,6 +812,16 @@ function Timetable() {
         <button className="secondary-btn" onClick={downloadFilteredPdf} disabled={loading || !timetable}>
           Download Filtered PDF
         </button>
+      </div>
+      <div className="tt-options-row">
+        <label className="tt-inline-toggle">
+          <input
+            type="checkbox"
+            checked={blockGenerateOnHealthErrors}
+            onChange={(e) => setBlockGenerateOnHealthErrors(e.target.checked)}
+          />
+          <span>Block generate on health errors</span>
+        </label>
       </div>
 
       {showFilters && (
@@ -857,9 +861,9 @@ function Timetable() {
 
       {error && <div className="error-message">{error}</div>}
 
-      <div style={{ marginTop: 20 }}>
+      <div className="tt-section-card">
         <h3>Active Constraint Policy</h3>
-        <p style={{ marginTop: 0 }}>
+        <p className="tt-subtext">
           Configure solver rules on the dedicated settings page.
         </p>
         <div className="filters-container">
@@ -873,9 +877,9 @@ function Timetable() {
       </div>
 
       {healthReport ? (
-        <div style={{ marginTop: 20 }}>
+        <div className="tt-section-card">
           <h3>Constraint Health Report</h3>
-          <p style={{ marginTop: 0 }}>
+          <p className="tt-subtext">
             Status: <b>{healthReport.ok ? "Healthy" : "Needs Attention"}</b>
           </p>
           <div className="filters-container">
@@ -894,40 +898,24 @@ function Timetable() {
             </select>
           </div>
           {isGenerateBlockedByHealth ? (
-            <div className="error-message" style={{ marginTop: 10 }}>
+            <div className="error-message tt-tight-message">
               Generate is blocked because health check contains errors.
             </div>
           ) : null}
           {filteredHealthWarnings.length > 0 ? (
-            <div style={{ marginTop: 10, maxHeight: 220, overflowY: "auto" }}>
+            <div className="tt-health-list">
               {["error", "warning", "info"].map((severity) => {
                 const items = groupedHealthWarnings[severity] || [];
                 if (!items.length) return null;
                 return (
-                  <div key={severity} style={{ marginBottom: 8 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 6 }}>
+                  <div key={severity} className="tt-health-group">
+                    <div className="tt-health-title">
                       {severity.toUpperCase()} ({items.length})
                     </div>
                     {items.map((w, idx) => (
                       <div
                         key={`${w.type || "warning"}-${severity}-${idx}`}
-                        style={{
-                          padding: "8px 10px",
-                          borderRadius: 6,
-                          marginBottom: 8,
-                          background:
-                            severity === "error"
-                              ? "#ffe9e9"
-                              : severity === "warning"
-                                ? "#fff8e5"
-                                : "#eaf4ff",
-                          border:
-                            severity === "error"
-                              ? "1px solid #e0b4b4"
-                              : severity === "warning"
-                                ? "1px solid #e6d6a8"
-                                : "1px solid #b6d4ef",
-                        }}
+                        className={`tt-health-item tt-health-${severity}`}
                       >
                         <b>{severity.toUpperCase()}</b>: {w.message}
                       </div>
@@ -942,21 +930,21 @@ function Timetable() {
         </div>
       ) : null}
 
-      <div style={{ marginTop: 20 }}>
+      <div className="tt-section-card">
         <h3>Fixed Classes (Empty Timetable)</h3>
-        <p style={{ marginTop: 0 }}>
+        <p className="tt-subtext">
           Assign slots here to lock them before you generate.
         </p>
         <button className="secondary-btn" onClick={clearFixedSlots} disabled={loading}>
           Clear Fixed Classes
         </button>
-        <div className="filters-container" style={{ marginTop: 10 }}>
+        <div className="filters-container tt-top-gap">
           <label>
             Fixed Class
             <select
               value={fixedClassId}
               onChange={(e) => setFixedClassId(e.target.value)}
-              style={{ marginLeft: 8 }}
+              className="tt-fixed-class-select"
             >
               {classes.map((cls) => (
                 <option key={cls._id} value={cls._id}>
@@ -966,7 +954,7 @@ function Timetable() {
             </select>
           </label>
         </div>
-        <div style={{ marginTop: 14 }}>
+        <div className="tt-table-gap">
           {fixedClassId
             ? classes
                 .filter((cls) => String(cls._id) === String(fixedClassId))
@@ -976,73 +964,75 @@ function Timetable() {
       </div>
 
       {timetable && timetable.class_timetables && (
-        <div style={{ marginTop: 20 }}>
+        <div className="tt-section-card">
           {filteredTimetable().map(([classId, slots]) => {
             const assignedHours = calculateAssignedHours(slots);
             const currentClass = classById.get(classId);
 
             return (
-              <div key={classId} style={{ marginBottom: 40 }}>
+              <div key={classId} className="tt-class-block">
                 <h3>{getClassName(classId)}</h3>
-                <table className="styled-table">
-                  <thead>
-                    <tr>
-                      <th>Day / Period</th>
-                      {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
-                        <th key={p}>P{p + 1}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {slots.map((row, d) => (
-                      <tr key={d}>
-                        <td>Day {d + 1}</td>
-                        {row.map((slot, h) => {
-                          const cellMatches = isCellMatching(slot);
-                          const cellStyle = { opacity: cellMatches ? 1 : 0.3 };
-
-                          if (!slot || slot === -1 || slot === "BREAK") {
-                            return <td key={h} style={cellStyle}>-</td>;
-                          }
-
-                          const combo = comboById.get(String(slot));
-                          if (!combo) {
-                            return <td key={h} style={cellStyle}>?</td>;
-                          }
-
-                          const subject = subjectById.get(String(combo.subject_id));
-                          const subjectName = subject ? subject.name : `Elective ${combo.subject_id.slice(-4)}`;
-
-                          let facultyNames = [];
-                          if (combo.faculty_ids) {
-                              facultyNames = (combo.faculty_ids || []).map(tid => {
-                                  const faculty = facultyById.get(String(tid));
-                                  return faculty ? faculty.name : "N/A";
-                              });
-                          } else if (combo.faculty_id) {
-                              const faculty = facultyById.get(String(combo.faculty_id));
-                              if (faculty) {
-                                  facultyNames.push(faculty.name);
-                              } else {
-                                  facultyNames.push("N/A");
-                              }
-                          }
-
-                          return (
-                            <td key={h} style={cellStyle}>
-                              <div>
-                                <b>{subjectName}</b>
-                              </div>
-                              {facultyNames.map((name, i) => <div key={i}>{name}</div>)}
-                            </td>
-                          );
-                        })}
+                <div className="table-responsive">
+                  <table className="styled-table">
+                    <thead>
+                      <tr>
+                        <th>Day / Period</th>
+                        {Array.from({ length: HOURS_PER_DAY }).map((_, p) => (
+                          <th key={p}>P{p + 1}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div style={{ marginTop: '10px' }}>
-                    <h4 style={{ marginBottom: '5px' }}>Subject Hours Report</h4>
+                    </thead>
+                    <tbody>
+                      {slots.map((row, d) => (
+                        <tr key={d}>
+                          <td>Day {d + 1}</td>
+                          {row.map((slot, h) => {
+                            const cellMatches = isCellMatching(slot);
+                            const cellClassName = cellMatches ? "" : "tt-cell-dim";
+
+                            if (!slot || slot === -1 || slot === "BREAK") {
+                              return <td key={h} className={cellClassName}>-</td>;
+                            }
+
+                            const combo = comboById.get(String(slot));
+                            if (!combo) {
+                              return <td key={h} className={cellClassName}>?</td>;
+                            }
+
+                            const subject = subjectById.get(String(combo.subject_id));
+                            const subjectName = subject ? subject.name : `Elective ${combo.subject_id.slice(-4)}`;
+
+                            let facultyNames = [];
+                            if (combo.faculty_ids) {
+                                facultyNames = (combo.faculty_ids || []).map(tid => {
+                                    const faculty = facultyById.get(String(tid));
+                                    return faculty ? faculty.name : "N/A";
+                                });
+                            } else if (combo.faculty_id) {
+                                const faculty = facultyById.get(String(combo.faculty_id));
+                                if (faculty) {
+                                    facultyNames.push(faculty.name);
+                                } else {
+                                    facultyNames.push("N/A");
+                                }
+                            }
+
+                            return (
+                              <td key={h} className={cellClassName}>
+                                <div>
+                                  <b>{subjectName}</b>
+                                </div>
+                                {facultyNames.map((name, i) => <div key={i}>{name}</div>)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="tt-hours-report">
+                    <h4>Subject Hours Report</h4>
                     {(() => {
                         if (!currentClass) return null;
 
@@ -1066,7 +1056,7 @@ function Timetable() {
                                     if (assigned === 0 && requiredHours === 0) return null;
 
                                     return (
-                                        <div key={subjectId}>
+                                        <div key={subjectId} className="tt-hours-row">
                                             <span>{subject.name}: {assigned} / {requiredHours}</span>
                                         </div>
                                     )
@@ -1077,7 +1067,7 @@ function Timetable() {
                                     const name = `Elective ${subjectId.slice(-4)}`;
                                     const requiredHours = currentClass?.subject_hours?.[subjectId] ?? 'N/A';
                                     return (
-                                        <div key={subjectId}>
+                                        <div key={subjectId} className="tt-hours-row">
                                             <span>{name}: {assigned} / {requiredHours}</span>
                                         </div>
                                     );

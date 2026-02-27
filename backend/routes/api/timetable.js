@@ -9,7 +9,6 @@ import ClassSubject from '../../models/ClassSubject.js';
 import TeacherSubjectCombination from '../../models/TeacherSubjectCombination.js';
 import TimetableResult from '../../models/TimetableResult.js';
 import ElectiveSubjectSetting from '../../models/ElectiveSubjectSetting.js';
-import generator from '../../models/lib/generator.js';
 import runGenerate from '../../models/lib/runGenerator.js';
 // Removed: import converter from '../../models/lib/convertNewCollegeInputToGeneratorData.js';
 import { prepareGeneratorData } from '../../services/generator/prepareGeneratorData.js';
