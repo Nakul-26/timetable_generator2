@@ -12,6 +12,7 @@ import ManageClassSubject from './pages/assignments/ManageClassSubject';
 import ManageClassFaculty from './pages/assignments/ManageClassFaculty';
 import ManageTeacherSubject from './pages/assignments/ManageTeacherSubject';
 import ManageElectiveSubjects from './pages/assignments/ManageElectiveSubjects';
+import ManageTeachingAllocations from './pages/assignments/ManageTeachingAllocations';
 import ManualTimetable from './pages/manual/ManualTimetable.jsx';
 import ProcessInputs from './pages/assignments/ProcessInputs.jsx';
 import SavedTimetables from './pages/SavedTimetables.jsx';
@@ -84,6 +85,7 @@ function App() {
           <Route path="/classes" element={<PrivateRoute><ClassManager /></PrivateRoute>} />
           <Route path="/class-subjects" element={<PrivateRoute><ManageClassSubject /></PrivateRoute>} />
           <Route path="/class-faculties" element={<PrivateRoute><ManageClassFaculty /></PrivateRoute>} />
+          <Route path="/teaching-allocations" element={<PrivateRoute><ManageTeachingAllocations /></PrivateRoute>} />
           <Route path="/class-elective-subjects" element={<PrivateRoute><ManageElectiveSubjects /></PrivateRoute>} />
           <Route path="/timetable" element={<PrivateRoute><Timetable /></PrivateRoute>} />
           <Route path="/timetable/settings" element={<PrivateRoute><TimetableSettings /></PrivateRoute>} />

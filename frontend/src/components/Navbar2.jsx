@@ -37,6 +37,7 @@ const Navbar = () => {
         <NavLink to="/classes" className="nav-item" onClick={() => setIsMenuOpen(false)}>Classes</NavLink>
         <NavLink to="/class-subjects" className="nav-item" onClick={() => setIsMenuOpen(false)}>Class Subjects</NavLink>
         <NavLink to="/class-faculties" className="nav-item" onClick={() => setIsMenuOpen(false)}>Class Faculties</NavLink>
+        <NavLink to="/teaching-allocations" className="nav-item" onClick={() => setIsMenuOpen(false)}>Class - Subject - Teacher</NavLink>
         <NavLink to="/class-elective-subjects" className="nav-item" onClick={() => setIsMenuOpen(false)}>Elective Subjects</NavLink>
         <NavLink to="/teacher-subject-combos" className="nav-item" onClick={() => setIsMenuOpen(false)}>Teacher Subjects</NavLink>
         {/* <NavLink to="/process-inputs" className="nav-item">Process Inputs</NavLink> */}

@@ -8,6 +8,7 @@ import classRoutes from './api/class.js';
 import teacherSubjectRoutes from './api/teacherSubject.js';
 import classSubjectRoutes from './api/classSubject.js';
 import timetableRoutes from './api/timetable.js';
+import teachingAllocationRoutes from './api/teachingAllocation.js';
 
 const router = Router();
 const protectedRouter = Router();
@@ -22,6 +23,7 @@ protectedRouter.use(subjectRoutes);
 protectedRouter.use(classRoutes);
 protectedRouter.use(teacherSubjectRoutes);
 protectedRouter.use(classSubjectRoutes);
+protectedRouter.use(teachingAllocationRoutes);
 protectedRouter.use(timetableRoutes);
 
 router.use(protectedRouter);
