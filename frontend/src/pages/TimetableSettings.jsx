@@ -84,6 +84,18 @@ function TimetableSettings() {
         DEFAULT_CONSTRAINT_CONFIG.frontLoading.weight,
         config.frontLoading.weight
       ),
+      frontLoadingTransition: toStrength(
+        DEFAULT_CONSTRAINT_CONFIG.frontLoading.transitionWeight,
+        config.frontLoading.transitionWeight
+      ),
+      frontLoadingEmptyBeforeLater: toStrength(
+        DEFAULT_CONSTRAINT_CONFIG.frontLoading.emptyBeforeLaterOccupiedWeight,
+        config.frontLoading.emptyBeforeLaterOccupiedWeight
+      ),
+      frontLoadingLateSlot: toStrength(
+        DEFAULT_CONSTRAINT_CONFIG.frontLoading.lateSlotWeight,
+        config.frontLoading.lateSlotWeight
+      ),
       teacherAvailability: toStrength(
         DEFAULT_CONSTRAINT_CONFIG.teacherAvailability.weight,
         config.teacherAvailability.weight
@@ -553,16 +565,97 @@ function TimetableSettings() {
           </select>
         </label>
         <label>
-          Front Loading Strength
+          Front Loading Overall Strength
           <select
             value={strengths.frontLoading}
+            onChange={(e) =>
+              updateConfig((prev) => {
+                const weight = fromStrength(
+                  DEFAULT_CONSTRAINT_CONFIG.frontLoading.weight,
+                  e.target.value
+                );
+                return {
+                  ...prev,
+                  frontLoading: {
+                    ...prev.frontLoading,
+                    weight,
+                    transitionWeight: weight,
+                    emptyBeforeLaterOccupiedWeight: weight,
+                    lateSlotWeight: weight,
+                  },
+                };
+              })
+            }
+            disabled={!config.frontLoading.enabled}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="very_high">Very High</option>
+          </select>
+        </label>
+        </div>
+
+        <div className="filters-container tt-settings-row">
+        <label>
+          Front Loading Transition Strength
+          <select
+            value={strengths.frontLoadingTransition}
             onChange={(e) =>
               updateConfig((prev) => ({
                 ...prev,
                 frontLoading: {
                   ...prev.frontLoading,
-                  weight: fromStrength(
-                    DEFAULT_CONSTRAINT_CONFIG.frontLoading.weight,
+                  transitionWeight: fromStrength(
+                    DEFAULT_CONSTRAINT_CONFIG.frontLoading.transitionWeight,
+                    e.target.value
+                  ),
+                },
+              }))
+            }
+            disabled={!config.frontLoading.enabled}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="very_high">Very High</option>
+          </select>
+        </label>
+        <label>
+          Front Loading Empty-Before-Later Strength
+          <select
+            value={strengths.frontLoadingEmptyBeforeLater}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                frontLoading: {
+                  ...prev.frontLoading,
+                  emptyBeforeLaterOccupiedWeight: fromStrength(
+                    DEFAULT_CONSTRAINT_CONFIG.frontLoading.emptyBeforeLaterOccupiedWeight,
+                    e.target.value
+                  ),
+                },
+              }))
+            }
+            disabled={!config.frontLoading.enabled}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="very_high">Very High</option>
+          </select>
+        </label>
+        <label>
+          Front Loading Late-Slot Strength
+          <select
+            value={strengths.frontLoadingLateSlot}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                frontLoading: {
+                  ...prev.frontLoading,
+                  lateSlotWeight: fromStrength(
+                    DEFAULT_CONSTRAINT_CONFIG.frontLoading.lateSlotWeight,
                     e.target.value
                   ),
                 },

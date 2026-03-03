@@ -56,6 +56,8 @@ async function callCpSatSolver({
   constraintConfig,
   random_seed,
   onProgress,
+  progressStart = 0,
+  progressEnd = 95,
   stopFlag,
 }) {
   if (stopFlag?.is_set) {
@@ -69,15 +71,30 @@ async function callCpSatSolver({
     };
   }
 
-  onProgress?.({ progress: 0, phase: "start" });
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const solverTimeLimitSec =
+    Number(constraintConfig?.solver?.timeLimitSec) || DEFAULT_SOLVER_TIME_LIMIT_SEC;
+  const expectedMs = Math.max(15_000, Math.round(solverTimeLimitSec * 1000));
+  const progressSpan = Math.max(1, progressEnd - progressStart);
+  const capBeforeDone = Math.min(99, Math.max(progressStart, progressEnd - 1));
+  const startedAt = Date.now();
+  let heartbeat = null;
+
+  const emitProgress = (value, phase = "running") => {
+    const clamped = Math.max(progressStart, Math.min(capBeforeDone, Math.round(value)));
+    onProgress?.({ progress: clamped, phase });
+  };
+
+  emitProgress(progressStart, "start");
+  heartbeat = setInterval(() => {
+    const elapsed = Date.now() - startedAt;
+    const ratio = Math.min(1, elapsed / expectedMs);
+    const eased = 1 - Math.pow(1 - ratio, 2);
+    emitProgress(progressStart + eased * progressSpan, "running");
+  }, 2000);
 
   try {
-    const solverTimeLimitSec =
-      Number(constraintConfig?.solver?.timeLimitSec) || DEFAULT_SOLVER_TIME_LIMIT_SEC;
-
     const res = await fetch(`${DEFAULT_SOLVER_URL}/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -121,7 +138,10 @@ async function callCpSatSolver({
       };
     }
 
-    onProgress?.({ progress: 100, phase: "done" });
+    onProgress?.({
+      progress: Math.max(progressStart, Math.min(99, Math.round(progressEnd))),
+      phase: "solver_done",
+    });
 
     return {
       ok: true,
@@ -146,6 +166,7 @@ async function callCpSatSolver({
       config: constraintConfig || {},
     };
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
     clearTimeout(timeout);
   }
 }
@@ -199,6 +220,8 @@ async function runGenerate({
   };
 
   for (let attempt = 0; attempt < attempts; attempt++) {
+    const progressStart = Math.floor((attempt * 95) / Math.max(1, attempts));
+    const progressEnd = Math.floor(((attempt + 1) * 95) / Math.max(1, attempts));
     const shuffledClasses = [...classes];
     const shuffledCombos = [...combos];
     const shuffledFaculties = [...faculties];
@@ -215,6 +238,8 @@ async function runGenerate({
       constraintConfig,
       random_seed: attempt + 1,
       onProgress,
+      progressStart,
+      progressEnd,
     });
 
     if (!result.ok) {
@@ -278,6 +303,8 @@ async function runGenerate({
   if (!best_class_timetables && (!bestPartial || bestPartialFilled <= 0)) {
     bestPartial = null;
   }
+
+  onProgress?.({ progress: 100, phase: "done" });
 
   return {
     ok: Boolean(best_class_timetables),

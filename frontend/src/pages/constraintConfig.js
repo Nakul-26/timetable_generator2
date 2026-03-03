@@ -41,6 +41,9 @@ export const DEFAULT_CONSTRAINT_CONFIG = {
   frontLoading: {
     enabled: true,
     weight: 400,
+    transitionWeight: 400,
+    emptyBeforeLaterOccupiedWeight: 400,
+    lateSlotWeight: 400,
   },
   teacherAvailability: {
     enabled: false,
@@ -239,6 +242,21 @@ export function normalizeConstraintConfig(input = {}) {
     frontLoading: {
       enabled: toBool(frontLoading.enabled, DEFAULT_CONSTRAINT_CONFIG.frontLoading.enabled),
       weight: safeInt(frontLoading.weight, DEFAULT_CONSTRAINT_CONFIG.frontLoading.weight, 0),
+      transitionWeight: safeInt(
+        frontLoading.transitionWeight,
+        frontLoading.weight ?? DEFAULT_CONSTRAINT_CONFIG.frontLoading.transitionWeight,
+        0
+      ),
+      emptyBeforeLaterOccupiedWeight: safeInt(
+        frontLoading.emptyBeforeLaterOccupiedWeight,
+        frontLoading.weight ?? DEFAULT_CONSTRAINT_CONFIG.frontLoading.emptyBeforeLaterOccupiedWeight,
+        0
+      ),
+      lateSlotWeight: safeInt(
+        frontLoading.lateSlotWeight,
+        frontLoading.weight ?? DEFAULT_CONSTRAINT_CONFIG.frontLoading.lateSlotWeight,
+        0
+      ),
     },
     teacherAvailability: {
       enabled: toBool(teacherAvailability.enabled, DEFAULT_CONSTRAINT_CONFIG.teacherAvailability.enabled),

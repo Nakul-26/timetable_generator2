@@ -208,6 +208,36 @@ async def solve(request: Request) -> Dict[str, Any]:
         _cfg_get(constraint_config, ["frontLoading", "enabled"], True), True
     )
     front_loading_weight = max(0, int(_cfg_get(constraint_config, ["frontLoading", "weight"], 400)))
+    front_loading_transition_weight = max(
+        0,
+        int(
+            _cfg_get(
+                constraint_config,
+                ["frontLoading", "transitionWeight"],
+                front_loading_weight,
+            )
+        ),
+    )
+    front_loading_empty_before_later_weight = max(
+        0,
+        int(
+            _cfg_get(
+                constraint_config,
+                ["frontLoading", "emptyBeforeLaterOccupiedWeight"],
+                front_loading_weight,
+            )
+        ),
+    )
+    front_loading_late_slot_weight = max(
+        0,
+        int(
+            _cfg_get(
+                constraint_config,
+                ["frontLoading", "lateSlotWeight"],
+                front_loading_weight,
+            )
+        ),
+    )
 
     teacher_avail_enabled = _to_bool(
         _cfg_get(constraint_config, ["teacherAvailability", "enabled"], False), False
@@ -293,7 +323,13 @@ async def solve(request: Request) -> Dict[str, Any]:
         "noGaps": {"hard": no_gaps_hard, "weight": no_gaps_weight},
         "teacherDailyOverload": {"enabled": teacher_daily_enabled, "max": teacher_daily_max, "weight": teacher_daily_weight},
         "subjectClustering": {"enabled": subject_cluster_enabled, "maxPerDay": subject_cluster_max, "weight": subject_cluster_weight},
-        "frontLoading": {"enabled": front_loading_enabled, "weight": front_loading_weight},
+        "frontLoading": {
+            "enabled": front_loading_enabled,
+            "weight": front_loading_weight,
+            "transitionWeight": front_loading_transition_weight,
+            "emptyBeforeLaterOccupiedWeight": front_loading_empty_before_later_weight,
+            "lateSlotWeight": front_loading_late_slot_weight,
+        },
         "teacherAvailability": {
             "enabled": teacher_avail_enabled,
             "hard": teacher_avail_hard,
@@ -807,7 +843,8 @@ async def solve(request: Request) -> Dict[str, Any]:
     # Medium soft constraint: global front-loading per class across the full week.
     # Flatten class occupancy by (day, hour) order (excluding breaks).
     # 1) Penalize any 0 -> 1 transition (occupied after empty).
-    # 2) Penalize occupied slots with larger position index.
+    # 2) Penalize an empty slot if any later slot is occupied.
+    # 3) Penalize occupied slots with larger position index.
     # Together this strongly pushes empty slots toward the end of the week,
     # while still respecting hard constraints and fixed slots.
     if front_loading_enabled and front_loading_weight > 0:
@@ -835,12 +872,36 @@ async def solve(request: Request) -> Dict[str, Any]:
                 model.Add(violation >= next_occ - prev_occ)
                 model.Add(violation <= next_occ)
                 model.Add(violation <= 1 - prev_occ)
-                objective_terms.append(violation * front_loading_weight)
+                objective_terms.append(violation * front_loading_transition_weight)
+
+            # Stronger compaction: penalize any empty slot that has an occupied slot later.
+            suffix_has_occ: List[cp_model.IntVar] = [None] * len(flat_occ)  # type: ignore
+            for i in range(len(flat_occ) - 1, -1, -1):
+                s = model.NewBoolVar(f"class_suffix_has_occ_{class_id}_{i}")
+                suffix_has_occ[i] = s
+                if i == len(flat_occ) - 1:
+                    model.Add(s == flat_occ[i])
+                else:
+                    model.Add(s >= flat_occ[i])
+                    model.Add(s >= suffix_has_occ[i + 1])
+                    model.Add(s <= flat_occ[i] + suffix_has_occ[i + 1])
+
+            for i in range(len(flat_occ) - 1):
+                empty_before_later_occ = model.NewBoolVar(
+                    f"class_empty_before_late_occ_{class_id}_{i}"
+                )
+                # 1 iff flat_occ[i] == 0 and some later slot is occupied.
+                model.Add(empty_before_later_occ <= 1 - flat_occ[i])
+                model.Add(empty_before_later_occ <= suffix_has_occ[i + 1])
+                model.Add(empty_before_later_occ >= suffix_has_occ[i + 1] - flat_occ[i])
+                objective_terms.append(
+                    empty_before_later_occ * front_loading_empty_before_later_weight
+                )
 
             # Additional compaction pressure: later occupied positions are costlier.
             # This improves week-end empty-slot packing, especially when fixed slots exist.
             for i, occ in enumerate(flat_occ):
-                objective_terms.append(occ * front_loading_weight * (i + 1))
+                objective_terms.append(occ * front_loading_late_slot_weight * (i + 1))
 
     if objective_terms:
         model.Minimize(sum(objective_terms))
