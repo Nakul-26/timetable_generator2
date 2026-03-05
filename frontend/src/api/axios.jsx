@@ -5,4 +5,15 @@ const API = axios.create({
     withCredentials: true 
 });
 
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    if (status === 401 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("auth:expired"));
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default API;

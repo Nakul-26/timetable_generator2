@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await API.get('/me');
             setUser(response.data);
-        } catch (error) {
+        } catch {
             setUser(null);
         } finally {
             setLoading(false);
@@ -21,6 +21,16 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         checkUser();
+    }, []);
+
+    useEffect(() => {
+        const handleAuthExpired = () => {
+            setUser(null);
+            setLoading(false);
+        };
+
+        window.addEventListener("auth:expired", handleAuthExpired);
+        return () => window.removeEventListener("auth:expired", handleAuthExpired);
     }, []);
 
     const login = (userData) => {

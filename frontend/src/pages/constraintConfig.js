@@ -33,10 +33,27 @@ export const DEFAULT_CONSTRAINT_CONFIG = {
     max: 6,
     weight: 120,
   },
+  teacherRecoveryBreak: {
+    enabled: false,
+    minHours: 1,
+    hard: false,
+    weight: 140,
+  },
   subjectClustering: {
     enabled: true,
     maxPerDay: 3,
     weight: 50,
+  },
+  subjectDistribution: {
+    enabled: false,
+    mode: "spread",
+    weight: 70,
+  },
+  highLoadSubjectTiming: {
+    enabled: false,
+    mode: "early",
+    minHoursPerWeek: 4,
+    weight: 60,
   },
   frontLoading: {
     enabled: true,
@@ -161,7 +178,10 @@ export function normalizeConstraintConfig(input = {}) {
   const teacherContinuity = cfg.teacherContinuity || {};
   const classContinuity = cfg.classContinuity || {};
   const teacherDailyOverload = cfg.teacherDailyOverload || {};
+  const teacherRecoveryBreak = cfg.teacherRecoveryBreak || {};
   const subjectClustering = cfg.subjectClustering || {};
+  const subjectDistribution = cfg.subjectDistribution || {};
+  const highLoadSubjectTiming = cfg.highLoadSubjectTiming || {};
   const frontLoading = cfg.frontLoading || {};
   const teacherAvailability = cfg.teacherAvailability || {};
   const teacherWeeklyLoadBalance = cfg.teacherWeeklyLoadBalance || {};
@@ -234,10 +254,67 @@ export function normalizeConstraintConfig(input = {}) {
         0
       ),
     },
+    teacherRecoveryBreak: {
+      enabled: toBool(
+        teacherRecoveryBreak.enabled,
+        DEFAULT_CONSTRAINT_CONFIG.teacherRecoveryBreak.enabled
+      ),
+      minHours: safeInt(
+        teacherRecoveryBreak.minHours,
+        DEFAULT_CONSTRAINT_CONFIG.teacherRecoveryBreak.minHours,
+        0
+      ),
+      hard: toBool(
+        teacherRecoveryBreak.hard,
+        DEFAULT_CONSTRAINT_CONFIG.teacherRecoveryBreak.hard
+      ),
+      weight: safeInt(
+        teacherRecoveryBreak.weight,
+        DEFAULT_CONSTRAINT_CONFIG.teacherRecoveryBreak.weight,
+        0
+      ),
+    },
     subjectClustering: {
       enabled: toBool(subjectClustering.enabled, DEFAULT_CONSTRAINT_CONFIG.subjectClustering.enabled),
       maxPerDay: safeInt(subjectClustering.maxPerDay, DEFAULT_CONSTRAINT_CONFIG.subjectClustering.maxPerDay, 1),
       weight: safeInt(subjectClustering.weight, DEFAULT_CONSTRAINT_CONFIG.subjectClustering.weight, 0),
+    },
+    subjectDistribution: {
+      enabled: toBool(
+        subjectDistribution.enabled,
+        DEFAULT_CONSTRAINT_CONFIG.subjectDistribution.enabled
+      ),
+      mode:
+        String(subjectDistribution.mode || DEFAULT_CONSTRAINT_CONFIG.subjectDistribution.mode).toLowerCase() ===
+        "compact"
+          ? "compact"
+          : "spread",
+      weight: safeInt(
+        subjectDistribution.weight,
+        DEFAULT_CONSTRAINT_CONFIG.subjectDistribution.weight,
+        0
+      ),
+    },
+    highLoadSubjectTiming: {
+      enabled: toBool(
+        highLoadSubjectTiming.enabled,
+        DEFAULT_CONSTRAINT_CONFIG.highLoadSubjectTiming.enabled
+      ),
+      mode:
+        String(highLoadSubjectTiming.mode || DEFAULT_CONSTRAINT_CONFIG.highLoadSubjectTiming.mode).toLowerCase() ===
+        "late"
+          ? "late"
+          : "early",
+      minHoursPerWeek: safeInt(
+        highLoadSubjectTiming.minHoursPerWeek,
+        DEFAULT_CONSTRAINT_CONFIG.highLoadSubjectTiming.minHoursPerWeek,
+        1
+      ),
+      weight: safeInt(
+        highLoadSubjectTiming.weight,
+        DEFAULT_CONSTRAINT_CONFIG.highLoadSubjectTiming.weight,
+        0
+      ),
     },
     frontLoading: {
       enabled: toBool(frontLoading.enabled, DEFAULT_CONSTRAINT_CONFIG.frontLoading.enabled),

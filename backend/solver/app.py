@@ -197,12 +197,49 @@ async def solve(request: Request) -> Dict[str, Any]:
     )
     teacher_daily_max = max(0, int(_cfg_get(constraint_config, ["teacherDailyOverload", "max"], 6)))
     teacher_daily_weight = max(0, int(_cfg_get(constraint_config, ["teacherDailyOverload", "weight"], 120)))
+    teacher_recovery_enabled = _to_bool(
+        _cfg_get(constraint_config, ["teacherRecoveryBreak", "enabled"], False), False
+    )
+    teacher_recovery_min_hours = max(
+        0, int(_cfg_get(constraint_config, ["teacherRecoveryBreak", "minHours"], 1))
+    )
+    teacher_recovery_hard = _to_bool(
+        _cfg_get(constraint_config, ["teacherRecoveryBreak", "hard"], False), False
+    )
+    teacher_recovery_weight = max(
+        0, int(_cfg_get(constraint_config, ["teacherRecoveryBreak", "weight"], 140))
+    )
 
     subject_cluster_enabled = _to_bool(
         _cfg_get(constraint_config, ["subjectClustering", "enabled"], True), True
     )
     subject_cluster_max = max(1, int(_cfg_get(constraint_config, ["subjectClustering", "maxPerDay"], 3)))
     subject_cluster_weight = max(0, int(_cfg_get(constraint_config, ["subjectClustering", "weight"], 50)))
+    subject_distribution_enabled = _to_bool(
+        _cfg_get(constraint_config, ["subjectDistribution", "enabled"], False), False
+    )
+    subject_distribution_mode = str(
+        _cfg_get(constraint_config, ["subjectDistribution", "mode"], "spread")
+    ).strip().lower()
+    if subject_distribution_mode not in ("spread", "compact"):
+        subject_distribution_mode = "spread"
+    subject_distribution_weight = max(
+        0, int(_cfg_get(constraint_config, ["subjectDistribution", "weight"], 70))
+    )
+    high_load_timing_enabled = _to_bool(
+        _cfg_get(constraint_config, ["highLoadSubjectTiming", "enabled"], False), False
+    )
+    high_load_timing_mode = str(
+        _cfg_get(constraint_config, ["highLoadSubjectTiming", "mode"], "early")
+    ).strip().lower()
+    if high_load_timing_mode not in ("early", "late"):
+        high_load_timing_mode = "early"
+    high_load_timing_min_hours = max(
+        1, int(_cfg_get(constraint_config, ["highLoadSubjectTiming", "minHoursPerWeek"], 4))
+    )
+    high_load_timing_weight = max(
+        0, int(_cfg_get(constraint_config, ["highLoadSubjectTiming", "weight"], 60))
+    )
 
     front_loading_enabled = _to_bool(
         _cfg_get(constraint_config, ["frontLoading", "enabled"], True), True
@@ -322,7 +359,24 @@ async def solve(request: Request) -> Dict[str, Any]:
         "classContinuity": {"enabled": class_cont_enabled, "maxConsecutive": class_cont_max, "weight": class_cont_weight},
         "noGaps": {"hard": no_gaps_hard, "weight": no_gaps_weight},
         "teacherDailyOverload": {"enabled": teacher_daily_enabled, "max": teacher_daily_max, "weight": teacher_daily_weight},
+        "teacherRecoveryBreak": {
+            "enabled": teacher_recovery_enabled,
+            "minHours": teacher_recovery_min_hours,
+            "hard": teacher_recovery_hard,
+            "weight": teacher_recovery_weight,
+        },
         "subjectClustering": {"enabled": subject_cluster_enabled, "maxPerDay": subject_cluster_max, "weight": subject_cluster_weight},
+        "subjectDistribution": {
+            "enabled": subject_distribution_enabled,
+            "mode": subject_distribution_mode,
+            "weight": subject_distribution_weight,
+        },
+        "highLoadSubjectTiming": {
+            "enabled": high_load_timing_enabled,
+            "mode": high_load_timing_mode,
+            "minHoursPerWeek": high_load_timing_min_hours,
+            "weight": high_load_timing_weight,
+        },
         "frontLoading": {
             "enabled": front_loading_enabled,
             "weight": front_loading_weight,
@@ -718,6 +772,30 @@ async def solve(request: Request) -> Dict[str, Any]:
                 model.Add(overload >= load - teacher_daily_max)
                 objective_terms.append(overload * teacher_daily_weight)
 
+    # Teacher recovery break between classes in a day.
+    # Example: minHours=1 disallows immediate back-to-back slots for a teacher.
+    if teacher_recovery_enabled and teacher_recovery_min_hours > 0:
+        valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
+        for fid in faculty_ids:
+            for day in range(DAYS_PER_WEEK):
+                for i, h1 in enumerate(valid_hours):
+                    for h2 in valid_hours[i + 1 :]:
+                        gap_slots = h2 - h1 - 1
+                        if gap_slots >= teacher_recovery_min_hours:
+                            break
+                        left = teacher_occ[(fid, day, h1)]
+                        right = teacher_occ[(fid, day, h2)]
+                        if teacher_recovery_hard:
+                            model.Add(left + right <= 1)
+                        elif teacher_recovery_weight > 0:
+                            violation = model.NewBoolVar(
+                                f"teacher_recovery_violation_{fid}_{day}_{h1}_{h2}"
+                            )
+                            model.Add(violation >= left + right - 1)
+                            model.Add(violation <= left)
+                            model.Add(violation <= right)
+                            objective_terms.append(violation * teacher_recovery_weight)
+
     # Class daily minimum load.
     if class_daily_min_enabled and class_daily_min_value > 0:
         for cls in classes:
@@ -839,6 +917,89 @@ async def solve(request: Request) -> Dict[str, Any]:
                     )
                     model.Add(excess >= day_count - subject_cluster_max)
                     objective_terms.append(excess * subject_cluster_weight)
+
+    # Spread/compact subject across week by controlling active teaching days.
+    if subject_distribution_enabled and subject_distribution_weight > 0:
+        usable_hours_per_day = len([h for h in range(HOURS_PER_DAY) if h not in break_hours_set])
+        for cls in classes:
+            class_id = cls["_id"]
+            days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+            if days <= 0:
+                continue
+            for subj in subjects:
+                subj_id = subj["_id"]
+                req = required_hours_by_class_subject[class_id][subj_id]
+                if req <= 0:
+                    continue
+
+                day_presence_vars: List[cp_model.IntVar] = []
+                for day in range(days):
+                    day_terms: List[cp_model.IntVar] = []
+                    for hour in range(HOURS_PER_DAY):
+                        if hour in break_hours_set:
+                            continue
+                        day_terms += subject_covers.get((class_id, day, hour, subj_id), [])
+                    if not day_terms:
+                        continue
+                    has_subject = model.NewBoolVar(f"subj_day_has_{class_id}_{subj_id}_{day}")
+                    model.Add(has_subject <= sum(day_terms))
+                    for term in day_terms:
+                        model.Add(has_subject >= term)
+                    day_presence_vars.append(has_subject)
+
+                if not day_presence_vars:
+                    continue
+
+                active_days = model.NewIntVar(
+                    0, len(day_presence_vars), f"subj_active_days_{class_id}_{subj_id}"
+                )
+                model.Add(active_days == sum(day_presence_vars))
+
+                if subject_distribution_mode == "compact":
+                    min_days = max(
+                        1,
+                        (req + max(1, usable_hours_per_day) - 1) // max(1, usable_hours_per_day),
+                    )
+                    excess_days = model.NewIntVar(
+                        0, len(day_presence_vars), f"subj_compact_excess_{class_id}_{subj_id}"
+                    )
+                    model.Add(excess_days >= active_days - min_days)
+                    objective_terms.append(excess_days * subject_distribution_weight)
+                else:
+                    target_days = min(req, len(day_presence_vars))
+                    spread_shortage = model.NewIntVar(
+                        0, target_days, f"subj_spread_shortage_{class_id}_{subj_id}"
+                    )
+                    model.Add(spread_shortage >= target_days - active_days)
+                    objective_terms.append(spread_shortage * subject_distribution_weight)
+
+    # High-hour subjects preference for early/late periods in a day.
+    if high_load_timing_enabled and high_load_timing_weight > 0:
+        valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
+        hour_rank = {h: i for i, h in enumerate(valid_hours)}
+        valid_hour_count = len(valid_hours)
+        for cls in classes:
+            class_id = cls["_id"]
+            days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
+            for subj in subjects:
+                subj_id = subj["_id"]
+                req = required_hours_by_class_subject[class_id][subj_id]
+                if req < high_load_timing_min_hours:
+                    continue
+                demand_factor = max(1, req - high_load_timing_min_hours + 1)
+                for day in range(days):
+                    for hour in valid_hours:
+                        terms = subject_covers.get((class_id, day, hour, subj_id), [])
+                        if not terms:
+                            continue
+                        rank = hour_rank.get(hour, 0)
+                        if high_load_timing_mode == "late":
+                            slot_cost = valid_hour_count - rank
+                        else:
+                            slot_cost = rank + 1
+                        objective_terms.append(
+                            sum(terms) * high_load_timing_weight * slot_cost * demand_factor
+                        )
 
     # Medium soft constraint: global front-loading per class across the full week.
     # Flatten class occupancy by (day, hour) order (excluding breaks).

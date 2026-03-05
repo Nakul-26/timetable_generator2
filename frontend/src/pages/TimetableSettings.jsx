@@ -14,6 +14,51 @@ const STRENGTH_FACTORS = {
   very_high: 1.6,
 };
 
+const POLICY_PRESETS = {
+  balanced: {
+    weeklySubjectHours: { hard: true, shortageWeight: 1000 },
+    noGaps: { hard: false, weight: 500 },
+    teacherDailyOverload: { enabled: true, max: 6, weight: 120 },
+    teacherContinuity: { enabled: true, maxConsecutive: 3, weight: 100 },
+    classContinuity: { enabled: true, maxConsecutive: 3, weight: 80 },
+    teacherRecoveryBreak: { enabled: true, minHours: 1, hard: false, weight: 140 },
+    subjectClustering: { enabled: true, maxPerDay: 3, weight: 50 },
+    subjectDistribution: { enabled: true, mode: "spread", weight: 70 },
+    highLoadSubjectTiming: { enabled: true, mode: "early", minHoursPerWeek: 4, weight: 60 },
+    frontLoading: { enabled: true, weight: 400, transitionWeight: 400, emptyBeforeLaterOccupiedWeight: 400, lateSlotWeight: 400 },
+    teacherAvailability: { enabled: true, hard: true, weight: 250 },
+    teacherBoundaryPreference: { enabled: false, avoidFirstPeriod: true, avoidLastPeriod: true, weight: 60 },
+  },
+  strict_academic: {
+    weeklySubjectHours: { hard: true, shortageWeight: 1400 },
+    noGaps: { hard: true, weight: 500 },
+    teacherDailyOverload: { enabled: true, max: 6, weight: 140 },
+    teacherContinuity: { enabled: true, maxConsecutive: 3, weight: 130 },
+    classContinuity: { enabled: true, maxConsecutive: 3, weight: 120 },
+    teacherRecoveryBreak: { enabled: true, minHours: 1, hard: false, weight: 140 },
+    subjectClustering: { enabled: true, maxPerDay: 2, weight: 80 },
+    subjectDistribution: { enabled: true, mode: "spread", weight: 90 },
+    highLoadSubjectTiming: { enabled: true, mode: "early", minHoursPerWeek: 4, weight: 75 },
+    frontLoading: { enabled: true, weight: 550, transitionWeight: 550, emptyBeforeLaterOccupiedWeight: 550, lateSlotWeight: 550 },
+    teacherAvailability: { enabled: true, hard: true, weight: 250 },
+    teacherBoundaryPreference: { enabled: false, avoidFirstPeriod: true, avoidLastPeriod: true, weight: 60 },
+  },
+  teacher_friendly: {
+    weeklySubjectHours: { hard: false, shortageWeight: 1000 },
+    noGaps: { hard: false, weight: 350 },
+    teacherDailyOverload: { enabled: true, max: 5, weight: 150 },
+    teacherContinuity: { enabled: true, maxConsecutive: 2, weight: 130 },
+    classContinuity: { enabled: true, maxConsecutive: 3, weight: 80 },
+    teacherRecoveryBreak: { enabled: true, minHours: 1, hard: true, weight: 140 },
+    subjectClustering: { enabled: true, maxPerDay: 3, weight: 50 },
+    subjectDistribution: { enabled: true, mode: "compact", weight: 70 },
+    highLoadSubjectTiming: { enabled: false, mode: "early", minHoursPerWeek: 4, weight: 60 },
+    frontLoading: { enabled: false, weight: 400, transitionWeight: 400, emptyBeforeLaterOccupiedWeight: 400, lateSlotWeight: 400 },
+    teacherAvailability: { enabled: true, hard: true, weight: 250 },
+    teacherBoundaryPreference: { enabled: true, avoidFirstPeriod: true, avoidLastPeriod: true, weight: 75 },
+  },
+};
+
 function toStrength(base, weight) {
   if (!base || base <= 0) return "high";
   const ratio = weight / base;
@@ -48,6 +93,9 @@ function TimetableSettings() {
   const [config, setConfig] = useState(() => loadConstraintConfig());
   const [savedAt, setSavedAt] = useState("");
   const [jsonMode, setJsonMode] = useState(false);
+  const [showPolicySettings, setShowPolicySettings] = useState(true);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [selectedPreset, setSelectedPreset] = useState("custom");
   const [jsonText, setJsonText] = useState(() =>
     JSON.stringify(loadConstraintConfig(), null, 2)
   );
@@ -76,9 +124,21 @@ function TimetableSettings() {
         DEFAULT_CONSTRAINT_CONFIG.teacherDailyOverload.weight,
         config.teacherDailyOverload.weight
       ),
+      teacherRecoveryBreak: toStrength(
+        DEFAULT_CONSTRAINT_CONFIG.teacherRecoveryBreak.weight,
+        config.teacherRecoveryBreak.weight
+      ),
       subjectClustering: toStrength(
         DEFAULT_CONSTRAINT_CONFIG.subjectClustering.weight,
         config.subjectClustering.weight
+      ),
+      subjectDistribution: toStrength(
+        DEFAULT_CONSTRAINT_CONFIG.subjectDistribution.weight,
+        config.subjectDistribution.weight
+      ),
+      highLoadSubjectTiming: toStrength(
+        DEFAULT_CONSTRAINT_CONFIG.highLoadSubjectTiming.weight,
+        config.highLoadSubjectTiming.weight
       ),
       frontLoading: toStrength(
         DEFAULT_CONSTRAINT_CONFIG.frontLoading.weight,
@@ -126,7 +186,38 @@ function TimetableSettings() {
   );
 
   const updateConfig = (updater) => {
+    setSelectedPreset("custom");
     setConfig((prev) => normalizeConstraintConfig(updater(prev)));
+  };
+
+  const applyPreset = (presetKey) => {
+    if (!presetKey || presetKey === "custom") {
+      setSelectedPreset("custom");
+      return;
+    }
+    const preset = POLICY_PRESETS[presetKey];
+    if (!preset) return;
+    setConfig((prev) =>
+      normalizeConstraintConfig({
+        ...prev,
+        weeklySubjectHours: { ...prev.weeklySubjectHours, ...(preset.weeklySubjectHours || {}) },
+        noGaps: { ...prev.noGaps, ...(preset.noGaps || {}) },
+        teacherDailyOverload: { ...prev.teacherDailyOverload, ...(preset.teacherDailyOverload || {}) },
+        teacherContinuity: { ...prev.teacherContinuity, ...(preset.teacherContinuity || {}) },
+        classContinuity: { ...prev.classContinuity, ...(preset.classContinuity || {}) },
+        teacherRecoveryBreak: { ...prev.teacherRecoveryBreak, ...(preset.teacherRecoveryBreak || {}) },
+        subjectClustering: { ...prev.subjectClustering, ...(preset.subjectClustering || {}) },
+        subjectDistribution: { ...prev.subjectDistribution, ...(preset.subjectDistribution || {}) },
+        highLoadSubjectTiming: { ...prev.highLoadSubjectTiming, ...(preset.highLoadSubjectTiming || {}) },
+        frontLoading: { ...prev.frontLoading, ...(preset.frontLoading || {}) },
+        teacherAvailability: { ...prev.teacherAvailability, ...(preset.teacherAvailability || {}) },
+        teacherBoundaryPreference: {
+          ...prev.teacherBoundaryPreference,
+          ...(preset.teacherBoundaryPreference || {}),
+        },
+      })
+    );
+    setSelectedPreset(presetKey);
   };
 
   const save = () => {
@@ -149,6 +240,7 @@ function TimetableSettings() {
   const resetDefaults = () => {
     const defaults = normalizeConstraintConfig(DEFAULT_CONSTRAINT_CONFIG);
     setConfig(defaults);
+    setSelectedPreset("custom");
     setJsonText(JSON.stringify(defaults, null, 2));
     setAvailabilityMapText(
       JSON.stringify(defaults.teacherAvailability.unavailableSlotsByTeacher || {}, null, 2)
@@ -167,6 +259,7 @@ function TimetableSettings() {
       const parsed = JSON.parse(jsonText);
       const normalized = normalizeConstraintConfig(parsed);
       setConfig(normalized);
+      setSelectedPreset("custom");
       setAvailabilityMapText(
         JSON.stringify(normalized.teacherAvailability.unavailableSlotsByTeacher || {}, null, 2)
       );
@@ -187,26 +280,123 @@ function TimetableSettings() {
       <div className="tt-settings-hero">
         <h2>Timetable Settings</h2>
         <p>
-          Start with schedule basics, then tune constraints. Use soft rules for flexibility and
-          hard rules only when absolutely required.
+          Start simple: set schedule shape, choose a policy preset, then adjust only what you need.
+          Advanced controls are available but hidden by default.
         </p>
       </div>
 
       <div className="actions-bar tt-settings-actions">
         <button className="primary-btn" onClick={save}>Save Settings</button>
         <button className="secondary-btn" onClick={resetDefaults}>Reset Defaults</button>
-        <button className="secondary-btn" onClick={() => setJsonMode((v) => !v)}>
-          {jsonMode ? "Hide Advanced JSON" : "Show Advanced JSON"}
+        <button className="secondary-btn" onClick={() => setShowAdvancedSettings((v) => !v)}>
+          {showAdvancedSettings ? "Hide Advanced Settings" : "Show Advanced Settings"}
         </button>
         <Link className="secondary-btn" to="/timetable">Go To Generate</Link>
       </div>
       {savedAt ? <div className="tt-settings-saved">Saved at: {savedAt}</div> : null}
 
       <section className="tt-settings-section">
+        <h3>Policy Preset</h3>
+        <p className="tt-settings-help">
+          Presets are the fastest way to configure policies without tuning every solver control.
+        </p>
+        <div className="filters-container tt-settings-row">
+          <label>
+            Preset
+            <select
+              value={selectedPreset}
+              onChange={(e) => applyPreset(e.target.value)}
+            >
+              <option value="balanced">Balanced</option>
+              <option value="strict_academic">Strict Academic</option>
+              <option value="teacher_friendly">Teacher Friendly</option>
+              <option value="custom">Custom (manual tuning)</option>
+            </select>
+          </label>
+          <label>
+            Policy Controls
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => setShowPolicySettings((v) => !v)}
+            >
+              {showPolicySettings ? "Hide Policy Settings" : "Show Policy Settings"}
+            </button>
+          </label>
+          <label>
+            Expert Controls
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => setShowAdvancedSettings((v) => !v)}
+            >
+              {showAdvancedSettings ? "Hide Advanced" : "Show Advanced"}
+            </button>
+          </label>
+        </div>
+      </section>
+
+      <section className="tt-settings-section">
+        <h3>What Each Policy Means</h3>
+        <p className="tt-settings-help">
+          Simple definitions for common timetable rules. Use this as a quick reference.
+        </p>
+        <div className="tt-settings-glossary">
+          <div className="tt-settings-glossary-item">
+            <strong>Weekly Subject Hours</strong>
+            Total periods each subject must get per week for a class.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>No Gaps Rule</strong>
+            Avoid empty periods between two classes on the same day.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Teacher Weekly Load Balance</strong>
+            Keeps each teacher's total weekly periods within a reasonable range.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Teacher Daily Load</strong>
+            Limits how many periods a teacher can take in a single day.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Teacher Recovery Break</strong>
+            Minimum free periods between two classes for the same teacher.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Class/Teacher Max Consecutive</strong>
+            Caps back-to-back periods to reduce overload.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Subject Clustering</strong>
+            Avoids repeating the same subject too many times in one day.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Subject Distribution</strong>
+            Spreads a subject across days or concentrates it into fewer days.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>High-Hour Subject Timing</strong>
+            Places heavy subjects earlier or later in the day.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Front Loading</strong>
+            Pushes classes toward earlier slots and leaves later slots freer.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Teacher Availability</strong>
+            Blocks slots where a teacher is not available.
+          </div>
+          <div className="tt-settings-glossary-item">
+            <strong>Boundary Preference</strong>
+            Lets teachers avoid first period and/or last period.
+          </div>
+        </div>
+      </section>
+
+      <section className="tt-settings-section">
         <h3>Schedule Basics</h3>
         <p className="tt-settings-help">
-          Define the timetable shape first. Slot indexes are zero-based, so first period is hour
-          0.
+          Define timetable shape first. Slot indexes are zero-based, so first period is hour 0.
         </p>
         <div className="filters-container tt-settings-row">
         <label>
@@ -258,12 +448,44 @@ function TimetableSettings() {
           />
         </label>
         </div>
+        <div className="filters-container tt-settings-row">
+        <label>
+          Lab Block Size
+          <input
+            type="number"
+            min="1"
+            value={config.structural.labBlockSize}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                structural: { ...prev.structural, labBlockSize: Number(e.target.value) || 1 },
+              }))
+            }
+          />
+        </label>
+        <label>
+          Theory Block Size
+          <input
+            type="number"
+            min="1"
+            value={config.structural.theoryBlockSize}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                structural: { ...prev.structural, theoryBlockSize: Number(e.target.value) || 1 },
+              }))
+            }
+          />
+        </label>
+        </div>
       </section>
 
+      {showPolicySettings ? (
+      <>
       <section className="tt-settings-section">
-        <h3>Core Rules</h3>
+        <h3>Core Policies</h3>
         <p className="tt-settings-help">
-          Use hard mode for strict compliance. Soft mode allows violations with penalties.
+          Choose strict rules only when mandatory. Soft rules improve flexibility during scheduling.
         </p>
         <div className="filters-container tt-settings-row">
         <label>
@@ -369,13 +591,13 @@ function TimetableSettings() {
       </section>
 
       <section className="tt-settings-section">
-        <h3>Daily Flow And Continuity</h3>
+        <h3>Class Schedule Quality And Teacher Comfort</h3>
         <p className="tt-settings-help">
-          These settings prevent overloaded days and too many back-to-back periods.
+          These controls improve timetable quality: workload balance, subject spread, and comfort.
         </p>
         <div className="filters-container tt-settings-row">
         <label>
-          Teacher Max Daily Load
+          Maximum Periods Per Teacher (Per Day)
           <input
             type="number"
             min="0"
@@ -392,7 +614,7 @@ function TimetableSettings() {
           />
         </label>
         <label>
-          Teacher Daily Load Strength
+          Teacher Workload Strictness
           <select
             value={strengths.teacherDailyOverload}
             onChange={(e) =>
@@ -418,7 +640,7 @@ function TimetableSettings() {
 
         <div className="filters-container tt-settings-row">
         <label>
-          Teacher Max Consecutive
+          Maximum Consecutive Classes (Teacher)
           <input
             type="number"
             min="1"
@@ -435,7 +657,7 @@ function TimetableSettings() {
           />
         </label>
         <label>
-          Teacher Continuity Strength
+          Consecutive Limit Strictness (Teacher)
           <select
             value={strengths.teacherContinuity}
             onChange={(e) =>
@@ -461,7 +683,7 @@ function TimetableSettings() {
 
         <div className="filters-container tt-settings-row">
         <label>
-          Class Max Consecutive
+          Maximum Consecutive Classes (Class)
           <input
             type="number"
             min="1"
@@ -478,7 +700,7 @@ function TimetableSettings() {
           />
         </label>
         <label>
-          Class Continuity Strength
+          Consecutive Limit Strictness (Class)
           <select
             value={strengths.classContinuity}
             onChange={(e) =>
@@ -493,6 +715,88 @@ function TimetableSettings() {
                 },
               }))
             }
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="very_high">Very High</option>
+          </select>
+        </label>
+        </div>
+
+        <div className="filters-container tt-settings-row">
+        <label>
+          Teacher Recovery Break
+          <select
+            value={config.teacherRecoveryBreak.enabled ? "enabled" : "disabled"}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                teacherRecoveryBreak: {
+                  ...prev.teacherRecoveryBreak,
+                  enabled: e.target.value === "enabled",
+                },
+              }))
+            }
+          >
+            <option value="enabled">Enabled</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </label>
+        <label>
+          Min Free Hours Between Classes
+          <input
+            type="number"
+            min="0"
+            value={config.teacherRecoveryBreak.minHours}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                teacherRecoveryBreak: {
+                  ...prev.teacherRecoveryBreak,
+                  minHours: Number(e.target.value) || 0,
+                },
+              }))
+            }
+            disabled={!config.teacherRecoveryBreak.enabled}
+          />
+        </label>
+        <label>
+          Recovery Rule Mode
+          <select
+            value={config.teacherRecoveryBreak.hard ? "hard" : "soft"}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                teacherRecoveryBreak: {
+                  ...prev.teacherRecoveryBreak,
+                  hard: e.target.value === "hard",
+                },
+              }))
+            }
+            disabled={!config.teacherRecoveryBreak.enabled}
+          >
+            <option value="soft">Soft</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+        <label>
+          Recovery Strength
+          <select
+            value={strengths.teacherRecoveryBreak}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                teacherRecoveryBreak: {
+                  ...prev.teacherRecoveryBreak,
+                  weight: fromStrength(
+                    DEFAULT_CONSTRAINT_CONFIG.teacherRecoveryBreak.weight,
+                    e.target.value
+                  ),
+                },
+              }))
+            }
+            disabled={!config.teacherRecoveryBreak.enabled || config.teacherRecoveryBreak.hard}
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -536,6 +840,152 @@ function TimetableSettings() {
                 },
               }))
             }
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="very_high">Very High</option>
+          </select>
+        </label>
+        </div>
+
+        <div className="filters-container tt-settings-row">
+        <label>
+          Subject Week Distribution
+          <select
+            value={config.subjectDistribution.enabled ? "enabled" : "disabled"}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                subjectDistribution: {
+                  ...prev.subjectDistribution,
+                  enabled: e.target.value === "enabled",
+                },
+              }))
+            }
+          >
+            <option value="enabled">Enabled</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </label>
+        <label>
+          Distribution Mode
+          <select
+            value={config.subjectDistribution.mode}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                subjectDistribution: {
+                  ...prev.subjectDistribution,
+                  mode: e.target.value === "compact" ? "compact" : "spread",
+                },
+              }))
+            }
+            disabled={!config.subjectDistribution.enabled}
+          >
+            <option value="spread">Spread Across Week</option>
+            <option value="compact">Concentrate Together</option>
+          </select>
+        </label>
+        <label>
+          Distribution Strength
+          <select
+            value={strengths.subjectDistribution}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                subjectDistribution: {
+                  ...prev.subjectDistribution,
+                  weight: fromStrength(
+                    DEFAULT_CONSTRAINT_CONFIG.subjectDistribution.weight,
+                    e.target.value
+                  ),
+                },
+              }))
+            }
+            disabled={!config.subjectDistribution.enabled}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="very_high">Very High</option>
+          </select>
+        </label>
+        </div>
+
+        <div className="filters-container tt-settings-row">
+        <label>
+          High-Hour Subject Timing
+          <select
+            value={config.highLoadSubjectTiming.enabled ? "enabled" : "disabled"}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                highLoadSubjectTiming: {
+                  ...prev.highLoadSubjectTiming,
+                  enabled: e.target.value === "enabled",
+                },
+              }))
+            }
+          >
+            <option value="enabled">Enabled</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </label>
+        <label>
+          Timing Preference
+          <select
+            value={config.highLoadSubjectTiming.mode}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                highLoadSubjectTiming: {
+                  ...prev.highLoadSubjectTiming,
+                  mode: e.target.value === "late" ? "late" : "early",
+                },
+              }))
+            }
+            disabled={!config.highLoadSubjectTiming.enabled}
+          >
+            <option value="early">Prefer Early Periods</option>
+            <option value="late">Prefer Late Periods</option>
+          </select>
+        </label>
+        <label>
+          Min Hours/Week To Qualify
+          <input
+            type="number"
+            min="1"
+            value={config.highLoadSubjectTiming.minHoursPerWeek}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                highLoadSubjectTiming: {
+                  ...prev.highLoadSubjectTiming,
+                  minHoursPerWeek: Number(e.target.value) || 1,
+                },
+              }))
+            }
+            disabled={!config.highLoadSubjectTiming.enabled}
+          />
+        </label>
+        <label>
+          Timing Strength
+          <select
+            value={strengths.highLoadSubjectTiming}
+            onChange={(e) =>
+              updateConfig((prev) => ({
+                ...prev,
+                highLoadSubjectTiming: {
+                  ...prev.highLoadSubjectTiming,
+                  weight: fromStrength(
+                    DEFAULT_CONSTRAINT_CONFIG.highLoadSubjectTiming.weight,
+                    e.target.value
+                  ),
+                },
+              }))
+            }
+            disabled={!config.highLoadSubjectTiming.enabled}
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -596,6 +1046,7 @@ function TimetableSettings() {
         </label>
         </div>
 
+        {showAdvancedSettings ? (
         <div className="filters-container tt-settings-row">
         <label>
           Front Loading Transition Strength
@@ -670,12 +1121,13 @@ function TimetableSettings() {
           </select>
         </label>
         </div>
+        ) : null}
       </section>
 
       <section className="tt-settings-section">
         <h3>Teacher Availability</h3>
         <p className="tt-settings-help">
-          Keep this enabled if faculty leaves/blocks should be respected globally or per teacher.
+          Enable this to respect teacher leaves and blocked periods.
         </p>
         <div className="filters-container tt-settings-row">
         <label>
@@ -741,53 +1193,66 @@ function TimetableSettings() {
         </label>
         </div>
 
-        <div className="tt-settings-json">
-        <label style={{ display: "block", marginBottom: 6 }}>
-          {'Global Unavailable Slots JSON ([{ "day": 5, "hour": 0 }])'}
-        </label>
-        <textarea
-          value={globalAvailabilityText}
-          onChange={(e) => setGlobalAvailabilityText(e.target.value)}
-          onBlur={() =>
-            updateConfig((prev) => ({
-              ...prev,
-              teacherAvailability: {
-                ...prev.teacherAvailability,
-                globallyUnavailableSlots: parseJsonOrDefault(globalAvailabilityText, []),
-              },
-            }))
-          }
-          rows={4}
-          style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
-        />
-          <small>Example: block first period on Saturday with {`[{ "day": 5, "hour": 0 }]`}.</small>
-        </div>
+        {showAdvancedSettings ? (
+          <>
+            <div className="tt-settings-json">
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {'Global Unavailable Slots JSON ([{ "day": 5, "hour": 0 }])'}
+            </label>
+            <textarea
+              value={globalAvailabilityText}
+              onChange={(e) => setGlobalAvailabilityText(e.target.value)}
+              onBlur={() =>
+                updateConfig((prev) => ({
+                  ...prev,
+                  teacherAvailability: {
+                    ...prev.teacherAvailability,
+                    globallyUnavailableSlots: parseJsonOrDefault(globalAvailabilityText, []),
+                  },
+                }))
+              }
+              rows={4}
+              style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
+            />
+              <small>Example: block first period on Saturday with {`[{ "day": 5, "hour": 0 }]`}.</small>
+            </div>
 
-        <div className="tt-settings-json">
-        <label style={{ display: "block", marginBottom: 6 }}>
-          {'Teacher Unavailable Slots JSON ({"teacherId":[{"day":0,"hour":2}]})'}
-        </label>
-        <textarea
-          value={availabilityMapText}
-          onChange={(e) => setAvailabilityMapText(e.target.value)}
-          onBlur={() =>
-            updateConfig((prev) => ({
-              ...prev,
-              teacherAvailability: {
-                ...prev.teacherAvailability,
-                unavailableSlotsByTeacher: parseJsonOrDefault(availabilityMapText, {}),
-              },
-            }))
-          }
-          rows={6}
-          style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
-        />
-          <small>Use teacher IDs as keys and provide a list of blocked slots for each teacher.</small>
-        </div>
+            <div className="tt-settings-json">
+            <label style={{ display: "block", marginBottom: 6 }}>
+              {'Teacher Unavailable Slots JSON ({"teacherId":[{"day":0,"hour":2}]})'}
+            </label>
+            <textarea
+              value={availabilityMapText}
+              onChange={(e) => setAvailabilityMapText(e.target.value)}
+              onBlur={() =>
+                updateConfig((prev) => ({
+                  ...prev,
+                  teacherAvailability: {
+                    ...prev.teacherAvailability,
+                    unavailableSlotsByTeacher: parseJsonOrDefault(availabilityMapText, {}),
+                  },
+                }))
+              }
+              rows={6}
+              style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
+            />
+              <small>Use teacher IDs as keys and provide a list of blocked slots for each teacher.</small>
+            </div>
+          </>
+        ) : (
+          <div className="tt-settings-help">
+            Advanced JSON editors for availability are hidden. Enable Advanced Settings to edit
+            global and teacher-specific blocked slots.
+          </div>
+        )}
       </section>
+      </>
+      ) : null}
 
+      {showAdvancedSettings ? (
+      <>
       <section className="tt-settings-section">
-        <h3>Weekly Teacher Load</h3>
+        <h3>Advanced: Weekly Teacher Load</h3>
         <p className="tt-settings-help">
           Keep min, target and max close to realistic workload to reduce impossible schedules.
         </p>
@@ -1039,7 +1504,7 @@ function TimetableSettings() {
       </section>
 
       <section className="tt-settings-section">
-        <h3>Boundary Preferences</h3>
+        <h3>Advanced: Boundary Preferences</h3>
         <p className="tt-settings-help">
           Use this when some teachers should avoid first/last periods. Add per-teacher overrides
           only if needed.
@@ -1153,40 +1618,11 @@ function TimetableSettings() {
       </section>
 
       <section className="tt-settings-section">
-        <h3>Structural And Solver</h3>
+        <h3>Advanced: Solver Controls</h3>
         <p className="tt-settings-help">
-          Tune these for performance and timetable shape. Increase solver time limit only if runs
-          often fail to find a solution.
+          Increase solver time only if generation fails frequently or takes too long.
         </p>
         <div className="filters-container tt-settings-row">
-        <label>
-          Lab Block Size
-          <input
-            type="number"
-            min="1"
-            value={config.structural.labBlockSize}
-            onChange={(e) =>
-              updateConfig((prev) => ({
-                ...prev,
-                structural: { ...prev.structural, labBlockSize: Number(e.target.value) || 1 },
-              }))
-            }
-          />
-        </label>
-        <label>
-          Theory Block Size
-          <input
-            type="number"
-            min="1"
-            value={config.structural.theoryBlockSize}
-            onChange={(e) =>
-              updateConfig((prev) => ({
-                ...prev,
-                structural: { ...prev.structural, theoryBlockSize: Number(e.target.value) || 1 },
-              }))
-            }
-          />
-        </label>
         <label>
           Solver Time Limit (seconds)
           <input
@@ -1201,6 +1637,11 @@ function TimetableSettings() {
             }
           />
         </label>
+        </div>
+        <div className="actions-bar tt-settings-actions" style={{ marginTop: 8 }}>
+          <button className="secondary-btn" onClick={() => setJsonMode((v) => !v)}>
+            {jsonMode ? "Hide Advanced JSON" : "Show Advanced JSON"}
+          </button>
         </div>
       </section>
 
@@ -1227,6 +1668,8 @@ function TimetableSettings() {
           </div>
           {jsonError ? <div className="error-message">{jsonError}</div> : null}
         </section>
+      ) : null}
+      </>
       ) : null}
     </div>
   );

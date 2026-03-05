@@ -44,6 +44,7 @@ function Timetable() {
   // Fixed slots
   const [fixedSlots, setFixedSlots] = useState({});
   const [fixedClassId, setFixedClassId] = useState("");
+  const [showFixedClasses, setShowFixedClasses] = useState(false);
   const [constraintConfig, setConstraintConfig] = useState(() => loadConstraintConfig());
   const DAYS_PER_WEEK = Number(constraintConfig?.schedule?.daysPerWeek) || 6;
   const HOURS_PER_DAY = Number(constraintConfig?.schedule?.hoursPerDay) || 8;
@@ -800,6 +801,9 @@ function Timetable() {
         <button className="secondary-btn" onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Filters" : "Show Filters"}
         </button>
+        <button className="secondary-btn" onClick={() => setShowFixedClasses((v) => !v)}>
+          {showFixedClasses ? "Hide Fixed Classes" : "Show Fixed Classes"}
+        </button>
         {/* <button className="secondary-btn" onClick={deleteAllTimetables} disabled={loading}>
           Delete All
         </button> */}
@@ -870,7 +874,7 @@ function Timetable() {
           <span>Days: {constraintConfig?.schedule?.daysPerWeek ?? 6}</span>
           <span>Hours: {constraintConfig?.schedule?.hoursPerDay ?? 8}</span>
           <span>Solver Time: {constraintConfig?.solver?.timeLimitSec ?? 180}s</span>
-          <Link className="secondary-btn" to="/timetable/settings">
+          <Link className="secondary-btn tt-soft-accent-btn" to="/timetable/settings">
             Open Timetable Settings
           </Link>
         </div>
@@ -930,12 +934,13 @@ function Timetable() {
         </div>
       ) : null}
 
+      {showFixedClasses ? (
       <div className="tt-section-card">
         <h3>Fixed Classes (Empty Timetable)</h3>
         <p className="tt-subtext">
           Assign slots here to lock them before you generate.
         </p>
-        <button className="secondary-btn" onClick={clearFixedSlots} disabled={loading}>
+        <button className="secondary-btn tt-soft-accent-btn" onClick={clearFixedSlots} disabled={loading}>
           Clear Fixed Classes
         </button>
         <div className="filters-container tt-top-gap">
@@ -962,6 +967,7 @@ function Timetable() {
             : <p>Select a class to assign fixed slots.</p>}
         </div>
       </div>
+      ) : null}
 
       {timetable && timetable.class_timetables && (
         <div className="tt-section-card">

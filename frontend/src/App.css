@@ -936,6 +936,45 @@ h2 {
   justify-content: flex-start;
 }
 
+.tt-settings-actions .primary-btn,
+.tt-settings-actions .secondary-btn {
+  min-height: 40px;
+  padding: 10px 16px;
+  margin-bottom: 0;
+}
+
+.tt-settings-actions a.secondary-btn {
+  background: #fff4ec;
+  border: 1px solid #ffcfad;
+  color: #9a3412;
+}
+
+.tt-settings-actions a.secondary-btn:hover {
+  background: #ffe8d8;
+  border-color: #ffb17d;
+  color: #7c2d12;
+}
+
+.tt-section-card .tt-soft-accent-btn {
+  min-height: 40px;
+  padding: 10px 16px;
+  margin-bottom: 0;
+  background: #fff4ec;
+  border: 1px solid #ffcfad;
+  color: #9a3412;
+}
+
+.tt-section-card .tt-soft-accent-btn:hover {
+  background: #ffe8d8;
+  border-color: #ffb17d;
+  color: #7c2d12;
+}
+
+.tt-section-card .tt-soft-accent-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .tt-settings-saved {
   margin-bottom: 10px;
   padding: 8px 10px;
@@ -999,6 +1038,28 @@ h2 {
   display: block;
   margin-top: 6px;
   color: #6b7280;
+}
+
+.tt-settings-glossary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.tt-settings-glossary-item {
+  border: 1px solid #f3dfcf;
+  background: #fff8f3;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #4b5563;
+  line-height: 1.35;
+  font-size: 0.92rem;
+}
+
+.tt-settings-glossary-item strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #9a3412;
 }
 
 .cst-combo-form {
