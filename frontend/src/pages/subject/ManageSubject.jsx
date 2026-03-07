@@ -1,11 +1,16 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
 import DataContext from "../../context/DataContext";
+import * as XLSX from "xlsx";
 
 function ManageSubject() {
   const { subjects, classes, faculties, assignments, combos, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
+  const [excelMessage, setExcelMessage] = useState("");
+  const [excelError, setExcelError] = useState("");
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Edit states
   const [editName, setEditName] = useState("");
@@ -22,6 +27,198 @@ function ManageSubject() {
   const [filterSem, setFilterSem] = useState("");
 
   const navigate = useNavigate();
+
+  const clearExcelStatus = () => {
+    setExcelMessage("");
+    setExcelError("");
+  };
+
+  const parseBoolean = (value) => {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    const normalized = String(value || "").trim().toLowerCase();
+    return ["true", "yes", "1", "y"].includes(normalized);
+  };
+
+  const parseCombinedClasses = (value) => {
+    const input = String(value || "").trim();
+    if (!input) return [];
+    const names = input
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const classIdByName = new Map(classes.map((cls) => [String(cls.name || "").toLowerCase(), cls._id]));
+    return names
+      .map((name) => classIdByName.get(name.toLowerCase()))
+      .filter(Boolean);
+  };
+
+  const getCellValue = (row, keys) => {
+    for (const key of keys) {
+      const raw = row[key];
+      if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+        return String(raw).trim();
+      }
+    }
+    return "";
+  };
+
+  const handleDownloadTemplate = () => {
+    clearExcelStatus();
+    const rows = [
+      ["name", "id", "sem", "type", "isElective", "combinedClasses"],
+      ["", "", "", "theory", "false", ""]
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Subjects");
+    XLSX.writeFile(workbook, "subjects_template.xlsx");
+    setExcelMessage("Template downloaded.");
+  };
+
+  const handleExportSubjects = () => {
+    clearExcelStatus();
+    const rows = subjects.map((subject) => {
+      const combinedClassNames = (subject.combined_classes || [])
+        .map((classId) => classes.find((c) => c._id === classId)?.name)
+        .filter(Boolean)
+        .join(", ");
+      const assignedClassNames = assignments
+        .filter((a) => a.subject?._id === subject._id)
+        .map((a) => a.class?.name)
+        .filter(Boolean)
+        .join(", ");
+      const assignedFacultyNames = combos
+        .filter((c) => c.subject?._id === subject._id)
+        .map((c) => c.faculty?.name)
+        .filter(Boolean)
+        .join(", ");
+
+      return {
+        name: subject.name || "",
+        id: subject.id || "",
+        sem: subject.sem || "",
+        type: subject.type || "theory",
+        isElective: Boolean(subject.isElective),
+        combinedClasses: combinedClassNames,
+        assignedClasses: assignedClassNames,
+        assignedFaculties: assignedFacultyNames
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Subjects");
+    XLSX.writeFile(workbook, "subjects_export.xlsx");
+    setExcelMessage("Subjects exported.");
+  };
+
+  const triggerExcelUpload = () => {
+    clearExcelStatus();
+    fileInputRef.current?.click();
+  };
+
+  const handleExcelUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    clearExcelStatus();
+    setUploadingExcel(true);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.SheetNames?.[0];
+      if (!firstSheet) {
+        throw new Error("No sheet found in the uploaded file.");
+      }
+
+      const sheet = workbook.Sheets[firstSheet];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      if (!Array.isArray(rawRows) || rawRows.length === 0) {
+        throw new Error("The uploaded sheet is empty.");
+      }
+
+      const normalizedRows = rawRows.map((row) => {
+        const name = getCellValue(row, ["name", "Name", "subjectName", "Subject Name"]);
+        const id = getCellValue(row, ["id", "ID", "code", "Code", "subjectCode", "Subject Code"]);
+        const sem = getCellValue(row, ["sem", "Sem", "semester", "Semester", "class", "Class"]);
+        const typeRaw = getCellValue(row, ["type", "Type"]) || "theory";
+        const type = typeRaw.toLowerCase() === "lab" ? "lab" : "theory";
+        const isElectiveRaw = getCellValue(row, ["isElective", "elective", "Elective"]);
+        const combinedClassesRaw = getCellValue(row, ["combinedClasses", "combined_classes", "Combined Classes"]);
+
+        return {
+          name,
+          id,
+          sem,
+          type,
+          isElective: parseBoolean(isElectiveRaw),
+          combined_classes: parseCombinedClasses(combinedClassesRaw)
+        };
+      });
+
+      const validRows = normalizedRows.filter((row) => row.name && row.id && row.sem);
+      if (validRows.length === 0) {
+        throw new Error("No valid rows found. Required columns: name, id, sem.");
+      }
+
+      const duplicateIds = new Set();
+      const seenIds = new Set();
+      validRows.forEach((row) => {
+        const key = row.id.toLowerCase();
+        if (seenIds.has(key)) duplicateIds.add(row.id);
+        seenIds.add(key);
+      });
+      if (duplicateIds.size > 0) {
+        throw new Error(`Duplicate subject IDs in file: ${Array.from(duplicateIds).join(", ")}`);
+      }
+
+      const existingByCode = new Map(
+        subjects
+          .filter((s) => s?.id)
+          .map((s) => [String(s.id).toLowerCase(), s])
+      );
+
+      let createdCount = 0;
+      let updatedCount = 0;
+      for (const row of validRows) {
+        const existing = existingByCode.get(row.id.toLowerCase());
+        if (existing) {
+          await axios.put(`/subjects/${existing._id}`, {
+            name: row.name,
+            sem: row.sem,
+            type: row.type,
+            combined_classes: row.combined_classes,
+            isElective: row.isElective
+          });
+          updatedCount += 1;
+        } else {
+          await axios.post("/subjects", {
+            name: row.name,
+            id: row.id,
+            sem: row.sem,
+            type: row.type,
+            combined_classes: row.combined_classes,
+            isElective: row.isElective
+          });
+          createdCount += 1;
+        }
+      }
+
+      refetchData(["subjects"]);
+      setExcelMessage(`Upload complete. Created: ${createdCount}, Updated: ${updatedCount}.`);
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to upload subjects from Excel.";
+      setExcelError(message);
+    } finally {
+      setUploadingExcel(false);
+      if (event.target) event.target.value = "";
+    }
+  };
 
   const handleAddSubject = () => {
     navigate("/subject/add");
@@ -94,10 +291,25 @@ function ManageSubject() {
       <h2>Manage Subjects</h2>
       <div className="actions-bar">
         <button onClick={handleAddSubject}>Add Subject</button>
+        <button onClick={handleDownloadTemplate} className="secondary-btn">Download Excel Template</button>
+        <button onClick={triggerExcelUpload} className="secondary-btn" disabled={uploadingExcel}>
+          {uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
+        </button>
+        <button onClick={handleExportSubjects} className="secondary-btn">Export Subjects Excel</button>
         <button onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Search" : "Show Search"}
         </button>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: "none" }}
+        onChange={handleExcelUpload}
+      />
+
+      {excelMessage ? <div className="success-message">{excelMessage}</div> : null}
+      {excelError ? <div className="error-message">{excelError}</div> : null}
 
       {/* 🔽 Filters */}
       {showFilters && (

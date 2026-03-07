@@ -41,8 +41,8 @@ protectedRouter.get('/classes', async (req, res) => {
 protectedRouter.put('/classes/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, sem, section } = req.body;
-    const updateData = { name, sem, section };
+    const { name, sem, section, id: classId, days_per_week } = req.body;
+    const updateData = { name, sem, section, id: classId, days_per_week };
 
     const updatedClass = await ClassModel.findOneAndUpdate(
       { _id: id },

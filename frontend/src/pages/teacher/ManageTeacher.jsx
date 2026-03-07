@@ -1,11 +1,16 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../../api/axios";
 import DataContext from "../../context/DataContext";
+import * as XLSX from "xlsx";
 
 const ManageTeacher = () => {
-  const { faculties, classes, subjects, combos, loading, error, refetchData } = useContext(DataContext);
+  const { faculties, classes, combos, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
+  const [excelMessage, setExcelMessage] = useState("");
+  const [excelError, setExcelError] = useState("");
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Edit form states
   const [editName, setEditName] = useState("");
@@ -17,6 +22,150 @@ const ManageTeacher = () => {
   const [filterFacultyId, setFilterFacultyId] = useState("");
 
   const navigate = useNavigate();
+
+  const clearExcelStatus = () => {
+    setExcelMessage("");
+    setExcelError("");
+  };
+
+  const getCellValue = (row, keys) => {
+    for (const key of keys) {
+      const raw = row[key];
+      if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+        return String(raw).trim();
+      }
+    }
+    return "";
+  };
+
+  const buildTemplateWorkbook = () => {
+    const rows = [
+      ["name", "id"],
+      ["", ""]
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Teachers");
+    return workbook;
+  };
+
+  const handleDownloadTemplate = () => {
+    clearExcelStatus();
+    const workbook = buildTemplateWorkbook();
+    XLSX.writeFile(workbook, "teachers_template.xlsx");
+    setExcelMessage("Template downloaded.");
+  };
+
+  const handleExportTeachers = () => {
+    clearExcelStatus();
+    const rows = faculties.map((teacher) => {
+      const assignedClassNames = classes
+        .filter((cls) => cls.faculties?.some((f) => f._id === teacher._id))
+        .map((cls) => cls.name)
+        .join(", ");
+      const assignedSubjectNames = combos
+        .filter((combo) => combo.faculty?._id === teacher._id)
+        .map((combo) => combo.subject?.name)
+        .filter(Boolean)
+        .join(", ");
+
+      return {
+        name: teacher.name || "",
+        id: teacher.id || "",
+        assignedClasses: assignedClassNames,
+        assignedSubjects: assignedSubjectNames
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Teachers");
+    XLSX.writeFile(workbook, "teachers_export.xlsx");
+    setExcelMessage("Teachers exported.");
+  };
+
+  const triggerExcelUpload = () => {
+    clearExcelStatus();
+    fileInputRef.current?.click();
+  };
+
+  const handleExcelUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    clearExcelStatus();
+    setUploadingExcel(true);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.SheetNames?.[0];
+      if (!firstSheet) {
+        throw new Error("No sheet found in the uploaded file.");
+      }
+
+      const sheet = workbook.Sheets[firstSheet];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      if (!Array.isArray(rawRows) || rawRows.length === 0) {
+        throw new Error("The uploaded sheet is empty.");
+      }
+
+      const normalizedRows = rawRows.map((row) => {
+        const name = getCellValue(row, ["name", "Name", "teacherName", "Teacher Name"]);
+        const id = getCellValue(row, ["id", "ID", "facultyId", "Faculty ID", "teacherId", "Teacher ID"]);
+        return { name, id };
+      });
+
+      const validRows = normalizedRows.filter((row) => row.name && row.id);
+      if (validRows.length === 0) {
+        throw new Error("No valid rows found. Required columns: name and id.");
+      }
+
+      const duplicateIds = new Set();
+      const seenIds = new Set();
+      validRows.forEach((row) => {
+        const key = row.id.toLowerCase();
+        if (seenIds.has(key)) duplicateIds.add(row.id);
+        seenIds.add(key);
+      });
+      if (duplicateIds.size > 0) {
+        throw new Error(`Duplicate teacher IDs in file: ${Array.from(duplicateIds).join(", ")}`);
+      }
+
+      const existingById = new Map(
+        faculties
+          .filter((f) => f?.id)
+          .map((f) => [String(f.id).toLowerCase(), f])
+      );
+
+      let createdCount = 0;
+      let updatedCount = 0;
+
+      for (const row of validRows) {
+        const existing = existingById.get(row.id.toLowerCase());
+        if (existing) {
+          await API.put(`/faculties/${existing._id}`, { name: row.name, id: row.id });
+          updatedCount += 1;
+        } else {
+          await API.post("/faculties", { name: row.name, id: row.id });
+          createdCount += 1;
+        }
+      }
+
+      refetchData(["faculties"]);
+      setExcelMessage(`Upload complete. Created: ${createdCount}, Updated: ${updatedCount}.`);
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to upload teachers from Excel.";
+      setExcelError(message);
+    } finally {
+      setUploadingExcel(false);
+      if (event.target) event.target.value = "";
+    }
+  };
 
   const handleAddTeacher = () => {
     navigate("/teacher/add");
@@ -72,10 +221,25 @@ const ManageTeacher = () => {
       <h2>Manage Teachers</h2>
       <div className="actions-bar">
         <button onClick={handleAddTeacher}>Add Teacher</button>
+        <button onClick={handleDownloadTemplate} className="secondary-btn">Download Excel Template</button>
+        <button onClick={triggerExcelUpload} className="secondary-btn" disabled={uploadingExcel}>
+          {uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
+        </button>
+        <button onClick={handleExportTeachers} className="secondary-btn">Export Teachers Excel</button>
         <button onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Search" : "Show Search"}
         </button>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: "none" }}
+        onChange={handleExcelUpload}
+      />
+
+      {excelMessage ? <div className="success-message">{excelMessage}</div> : null}
+      {excelError ? <div className="error-message">{excelError}</div> : null}
 
       {/* 🔽 Filters */}
       {showFilters && (

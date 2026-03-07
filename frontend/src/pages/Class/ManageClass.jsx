@@ -1,12 +1,17 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import AssignModal from "./AssignModal";
 import DataContext from "../../context/DataContext";
+import * as XLSX from "xlsx";
 
 function ManageClass() {
   const { classes, subjects, faculties, assignments, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
+  const [excelMessage, setExcelMessage] = useState("");
+  const [excelError, setExcelError] = useState("");
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const fileInputRef = useRef(null);
 
   // State for the assignment modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,6 +32,155 @@ function ManageClass() {
   const [filterSemester, setFilterSemester] = useState("");
 
   const navigate = useNavigate();
+
+  const clearExcelStatus = () => {
+    setExcelMessage("");
+    setExcelError("");
+  };
+
+  const getCellValue = (row, keys) => {
+    for (const key of keys) {
+      const raw = row[key];
+      if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
+        return String(raw).trim();
+      }
+    }
+    return "";
+  };
+
+  const parseDaysPerWeek = (value) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 5;
+    const rounded = Math.round(parsed);
+    return Math.max(1, Math.min(7, rounded));
+  };
+
+  const handleDownloadTemplate = () => {
+    clearExcelStatus();
+    const rows = [
+      ["id", "name", "sem", "section", "days_per_week"],
+      ["", "", "", "", "5"]
+    ];
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Classes");
+    XLSX.writeFile(workbook, "classes_template.xlsx");
+    setExcelMessage("Template downloaded.");
+  };
+
+  const handleExportClasses = () => {
+    clearExcelStatus();
+    const rows = classes.map((classItem) => {
+      const assignedSubjects = assignments
+        .filter((a) => a.class?._id === classItem._id)
+        .map((a) => a.subject?.name)
+        .filter(Boolean)
+        .join(", ");
+      const assignedFaculties = (classItem.faculties || [])
+        .map((f) => f?.name)
+        .filter(Boolean)
+        .join(", ");
+
+      return {
+        id: classItem.id || "",
+        name: classItem.name || "",
+        sem: classItem.sem || "",
+        section: classItem.section || "",
+        days_per_week: classItem.days_per_week || 5,
+        assignedSubjects,
+        assignedFaculties
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Classes");
+    XLSX.writeFile(workbook, "classes_export.xlsx");
+    setExcelMessage("Classes exported.");
+  };
+
+  const triggerExcelUpload = () => {
+    clearExcelStatus();
+    fileInputRef.current?.click();
+  };
+
+  const handleExcelUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    clearExcelStatus();
+    setUploadingExcel(true);
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.SheetNames?.[0];
+      if (!firstSheet) {
+        throw new Error("No sheet found in the uploaded file.");
+      }
+
+      const sheet = workbook.Sheets[firstSheet];
+      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      if (!Array.isArray(rawRows) || rawRows.length === 0) {
+        throw new Error("The uploaded sheet is empty.");
+      }
+
+      const normalizedRows = rawRows.map((row) => ({
+        id: getCellValue(row, ["id", "ID", "classId", "Class ID"]),
+        name: getCellValue(row, ["name", "Name", "className", "Class Name"]),
+        sem: getCellValue(row, ["sem", "Sem", "semester", "Semester", "class", "Class"]),
+        section: getCellValue(row, ["section", "Section"]),
+        days_per_week: parseDaysPerWeek(getCellValue(row, ["days_per_week", "daysPerWeek", "Days Per Week"]))
+      }));
+
+      const validRows = normalizedRows.filter((row) => row.id && row.name && row.sem && row.section);
+      if (validRows.length === 0) {
+        throw new Error("No valid rows found. Required columns: id, name, sem, section.");
+      }
+
+      const duplicateIds = new Set();
+      const seenIds = new Set();
+      validRows.forEach((row) => {
+        const key = row.id.toLowerCase();
+        if (seenIds.has(key)) duplicateIds.add(row.id);
+        seenIds.add(key);
+      });
+      if (duplicateIds.size > 0) {
+        throw new Error(`Duplicate class IDs in file: ${Array.from(duplicateIds).join(", ")}`);
+      }
+
+      const existingById = new Map(
+        classes
+          .filter((c) => c?.id)
+          .map((c) => [String(c.id).toLowerCase(), c])
+      );
+
+      let createdCount = 0;
+      let updatedCount = 0;
+      for (const row of validRows) {
+        const existing = existingById.get(row.id.toLowerCase());
+        if (existing) {
+          await api.put(`/classes/${existing._id}`, row);
+          updatedCount += 1;
+        } else {
+          await api.post("/classes", row);
+          createdCount += 1;
+        }
+      }
+
+      refetchData(["classes"]);
+      setExcelMessage(`Upload complete. Created: ${createdCount}, Updated: ${updatedCount}.`);
+    } catch (err) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to upload classes from Excel.";
+      setExcelError(message);
+    } finally {
+      setUploadingExcel(false);
+      if (event.target) event.target.value = "";
+    }
+  };
 
   const handleAddClass = () => {
     navigate("/class/add");
@@ -96,10 +250,25 @@ function ManageClass() {
       <h2>Manage Classes</h2>
       <div className="actions-bar">
         <button onClick={handleAddClass}>Add new class</button>
+        <button onClick={handleDownloadTemplate} className="secondary-btn">Download Excel Template</button>
+        <button onClick={triggerExcelUpload} className="secondary-btn" disabled={uploadingExcel}>
+          {uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
+        </button>
+        <button onClick={handleExportClasses} className="secondary-btn">Export Classes Excel</button>
         <button onClick={() => setShowFilters(!showFilters)}>
           {showFilters ? "Hide Search" : "Show Search"}
         </button>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: "none" }}
+        onChange={handleExcelUpload}
+      />
+
+      {excelMessage ? <div className="success-message">{excelMessage}</div> : null}
+      {excelError ? <div className="error-message">{excelError}</div> : null}
 
       {/* 🔽 Filters */}
       {showFilters && (
