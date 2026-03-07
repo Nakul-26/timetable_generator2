@@ -34,6 +34,7 @@ function Timetable() {
   const [faculties, setFaculties] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [combos, setCombos] = useState([]);
+  const [classSubjects, setClassSubjects] = useState([]);
 
   // Filters
   const [showFilters, setShowFilters] = useState(false);
@@ -62,6 +63,18 @@ function Timetable() {
     () => new Map(combos.map((c) => [String(c._id), c])),
     [combos]
   );
+  const requiredHoursByClassSubject = useMemo(() => {
+    const byClass = new Map();
+    for (const item of classSubjects) {
+      const classId = String(item?.class?._id || item?.class || "");
+      const subjectId = String(item?.subject?._id || item?.subject || "");
+      const hours = Number(item?.hoursPerWeek || 0);
+      if (!classId || !subjectId) continue;
+      if (!byClass.has(classId)) byClass.set(classId, {});
+      byClass.get(classId)[subjectId] = hours;
+    }
+    return byClass;
+  }, [classSubjects]);
   const fixedClassComboOptionsByClass = useMemo(() => {
     const out = new Map();
     const allClassIds = classes.map((c) => String(c._id));
@@ -149,16 +162,18 @@ function Timetable() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [classRes, facRes, subRes, comboRes] = await Promise.all([
+      const [classRes, facRes, subRes, comboRes, classSubjectRes] = await Promise.all([
         axios.get("/classes"),
         axios.get("/faculties"),
         axios.get("/subjects"),
         axios.get("/teacher-subject-combos"),
+        axios.get("/class-subjects"),
       ]);
       setClasses(classRes.data);
       setFaculties(facRes.data);
       setSubjects(subRes.data);
       setCombos(comboRes.data || []);
+      setClassSubjects(classSubjectRes.data || []);
     } catch {
       setError("Failed to fetch master data.");
     }
@@ -1041,44 +1056,48 @@ function Timetable() {
                     <h4>Subject Hours Report</h4>
                     {(() => {
                         if (!currentClass) return null;
+                        const classIdKey = String(classId);
+                        const requiredFromAssignments = requiredHoursByClassSubject.get(classIdKey) || {};
+                        const requiredFromClass = currentClass?.subject_hours || {};
+                        const requiredHours = {
+                          ...requiredFromAssignments,
+                          ...requiredFromClass,
+                        };
 
-                        const assignedElectiveIds = new Set();
-                        slots.flat().forEach(slot => {
-                            if(!slot || slot === -1 || slot === "BREAK") return;
-                            const combo = comboById.get(String(slot));
-                            if (combo && !subjectById.get(String(combo.subject_id))) {
-                                assignedElectiveIds.add(combo.subject_id);
-                            }
-                        });
+                        const allSubjectIds = new Set([
+                          ...Object.keys(requiredHours),
+                          ...Object.keys(assignedHours),
+                        ]);
+
+                        const rows = Array.from(allSubjectIds).map((subjectId) => {
+                          const assigned = Number(assignedHours[subjectId] || 0);
+                          const requiredValue = requiredHours[subjectId];
+                          const required =
+                            requiredValue === undefined || requiredValue === null
+                              ? "N/A"
+                              : Number(requiredValue);
+
+                          if (assigned === 0 && required === 0) return null;
+                          if (assigned === 0 && required === "N/A") return null;
+
+                          const subject = subjectById.get(String(subjectId));
+                          const name = subject ? subject.name : `Elective ${String(subjectId).slice(-4)}`;
+
+                          return (
+                            <div key={subjectId} className="tt-hours-row">
+                              <span>{name}: {assigned} / {required}</span>
+                            </div>
+                          );
+                        }).filter(Boolean);
+
+                        if (!rows.length) {
+                          return <div className="tt-hours-row">No subject hours data available.</div>;
+                        }
 
                         return (
-                            <>
-                                {currentClass.subject_hours && Object.entries(currentClass.subject_hours).map(([subjectId, requiredHours]) => {
-                                    const subject = subjectById.get(String(subjectId));
-                                    if (!subject) return null;
-                                    const assigned = assignedHours[subjectId] || 0;
-                                    
-                                    if (assigned === 0 && assignedElectiveIds.size > 0) return null;
-                                    if (assigned === 0 && requiredHours === 0) return null;
-
-                                    return (
-                                        <div key={subjectId} className="tt-hours-row">
-                                            <span>{subject.name}: {assigned} / {requiredHours}</span>
-                                        </div>
-                                    )
-                                })}
-                                {Array.from(assignedElectiveIds).map(subjectId => {
-                                    const assigned = assignedHours[subjectId] || 0;
-                                    if (assigned === 0) return null;
-                                    const name = `Elective ${subjectId.slice(-4)}`;
-                                    const requiredHours = currentClass?.subject_hours?.[subjectId] ?? 'N/A';
-                                    return (
-                                        <div key={subjectId} className="tt-hours-row">
-                                            <span>{name}: {assigned} / {requiredHours}</span>
-                                        </div>
-                                    );
-                                })}
-                            </>
+                          <>
+                            {rows}
+                          </>
                         );
                     })()}
                 </div>
