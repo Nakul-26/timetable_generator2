@@ -48,6 +48,9 @@ const SavedTimetables = () => {
                     <thead>
                         <tr>
                             <th>Name</th>
+                            <th>Source</th>
+                            <th>Status</th>
+                            <th>Version</th>
                             <th>Saved At</th>
                             <th>Actions</th>
                         </tr>
@@ -56,6 +59,9 @@ const SavedTimetables = () => {
                         {timetables.map((tt) => (
                             <tr key={tt._id}>
                                 <td>{tt.name}</td>
+                                <td>{tt.source}</td>
+                                <td>{tt.status || 'draft'}</td>
+                                <td>{tt.edit_version || 1}</td>
                                 <td>{new Date(tt.createdAt).toLocaleString()}</td>
                                 <td>
                                     <button
@@ -64,6 +70,15 @@ const SavedTimetables = () => {
                                     >
                                         View
                                     </button>
+                                    {(tt.source === 'generator' || tt.status === 'generated') && (
+                                        <button
+                                            className="secondary-btn"
+                                            onClick={() => navigate(`/manual-timetable?sourceTimetableId=${tt._id}`)}
+                                            style={{ marginLeft: '8px' }}
+                                        >
+                                            Edit
+                                        </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}

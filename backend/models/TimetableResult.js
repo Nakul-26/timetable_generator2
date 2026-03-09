@@ -12,6 +12,35 @@ const ResultSchema = new Schema(
       default: 'manual'
     },
 
+    status: {
+      type: String,
+      enum: ['generated', 'draft', 'edited', 'approved', 'locked'],
+      default: 'draft',
+    },
+
+    generated_from_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'TimetableResult',
+      default: null,
+    },
+
+    parent_timetable_id: {
+      type: Schema.Types.ObjectId,
+      ref: 'TimetableResult',
+      default: null,
+    },
+
+    edit_version: {
+      type: Number,
+      default: 1,
+    },
+
+    created_by: {
+      type: Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null,
+    },
+
     // Assignment-only results:
     // { [classId]: [teacherSubjectComboId, ...] }
     assignments_only: { type: Object, default: null },
@@ -20,6 +49,10 @@ const ResultSchema = new Schema(
     class_timetables: Object,
     faculty_timetables: Object,
     faculty_daily_hours: Object,
+    teacher_timetables: Object,
+    subject_hours_assigned: Object,
+    slot_sources: Object,
+    locked_slots: Object,
 
     // Metadata
     config: Object,        // { days, hours, fixedSlots, ... }

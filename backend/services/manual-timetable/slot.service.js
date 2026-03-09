@@ -77,11 +77,16 @@ export async function placeCombo({
     teacherTimetable,
     subjectHoursAssigned,
     config,
-    electiveGroups
+    electiveGroups,
+    lockedSlots,
   } = newState;
 
   const classObj = await ClassModel.findById(classId).lean();
   if (!classObj) throw new Error("Class not found");
+
+  if (lockedSlots?.[classId]?.[day]?.[hour]) {
+    throw new Error("This slot is locked.");
+  }
 
   const combosInSlot = classTimetable[classId]?.[day]?.[hour] || [];
   if (combosInSlot.includes(comboId)) return newState;

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const hours = ["1", "2", "3", "4", "5", "6", "7", "8"];
 
 const ManualTimetable = () => {
+    const [searchParams] = useSearchParams();
+    const sourceTimetableId = searchParams.get('sourceTimetableId');
+
     // Core data
     const [classes, setClasses] = useState([]);
     const [subjects, setSubjects] = useState([]);
@@ -22,6 +26,9 @@ const ManualTimetable = () => {
     const [timetableId, setTimetableId] = useState(null); // New state for timetableId
     const [savedTimetableId, setSavedTimetableId] = useState(null); // For tracking loaded timetable
     const [comboIdToDetails, setComboIdToDetails] = useState({});
+    const [slotSources, setSlotSources] = useState({});
+    const [lockedSlots, setLockedSlots] = useState({});
+    const [sourceTimetableMeta, setSourceTimetableMeta] = useState(null);
 
 
     const [validOptions, setValidOptions] = useState({}); // { "classId-dayIndex-hourIndex": [options] }
@@ -32,15 +39,18 @@ const ManualTimetable = () => {
             try {
                 setIsLoading(true);
                 // Fetch core data
-                const [classesRes, facultiesRes, subjectsRes] = await Promise.all([
+                const [classesRes, facultiesRes, subjectsRes, combosRes, sourceRes] = await Promise.all([
                     api.get('/classes'),
                     api.get('/faculties'),
-                    api.get('/subjects')
+                    api.get('/subjects'),
+                    api.get('/teacher-subject-combos'),
+                    sourceTimetableId ? api.get(`/timetable/${sourceTimetableId}`) : Promise.resolve({ data: null })
                 ]);
 
                 const fetchedClasses = classesRes.data;
                 const fetchedFaculties = facultiesRes.data;
                 const fetchedSubjects = subjectsRes.data;
+                const fetchedCombos = combosRes.data || [];
 
                 setClasses(fetchedClasses);
                 setSubjects(fetchedSubjects);
@@ -51,12 +61,52 @@ const ManualTimetable = () => {
                 });
                 setSubjectIdToDetails(subjectDetails);
 
+                const comboDetails = {};
+                fetchedCombos.forEach(combo => {
+                    const comboId = String(combo._id);
+                    const subjectId = String(combo?.subject?._id || combo?.subject || '');
+                    const facultyId = String(combo?.faculty?._id || combo?.faculty || '');
+                    const subjectName = combo?.subject?.name || subjectDetails[subjectId]?.name || 'Unknown Subject';
+                    const facultyName =
+                        combo?.faculty?.name ||
+                        fetchedFaculties.find(f => String(f._id) === facultyId)?.name ||
+                        'Unknown Teacher';
+                    comboDetails[comboId] = {
+                        subject: subjectName,
+                        faculty: facultyName,
+                    };
+                });
+
+                if (Array.isArray(sourceRes.data?.combos)) {
+                    sourceRes.data.combos.forEach(combo => {
+                        const comboId = String(combo._id);
+                        const subjectId = String(combo?.subject_id || combo?.subject?._id || combo?.subject || '');
+                        const facultyIds = Array.isArray(combo?.faculty_ids)
+                            ? combo.faculty_ids.map(id => String(id))
+                            : combo?.faculty_id
+                                ? [String(combo.faculty_id)]
+                                : combo?.faculty
+                                    ? [String(combo.faculty?._id || combo.faculty)]
+                                    : [];
+
+                        comboDetails[comboId] = {
+                            subject: subjectDetails[subjectId]?.name || combo?.subject?.name || 'Unknown Subject',
+                            faculty: facultyIds
+                                .map(facultyId => fetchedFaculties.find(f => String(f._id) === facultyId)?.name || 'Unknown Teacher')
+                                .join(', '),
+                        };
+                    });
+                }
+
+                setComboIdToDetails(comboDetails);
+
 
                 const electiveGroups = JSON.parse(localStorage.getItem('classElectiveGroups')) || [];
 
                 // Generate a unique timetableId for this session
                 const currentTimetableId = `manual-${Date.now()}`;
                 setTimetableId(currentTimetableId);
+                setSourceTimetableMeta(sourceRes.data || null);
 
                 // Initialize backend state and get initial timetables
                 // Pass frontend's preferred days and hours configuration
@@ -66,13 +116,38 @@ const ManualTimetable = () => {
                     faculties: fetchedFaculties,
                     subjects: fetchedSubjects,
                     electiveGroups: electiveGroups, // Pass elective groups to the backend
-                    config: { days: days.length, hours: hours.length } // Pass config
+                    config: { days: days.length, hours: hours.length }, // Pass config
+                    sourceTimetableId,
                 });
                 
                 if (initStateResponse.data.ok) {
-                    setClassTimetable(initStateResponse.data.classTimetable);
-                    setTeacherTimetable(initStateResponse.data.teacherTimetable);
-                    setSubjectHoursAssigned(initStateResponse.data.subjectHoursAssigned);
+                    if (sourceTimetableId) {
+                        const loadResponse = await api.post('/manual/load', {
+                            timetableId: currentTimetableId,
+                            savedTimetableId: sourceTimetableId,
+                        });
+
+                        if (!loadResponse.data.ok) {
+                            throw new Error(loadResponse.data.error || 'Failed to load source timetable.');
+                        }
+
+                        setClassTimetable(loadResponse.data.classTimetable);
+                        setTeacherTimetable(loadResponse.data.teacherTimetable);
+                        setSubjectHoursAssigned(loadResponse.data.subjectHoursAssigned);
+                        setSlotSources(loadResponse.data.slotSources || {});
+                        setLockedSlots(loadResponse.data.lockedSlots || {});
+                        setSavedTimetableId(
+                            sourceRes.data?.source === 'manual' && sourceRes.data?.status !== 'generated'
+                                ? sourceTimetableId
+                                : null
+                        );
+                    } else {
+                        setClassTimetable(initStateResponse.data.classTimetable);
+                        setTeacherTimetable(initStateResponse.data.teacherTimetable);
+                        setSubjectHoursAssigned(initStateResponse.data.subjectHoursAssigned);
+                        setSlotSources(initStateResponse.data.slotSources || {});
+                        setLockedSlots(initStateResponse.data.lockedSlots || {});
+                    }
                 } else {
                     throw new Error("Failed to initialize timetable state on the server.");
                 }
@@ -85,7 +160,7 @@ const ManualTimetable = () => {
             }
         };
         fetchAndInitialize();
-    }, []); // Empty dependency array means this runs once on mount
+    }, [sourceTimetableId]); // Empty dependency array means this runs once on mount
 
         const handleGetOptions = async (classId, dayIndex, hourIndex) => {
         if (!timetableId) return; // Ensure timetableId is set
@@ -125,6 +200,8 @@ const ManualTimetable = () => {
                 setClassTimetable(response.data.classTimetable);
                 setTeacherTimetable(response.data.teacherTimetable);
                 setSubjectHoursAssigned(response.data.subjectHoursAssigned);
+                setSlotSources(response.data.slotSources || {});
+                setLockedSlots(response.data.lockedSlots || {});
             } else {
                 alert(`Error clearing slot: ${response.data.error}`);
             }
@@ -151,6 +228,8 @@ const ManualTimetable = () => {
                 setClassTimetable(response.data.classTimetable);
                 setTeacherTimetable(response.data.teacherTimetable);
                 setSubjectHoursAssigned(response.data.subjectHoursAssigned);
+                setSlotSources(response.data.slotSources || {});
+                setLockedSlots(response.data.lockedSlots || {});
             } else {
                 // If placement was invalid, show the error from the backend
                 alert(`Error: ${response.data.error || 'The requested placement is invalid.'}`);
@@ -181,6 +260,8 @@ const ManualTimetable = () => {
                 setClassTimetable(response.data.classTimetable);
                 setTeacherTimetable(response.data.teacherTimetable);
                 setSubjectHoursAssigned(response.data.subjectHoursAssigned);
+                setSlotSources(response.data.slotSources || {});
+                setLockedSlots(response.data.lockedSlots || {});
             } else {
                 alert(`Auto-fill failed: ${response.data.error}`);
             }
@@ -205,6 +286,8 @@ const ManualTimetable = () => {
                     setClassTimetable(response.data.classTimetable);
                     setTeacherTimetable(response.data.teacherTimetable);
                     setSubjectHoursAssigned(response.data.subjectHoursAssigned);
+                    setSlotSources(response.data.slotSources || {});
+                    setLockedSlots(response.data.lockedSlots || {});
                 } else {
                     alert(`Failed to clear timetable: ${response.data.error}`);
                 }
@@ -246,7 +329,10 @@ const ManualTimetable = () => {
     const handleSave = async (isSaveAs = false) => {
         if (!timetableId) return;
 
-        const name = window.prompt("Enter a name for this timetable:");
+        const suggestedName = sourceTimetableMeta?.name
+            ? `${sourceTimetableMeta.name} (Edited)`
+            : 'Edited Timetable';
+        const name = window.prompt("Enter a name for this timetable:", suggestedName);
         if (name) {
             setIsSaving(true);
             try {
@@ -331,6 +417,8 @@ const ManualTimetable = () => {
                     setClassTimetable(loadResponse.data.classTimetable);
                     setTeacherTimetable(loadResponse.data.teacherTimetable);
                     setSubjectHoursAssigned(loadResponse.data.subjectHoursAssigned);
+                    setSlotSources(loadResponse.data.slotSources || {});
+                    setLockedSlots(loadResponse.data.lockedSlots || {});
                     setSavedTimetableId(selectedTimetable._id);
                     alert(`Timetable "${selectedTimetable.name}" loaded successfully.`);
                 } else {
@@ -343,6 +431,28 @@ const ManualTimetable = () => {
         }
     };
 
+    const handleToggleLock = async (classId, dayIndex, hourIndex) => {
+        if (!timetableId) return;
+
+        try {
+            const response = await api.post('/manual/toggle-lock', {
+                timetableId,
+                classId,
+                day: dayIndex,
+                hour: hourIndex,
+            });
+
+            if (response.data.ok) {
+                setLockedSlots(response.data.lockedSlots || {});
+            } else {
+                alert(`Failed to toggle lock: ${response.data.error}`);
+            }
+        } catch (error) {
+            console.error('Error toggling slot lock:', error);
+            alert(`An unexpected error occurred while toggling the lock: ${error.response?.data?.error || error.message}`);
+        }
+    };
+
     if (isLoading || timetableId === null || isDeleting) { // Add isDeleting to loading check
         return <div>Loading...</div>;
     }
@@ -351,6 +461,12 @@ const ManualTimetable = () => {
         <div className="manage-container manual-page">
             <div className="manual-header">
                 <h1>Manual Timetable Generator</h1>
+                {sourceTimetableMeta && (
+                    <p>
+                        Editing generated timetable: <strong>{sourceTimetableMeta.name}</strong>
+                        {sourceTimetableMeta.status ? ` | ${sourceTimetableMeta.status}` : ''}
+                    </p>
+                )}
                 <div className="manual-header-actions">
                     <button
                         onClick={handleLoad}
@@ -417,8 +533,16 @@ const ManualTimetable = () => {
                                         const comboIdsInSlot = classTimetable[c._id]?.[dayIndex]?.[hourIndex];
                                         const options = validOptions[`${c._id}-${dayIndex}-${hourIndex}`];
                                         const hasLoadedOptions = options !== undefined;
+                                        const slotSource = slotSources[c._id]?.[dayIndex]?.[hourIndex];
+                                        const isLocked = !!lockedSlots[c._id]?.[dayIndex]?.[hourIndex];
                                         const tdStyle = {
-                                            backgroundColor: comboIdsInSlot && comboIdsInSlot.length > 0 ? 'lightgreen' : 'lightcoral',
+                                            backgroundColor: isLocked
+                                                ? '#f6d365'
+                                                : slotSource === 'manual'
+                                                    ? '#d9ecff'
+                                                    : comboIdsInSlot && comboIdsInSlot.length > 0
+                                                        ? '#dff4dd'
+                                                        : '#fde2e1',
                                             padding: '5px',
                                             verticalAlign: 'top',
                                         };
@@ -439,6 +563,7 @@ const ManualTimetable = () => {
                                                     {comboIdsInSlot && comboIdsInSlot.length > 0 && (
                                                         <button 
                                                             onClick={() => handleClearSlot(c._id, dayIndex, hourIndex)}
+                                                            disabled={isLocked}
                                                             style={{ border: 'none', background: 'transparent', color: 'red', cursor: 'pointer', padding: '0', fontSize: '16px' }}
                                                             title="Clear slot"
                                                         >
@@ -446,6 +571,14 @@ const ManualTimetable = () => {
                                                         </button>
                                                     )}
                                                 </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleToggleLock(c._id, dayIndex, hourIndex)}
+                                                    className="secondary-btn"
+                                                    style={{ marginBottom: '6px', width: '100%' }}
+                                                >
+                                                    {isLocked ? 'Unlock Slot' : 'Lock Slot'}
+                                                </button>
                                                 <select
                                                     onFocus={() => handleGetOptions(c._id, dayIndex, hourIndex)}
                                                     onChange={(e) => {
@@ -453,7 +586,7 @@ const ManualTimetable = () => {
                                                             handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value);
                                                         }
                                                     }}
-                                                    // disabled={isDeleting || isSaving || (hasLoadedOptions && options.length === 0)}
+                                                    disabled={isLocked}
                                                     style={{ width: '100%', border: 'none', background: 'transparent' }}
                                                     defaultValue=""
                                                 >

@@ -35,7 +35,7 @@ export async function runAutoFill({ timetableId, classId }) {
 
   return {
     ok: true,
-    newState: result.newState,
+    ...result.newState,
     comboIdToDetails
   };
 }

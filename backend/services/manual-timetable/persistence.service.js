@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import TimetableResult from "../../models/TimetableResult.js";
 import TeacherSubjectCombination from "../../models/TeacherSubjectCombination.js";
 
@@ -21,6 +22,155 @@ function normalizeClassTimetables(classTimetables) {
   return classTimetables;
 }
 
+function createSlotSourceGrid(classTimetable, defaultSource) {
+  const slotSources = {};
+
+  for (const classId in classTimetable || {}) {
+    slotSources[classId] = [];
+    const days = classTimetable[classId] || [];
+
+    for (let day = 0; day < days.length; day++) {
+      slotSources[classId][day] = [];
+      const hours = days[day] || [];
+
+      for (let hour = 0; hour < hours.length; hour++) {
+        const slot = hours[hour];
+        slotSources[classId][day][hour] =
+          Array.isArray(slot) && slot.length > 0 ? defaultSource : null;
+      }
+    }
+  }
+
+  return slotSources;
+}
+
+function createLockedSlotGrid(classTimetable) {
+  const lockedSlots = {};
+
+  for (const classId in classTimetable || {}) {
+    lockedSlots[classId] = [];
+    const days = classTimetable[classId] || [];
+
+    for (let day = 0; day < days.length; day++) {
+      lockedSlots[classId][day] = [];
+      const hours = days[day] || [];
+
+      for (let hour = 0; hour < hours.length; hour++) {
+        lockedSlots[classId][day][hour] = false;
+      }
+    }
+  }
+
+  return lockedSlots;
+}
+
+async function buildDerivedState(saved) {
+  const classTimetable = normalizeClassTimetables(
+    JSON.parse(JSON.stringify(saved.class_timetables || {}))
+  );
+
+  const config = saved.config || {};
+  const days = Number(config.days || config.daysPerWeek || 6);
+  const hours = Number(config.hours || config.hoursPerDay || 8);
+
+  const comboIds = Object.values(classTimetable)
+    .flatMap((classSchedule) => (classSchedule || []).flatMap((day) => (day || []).flat()))
+    .filter(Boolean)
+    .map((id) => String(id));
+  const validComboIds = [...new Set(comboIds)].filter((id) =>
+    mongoose.Types.ObjectId.isValid(id)
+  );
+
+  const comboDocs = validComboIds.length
+    ? await TeacherSubjectCombination.find({
+        _id: { $in: validComboIds },
+      }).lean()
+    : [];
+
+  const comboMap = new Map();
+  comboDocs.forEach((combo) => comboMap.set(String(combo._id), combo));
+
+  if (Array.isArray(saved.combos)) {
+    saved.combos.forEach((combo) => {
+      if (combo && combo._id) comboMap.set(String(combo._id), combo);
+    });
+  }
+
+  const teacherTimetable = {};
+  const subjectHoursAssigned = {};
+
+  for (const classId in classTimetable) {
+    if (!subjectHoursAssigned[classId]) {
+      subjectHoursAssigned[classId] = {};
+    }
+
+    for (let day = 0; day < days; day++) {
+      if (!Array.isArray(classTimetable[classId][day])) {
+        classTimetable[classId][day] = Array.from({ length: hours }, () => []);
+      }
+
+      for (let hour = 0; hour < hours; hour++) {
+        if (!Array.isArray(classTimetable[classId][day][hour])) {
+          classTimetable[classId][day][hour] = classTimetable[classId][day][hour]
+            ? [classTimetable[classId][day][hour]]
+            : [];
+        }
+
+        const slot = classTimetable[classId][day][hour];
+        for (const comboId of slot) {
+          const combo = comboMap.get(String(comboId));
+          if (!combo) continue;
+
+          const subjectId = String(combo.subject?._id || combo.subject || combo.subject_id || "");
+          const facultyIds = Array.isArray(combo.faculty_ids)
+            ? combo.faculty_ids.map((id) => String(id))
+            : combo.faculty_id
+              ? [String(combo.faculty_id)]
+              : combo.faculty
+                ? [String(combo.faculty?._id || combo.faculty)]
+                : [];
+
+          if (subjectId) {
+            subjectHoursAssigned[classId][subjectId] =
+              (subjectHoursAssigned[classId][subjectId] || 0) + 1;
+          }
+
+          for (const facultyId of facultyIds) {
+            if (!teacherTimetable[facultyId]) {
+              teacherTimetable[facultyId] = Array.from({ length: days }, () => Array(hours).fill(null));
+            }
+            teacherTimetable[facultyId][day][hour] = String(comboId);
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    classTimetable,
+    teacherTimetable,
+    subjectHoursAssigned,
+    config: { ...config, days, hours },
+    version: saved.version || 1,
+    createdAt: saved.createdAt,
+    slotSources:
+      saved.slot_sources ||
+      createSlotSourceGrid(
+        classTimetable,
+        saved.status === "generated" || saved.source === "generator" ? "generated" : "manual"
+      ),
+    lockedSlots: saved.locked_slots || createLockedSlotGrid(classTimetable),
+    sourceTimetableId: saved._id?.toString() || null,
+    generatedFromId:
+      saved.generated_from_id?.toString() ||
+      (saved.source === "generator" ? saved._id?.toString() : null),
+    parentTimetableId:
+      saved.parent_timetable_id?.toString() || saved._id?.toString() || null,
+    lifecycleStatus: saved.status || (saved.source === "generator" ? "generated" : "draft"),
+    editVersion: saved.edit_version || 1,
+  };
+}
+
 /* ------------------------------------------------ */
 /* ------------------- Load / Save ---------------- */
 /* ------------------------------------------------ */
@@ -31,30 +181,30 @@ export async function loadSavedTimetable({ timetableId, savedTimetableId }) {
     throw new Error("Saved timetable not found");
   }
 
-  const normalizedClassTimetables =
-    normalizeClassTimetables(saved.class_timetables);
-
-  return {
-    classTimetable: normalizedClassTimetables,
-    teacherTimetable: saved.teacher_timetables,
-    subjectHoursAssigned: saved.subject_hours_assigned,
-    config: saved.config,
-    version: saved.version,
-    createdAt: saved.createdAt,
-  };
+  return buildDerivedState(saved);
 }
 
 export async function saveTimetable({
   name,
   state,
+  userId = null,
   savedTimetableId = null,
 }) {
+  const isEditedDraft = !!state.generatedFromId;
   const payload = {
     name,
     source: "manual",
+    status: isEditedDraft ? "edited" : (state.lifecycleStatus || "draft"),
+    generated_from_id: state.generatedFromId || null,
+    parent_timetable_id: state.parentTimetableId || null,
+    edit_version: state.editVersion || 1,
+    created_by: userId || null,
     class_timetables: state.classTimetable,
+    faculty_timetables: state.teacherTimetable,
     teacher_timetables: state.teacherTimetable,
     subject_hours_assigned: state.subjectHoursAssigned,
+    slot_sources: state.slotSources || null,
+    locked_slots: state.lockedSlots || null,
     config: state.config,
     version: state.version,
   };
@@ -69,6 +219,24 @@ export async function saveTimetable({
       throw new Error("Timetable to update not found");
     }
     return updated;
+  }
+
+  if (state.parentTimetableId) {
+    const latestSibling = await TimetableResult.find({
+      $or: [
+        { parent_timetable_id: state.parentTimetableId },
+        { _id: state.parentTimetableId },
+      ],
+    })
+      .sort({ edit_version: -1, createdAt: -1 })
+      .lean();
+
+    const maxVersion = latestSibling.reduce((max, item) => {
+      const value = Number(item.edit_version || 0);
+      return value > max ? value : max;
+    }, 0);
+
+    payload.edit_version = maxVersion + 1;
   }
 
   const created = new TimetableResult(payload);

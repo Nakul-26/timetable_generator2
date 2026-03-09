@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -7,6 +7,7 @@ const hours = ["1", "2", "3", "4", "5", "6", "7", "8"];
 
 const ViewTimetable = () => {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [timetable, setTimetable] = useState(null);
     const [classes, setClasses] = useState([]);
     const [combos, setCombos] = useState([]);
@@ -333,12 +334,27 @@ const ViewTimetable = () => {
         downloadPdfFromHtml(buildPdfHtml(true), "Filtered Timetable PDF");
     };
 
+    const canEditTimetable =
+        timetable?.source === 'generator' || timetable?.status === 'generated';
+
     return (
         <div className="manage-container">
             <h2>{timetable.name}</h2>
             <p><strong>Saved At:</strong> {new Date(timetable.createdAt).toLocaleString()}</p>
+            <p>
+                <strong>Status:</strong> {timetable.status || 'draft'}
+                {timetable.edit_version ? ` | Version ${timetable.edit_version}` : ''}
+            </p>
 
             <div className="actions-bar">
+                {canEditTimetable && (
+                    <button
+                        className="primary-btn"
+                        onClick={() => navigate(`/manual-timetable?sourceTimetableId=${id}`)}
+                    >
+                        Edit Timetable
+                    </button>
+                )}
                 <button className="secondary-btn" onClick={handleDownloadFull}>
                     Download Full PDF
                 </button>

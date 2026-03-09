@@ -88,10 +88,11 @@ protectedRouter.post('/process-new-input', async (req, res) => {
 
         // 4. Save the generated assignments as a new TimetableResult
         const newAssignmentName = `Processed Assignments - ${new Date().toLocaleString()}`;
-        const newAssignmentResult = new TimetableResult({
-            name: newAssignmentName,
-            source: 'assignments',
-            // Storing raw combo data instead of refs.
+    const newAssignmentResult = new TimetableResult({
+      name: newAssignmentName,
+      source: 'assignments',
+      status: 'draft',
+      // Storing raw combo data instead of refs.
             // We are creating a new property 'raw_combos' to not break the existing schema.
             // Note: This is a placeholder for a more robust solution.
             assignments_only: assignmentsOnly, // This won't populate correctly.
@@ -329,6 +330,9 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
     }
 
     const rec = new TimetableResult({
+      name: `Generated Timetable - ${new Date().toLocaleString()}`,
+      source: 'generator',
+      status: 'generated',
       class_timetables: bestClassTimetables,
       faculty_timetables: bestFacultyTimetables,
       faculty_daily_hours: bestFacultyDailyHours,
@@ -378,6 +382,8 @@ protectedRouter.post("/timetables", async (req, res) => {
     const newTimetable = new TimetableResult({
       name,
       source: 'generator', // Mark as from the generator
+      status: 'generated',
+      created_by: req.user?._id || null,
       class_timetables: timetableData.class_timetables,
       faculty_timetables: timetableData.faculty_timetables,
       faculty_daily_hours: timetableData.faculty_daily_hours,

@@ -1,11 +1,9 @@
 import { Router } from "express";
 const router = Router();
-import express from "express";
 import ClassModel from "../models/Class.js";
 import TeacherSubjectCombination from "../models/TeacherSubjectCombination.js";
 import Faculty from "../models/Faculty.js";
 import Subject from "../models/Subject.js";
-import TimetableResult from "../models/TimetableResult.js";
 
 import {
   clearSlot,
@@ -23,11 +21,65 @@ import { runAutoFill } from "../services/manual-timetable/autofill.service.js";
 
 import {
   computeAvailableCombos,
-  checkClassConstraints,
-  checkTeacherConstraints,
   computeRemainingHours,
-  autoFillTimetable,
+  checkTeacherConstraints,
 } from "../utils/timetableManualUtils.js";
+
+import {
+  initializeState,
+  loadState,
+  getState,
+  setState,
+  lockSlot,
+  unlockSlot,
+  assertState,
+  deleteState,
+} from "../state/timetableState.js";
+
+function buildSessionMeta(existingState = {}, overrides = {}) {
+  return {
+    slotSources: existingState.slotSources || {},
+    lockedSlots: existingState.lockedSlots || {},
+    sourceTimetableId: existingState.sourceTimetableId || null,
+    generatedFromId: existingState.generatedFromId || null,
+    parentTimetableId: existingState.parentTimetableId || null,
+    lifecycleStatus: existingState.lifecycleStatus || "draft",
+    editVersion: existingState.editVersion || 1,
+    ...overrides,
+  };
+}
+
+router.post("/initialize", async (req, res) => {
+  try {
+    const {
+      timetableId,
+      classes = [],
+      faculties = [],
+      subjects = [],
+      electiveGroups = [],
+      config = {},
+      sourceTimetableId = null,
+    } = req.body;
+
+    if (!timetableId) {
+      return res.status(400).json({ ok: false, error: "timetableId is required" });
+    }
+
+    initializeState(timetableId, classes, faculties, subjects, config, electiveGroups);
+
+    const nextState = {
+      ...getState(timetableId),
+      ...buildSessionMeta(getState(timetableId), {
+        sourceTimetableId,
+      }),
+    };
+    loadState(timetableId, nextState);
+
+    return res.json({ ok: true, ...getState(timetableId) });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // Valid options
 router.post("/valid-options", async (req, res) => {
@@ -125,6 +177,14 @@ router.post("/place", async (req, res) => {
       comboId
     });
 
+    if (!newState.slotSources[classId]) {
+      newState.slotSources[classId] = [];
+    }
+    if (!newState.slotSources[classId][day]) {
+      newState.slotSources[classId][day] = [];
+    }
+    newState.slotSources[classId][day][hour] = "manual";
+
     setState(timetableId, newState);
     return res.json({ ok: true, ...newState });
   } catch (e) {
@@ -164,6 +224,13 @@ router.post("/clear-all", async (req, res) => {
   ]);
 
   initializeState(timetableId, classes, faculties, subjects, config);
+  const current = getState(timetableId);
+  loadState(timetableId, {
+    ...current,
+    ...buildSessionMeta(current, {
+      lifecycleStatus: "draft",
+    }),
+  });
   return res.json({ ok: true, ...getState(timetableId) });
 });
 
@@ -178,7 +245,11 @@ router.post("/load", async (req, res) => {
       savedTimetableId,
     });
 
-    loadState(timetableId, savedState);
+    const currentState = getState(timetableId);
+    loadState(timetableId, {
+      ...savedState,
+      electiveGroups: currentState.electiveGroups || [],
+    });
     res.json({ ok: true, ...getState(timetableId) });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -195,6 +266,7 @@ router.post("/save", async (req, res) => {
     const saved = await saveTimetable({
       name,
       state,
+      userId: req.user?._id || null,
       savedTimetableId,
     });
 
@@ -234,7 +306,38 @@ router.post("/clear-slot", async (req, res) => {
 
   try {
     let newState = JSON.parse(JSON.stringify(getState(timetableId)));
+    if (newState.lockedSlots?.[classId]?.[day]?.[hour]) {
+      return res.status(400).json({ ok: false, error: "This slot is locked." });
+    }
     await clearSlot({ classId, day, hour, state: newState });
+    if (!newState.slotSources[classId]) {
+      newState.slotSources[classId] = [];
+    }
+    if (!newState.slotSources[classId][day]) {
+      newState.slotSources[classId][day] = [];
+    }
+    newState.slotSources[classId][day][hour] = "manual";
+    setState(timetableId, newState);
+    return res.json({ ok: true, ...newState });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.post("/toggle-lock", async (req, res) => {
+  const { timetableId, classId, day, hour } = req.body;
+  assertState(timetableId);
+
+  try {
+    const newState = JSON.parse(JSON.stringify(getState(timetableId)));
+    if (!newState.lockedSlots[classId]) {
+      newState.lockedSlots[classId] = [];
+    }
+    if (!newState.lockedSlots[classId][day]) {
+      newState.lockedSlots[classId][day] = [];
+    }
+
+    newState.lockedSlots[classId][day][hour] = !newState.lockedSlots[classId][day][hour];
     setState(timetableId, newState);
     return res.json({ ok: true, ...newState });
   } catch (e) {
