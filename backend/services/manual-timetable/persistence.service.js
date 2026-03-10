@@ -150,6 +150,7 @@ async function buildDerivedState(saved) {
     classTimetable,
     teacherTimetable,
     subjectHoursAssigned,
+    combos: saved.combos || comboDocs,
     config: { ...config, days, hours },
     version: saved.version || 1,
     createdAt: saved.createdAt,
@@ -205,6 +206,7 @@ export async function saveTimetable({
     subject_hours_assigned: state.subjectHoursAssigned,
     slot_sources: state.slotSources || null,
     locked_slots: state.lockedSlots || null,
+    combos: state.combos || null,
     config: state.config,
     version: state.version,
   };

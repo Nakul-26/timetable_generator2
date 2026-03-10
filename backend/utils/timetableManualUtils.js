@@ -20,6 +20,23 @@ export function computeRemainingHours(classObj, subjectHoursAssigned) {
   return remaining;
 }
 
+function getComboSubjectId(combo) {
+  return String(combo?.subject?._id || combo?.subject || combo?.subject_id || "");
+}
+
+function getComboFacultyIds(combo) {
+  if (Array.isArray(combo?.faculty_ids) && combo.faculty_ids.length > 0) {
+    return combo.faculty_ids.map((id) => String(id));
+  }
+  if (combo?.faculty?._id || combo?.faculty) {
+    return [String(combo.faculty?._id || combo.faculty)];
+  }
+  if (combo?.faculty_id) {
+    return [String(combo.faculty_id)];
+  }
+  return [];
+}
+
 
 //---------------------------------------------------------
 // Teacher constraint checker
@@ -57,7 +74,7 @@ export function checkTeacherConstraints(teacherTimetable, facultyId, day, hour) 
 //---------------------------------------------------------
 // Class constraint checker
 //---------------------------------------------------------
-export function checkClassConstraints(classTimetable, classObj, day, hour, subjId, remainingHours) {
+export function checkClassConstraints(classTimetable, classObj, day, hour, subjId, remainingHours, { allowHourOverflow = false } = {}) {
 
   // Slot collision check
   const slot = classTimetable[classObj._id.toString()]?.[day]?.[hour];
@@ -67,7 +84,7 @@ export function checkClassConstraints(classTimetable, classObj, day, hour, subjI
 
   // Subject hours limit check
   // Handle case where remainingHours might be null (e.g., if subject_hours is not defined for the class)
-  if (!remainingHours || remainingHours[subjId] === undefined || remainingHours[subjId] <= 0) {
+  if (!allowHourOverflow && (!remainingHours || remainingHours[subjId] === undefined || remainingHours[subjId] <= 0)) {
     return { ok: false, error: "Required hours for this subject are already completed or subject hours data is missing." };
   }
 
@@ -85,23 +102,16 @@ export function computeAvailableCombos({
   teacherTimetable,
   day,
   hour,
-  subjectHoursAssigned
+  subjectHoursAssigned,
+  allowHourOverflow = false,
 }) {
   const remainingHours = computeRemainingHours(classObj, subjectHoursAssigned);
 
-  // If remainingHours is null, it means subject_hours data is missing for the class,
-  // so no subjects can be assigned.
-  if (remainingHours === null) {
-    return [];
-  }
-
   const valid = [];
 
-  const assignedComboIds = classObj.assigned_teacher_subject_combos.map(id => id.toString());
-
   for (const cb of combos) {
-    const subjId = cb.subject._id.toString();
-    const facultyId = cb.faculty._id.toString();
+    const subjId = getComboSubjectId(cb);
+    const facultyIds = getComboFacultyIds(cb);
 
     // Check class constraints
     const classCheck = checkClassConstraints(
@@ -110,18 +120,21 @@ export function computeAvailableCombos({
       day,
       hour,
       subjId,
-      remainingHours
+      remainingHours,
+      { allowHourOverflow }
     );
     if (!classCheck.ok) continue;
 
-    // Check teacher constraints
-    const teacherCheck = checkTeacherConstraints(
-      teacherTimetable,
-      facultyId,
-      day,
-      hour
-    );
-    if (!teacherCheck.ok) continue;
+    const teacherBlocked = facultyIds.some((facultyId) => {
+      const teacherCheck = checkTeacherConstraints(
+        teacherTimetable,
+        facultyId,
+        day,
+        hour
+      );
+      return !teacherCheck.ok;
+    });
+    if (teacherBlocked) continue;
 
     valid.push(cb);
   }

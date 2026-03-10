@@ -13,6 +13,8 @@ const ManualTimetable = () => {
     const [classes, setClasses] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [subjectIdToDetails, setSubjectIdToDetails] = useState({});
+    const [facultyIdToName, setFacultyIdToName] = useState({});
+    const [requiredHoursByClassSubject, setRequiredHoursByClassSubject] = useState({});
     
     // Timetable states
     const [classTimetable, setClassTimetable] = useState({});
@@ -29,9 +31,70 @@ const ManualTimetable = () => {
     const [slotSources, setSlotSources] = useState({});
     const [lockedSlots, setLockedSlots] = useState({});
     const [sourceTimetableMeta, setSourceTimetableMeta] = useState(null);
+    const [editableTimetableName, setEditableTimetableName] = useState('');
+    const [activeCellKey, setActiveCellKey] = useState(null);
 
 
     const [validOptions, setValidOptions] = useState({}); // { "classId-dayIndex-hourIndex": [options] }
+    const isEditingGeneratedTimetable =
+        Boolean(sourceTimetableId) &&
+        (sourceTimetableMeta?.source === 'generator' || sourceTimetableMeta?.status === 'generated');
+    const getCellKey = (classId, dayIndex, hourIndex) => `${classId}-${dayIndex}-${hourIndex}`;
+
+    const handleToggleCellEditor = (classId, dayIndex, hourIndex) => {
+        const cellKey = getCellKey(classId, dayIndex, hourIndex);
+        const nextIsOpening = activeCellKey !== cellKey;
+        setActiveCellKey(nextIsOpening ? cellKey : null);
+
+        if (nextIsOpening) {
+            handleGetOptions(classId, dayIndex, hourIndex);
+        }
+    };
+
+    const getClassSummaryRows = (classObj) => {
+        const classId = classObj._id;
+        const requiredHours = requiredHoursByClassSubject[classId] || classObj.subject_hours || {};
+        const assignedHours = subjectHoursAssigned[classId] || {};
+        const subjectIds = Array.from(new Set([
+            ...Object.keys(requiredHours),
+            ...Object.keys(assignedHours),
+        ]));
+
+        return subjectIds.map((subjectId) => ({
+            subjectId,
+            name: subjectIdToDetails[subjectId]?.name || 'Unknown Subject',
+            assignedHours: assignedHours[subjectId] || 0,
+            requiredHours: requiredHours[subjectId],
+        }));
+    };
+
+    const resolveComboDisplay = (combo, classId = '') => {
+        const subjectId = String(combo?.subject?._id || combo?.subject || combo?.subject_id || '');
+        const facultyIds = Array.isArray(combo?.faculty_ids)
+            ? combo.faculty_ids.map((id) => String(id))
+            : combo?.faculty_id
+                ? [String(combo.faculty_id)]
+                : combo?.faculty
+                    ? [String(combo.faculty?._id || combo.faculty)]
+                    : [];
+
+        const subjectName =
+            combo?.subject?.name ||
+            combo?.subject_name ||
+            subjectIdToDetails[subjectId]?.name ||
+            (subjectId ? `Subject ${subjectId.slice(-4)}` : 'Unknown Subject');
+
+        return {
+            subject: subjectName,
+            faculty:
+                combo?.faculty?.name ||
+                combo?.faculty_name ||
+                facultyIds.map((facultyId) => facultyIdToName[facultyId] || `Faculty ${facultyId.slice(-4)}`).join(', ') ||
+                'Unknown Teacher',
+            subjectId,
+            classId,
+        };
+    };
 
     // Initial data fetch and state setup
     useEffect(() => {
@@ -39,11 +102,12 @@ const ManualTimetable = () => {
             try {
                 setIsLoading(true);
                 // Fetch core data
-                const [classesRes, facultiesRes, subjectsRes, combosRes, sourceRes] = await Promise.all([
+                const [classesRes, facultiesRes, subjectsRes, combosRes, classSubjectRes, sourceRes] = await Promise.all([
                     api.get('/classes'),
                     api.get('/faculties'),
                     api.get('/subjects'),
                     api.get('/teacher-subject-combos'),
+                    api.get('/class-subjects'),
                     sourceTimetableId ? api.get(`/timetable/${sourceTimetableId}`) : Promise.resolve({ data: null })
                 ]);
 
@@ -51,9 +115,16 @@ const ManualTimetable = () => {
                 const fetchedFaculties = facultiesRes.data;
                 const fetchedSubjects = subjectsRes.data;
                 const fetchedCombos = combosRes.data || [];
+                const fetchedClassSubjects = classSubjectRes.data || [];
 
                 setClasses(fetchedClasses);
                 setSubjects(fetchedSubjects);
+                setFacultyIdToName(
+                    fetchedFaculties.reduce((acc, faculty) => {
+                        acc[String(faculty._id)] = faculty.name;
+                        return acc;
+                    }, {})
+                );
 
                 const subjectDetails = {};
                 fetchedSubjects.forEach(s => {
@@ -61,39 +132,37 @@ const ManualTimetable = () => {
                 });
                 setSubjectIdToDetails(subjectDetails);
 
+                const requiredHoursMap = {};
+                fetchedClassSubjects.forEach((item) => {
+                    const classId = String(item?.class?._id || item?.class || '');
+                    const subjectId = String(item?.subject?._id || item?.subject || '');
+                    const hoursPerWeek = Number(item?.hoursPerWeek || 0);
+
+                    if (!classId || !subjectId) return;
+                    if (!requiredHoursMap[classId]) {
+                        requiredHoursMap[classId] = {};
+                    }
+                    requiredHoursMap[classId][subjectId] = hoursPerWeek;
+                });
+                setRequiredHoursByClassSubject(requiredHoursMap);
+
                 const comboDetails = {};
                 fetchedCombos.forEach(combo => {
                     const comboId = String(combo._id);
-                    const subjectId = String(combo?.subject?._id || combo?.subject || '');
-                    const facultyId = String(combo?.faculty?._id || combo?.faculty || '');
-                    const subjectName = combo?.subject?.name || subjectDetails[subjectId]?.name || 'Unknown Subject';
-                    const facultyName =
-                        combo?.faculty?.name ||
-                        fetchedFaculties.find(f => String(f._id) === facultyId)?.name ||
-                        'Unknown Teacher';
+                    const resolved = resolveComboDisplay(combo);
                     comboDetails[comboId] = {
-                        subject: subjectName,
-                        faculty: facultyName,
+                        subject: resolved.subject,
+                        faculty: resolved.faculty,
                     };
                 });
 
                 if (Array.isArray(sourceRes.data?.combos)) {
                     sourceRes.data.combos.forEach(combo => {
                         const comboId = String(combo._id);
-                        const subjectId = String(combo?.subject_id || combo?.subject?._id || combo?.subject || '');
-                        const facultyIds = Array.isArray(combo?.faculty_ids)
-                            ? combo.faculty_ids.map(id => String(id))
-                            : combo?.faculty_id
-                                ? [String(combo.faculty_id)]
-                                : combo?.faculty
-                                    ? [String(combo.faculty?._id || combo.faculty)]
-                                    : [];
-
+                        const resolved = resolveComboDisplay(combo);
                         comboDetails[comboId] = {
-                            subject: subjectDetails[subjectId]?.name || combo?.subject?.name || 'Unknown Subject',
-                            faculty: facultyIds
-                                .map(facultyId => fetchedFaculties.find(f => String(f._id) === facultyId)?.name || 'Unknown Teacher')
-                                .join(', '),
+                            subject: resolved.subject,
+                            faculty: resolved.faculty,
                         };
                     });
                 }
@@ -107,6 +176,7 @@ const ManualTimetable = () => {
                 const currentTimetableId = `manual-${Date.now()}`;
                 setTimetableId(currentTimetableId);
                 setSourceTimetableMeta(sourceRes.data || null);
+                setEditableTimetableName(sourceRes.data?.name || '');
 
                 // Initialize backend state and get initial timetables
                 // Pass frontend's preferred days and hours configuration
@@ -177,7 +247,10 @@ const ManualTimetable = () => {
             
             const newDetails = {};
             options.forEach(opt => {
-                newDetails[opt.comboId] = { subject: opt.subject, faculty: opt.faculty };
+                newDetails[opt.comboId] = {
+                    subject: opt.subject || (opt.subjectId ? subjectIdToDetails[String(opt.subjectId)]?.name : null) || 'Unknown Subject',
+                    faculty: opt.faculty || (Array.isArray(opt.facultyIds) ? opt.facultyIds.map((facultyId) => facultyIdToName[String(facultyId)] || `Faculty ${String(facultyId).slice(-4)}`).join(', ') : 'Unknown Teacher'),
+                };
             });
             setComboIdToDetails(prev => ({ ...prev, ...newDetails }));
 
@@ -332,7 +405,9 @@ const ManualTimetable = () => {
         const suggestedName = sourceTimetableMeta?.name
             ? `${sourceTimetableMeta.name} (Edited)`
             : 'Edited Timetable';
-        const name = window.prompt("Enter a name for this timetable:", suggestedName);
+        const name = isEditingGeneratedTimetable
+            ? (editableTimetableName || suggestedName).trim()
+            : window.prompt("Enter a name for this timetable:", suggestedName)?.trim();
         if (name) {
             setIsSaving(true);
             try {
@@ -460,21 +535,33 @@ const ManualTimetable = () => {
     return (
         <div className="manage-container manual-page">
             <div className="manual-header">
-                <h1>Manual Timetable Generator</h1>
+                <h1>{isEditingGeneratedTimetable ? 'Edit Generated Timetable' : 'Manual Timetable Generator'}</h1>
                 {sourceTimetableMeta && (
-                    <p>
-                        Editing generated timetable: <strong>{sourceTimetableMeta.name}</strong>
-                        {sourceTimetableMeta.status ? ` | ${sourceTimetableMeta.status}` : ''}
-                    </p>
+                    isEditingGeneratedTimetable ? (
+                        <div className="manual-edit-meta">
+                            <label className="manual-edit-name">
+                                <span>Timetable Name</span>
+                                <input
+                                    type="text"
+                                    value={editableTimetableName}
+                                    onChange={(e) => setEditableTimetableName(e.target.value)}
+                                    placeholder="Enter timetable name"
+                                    disabled={isSaving || isDeleting}
+                                />
+                            </label>
+                            <p>
+                                Editing generated timetable
+                                {sourceTimetableMeta.status ? ` | ${sourceTimetableMeta.status}` : ''}
+                            </p>
+                        </div>
+                    ) : (
+                        <p>
+                            Editing generated timetable: <strong>{sourceTimetableMeta.name}</strong>
+                            {sourceTimetableMeta.status ? ` | ${sourceTimetableMeta.status}` : ''}
+                        </p>
+                    )
                 )}
                 <div className="manual-header-actions">
-                    <button
-                        onClick={handleLoad}
-                        className="manual-action-btn manual-action-load"
-                        disabled={isSaving || isDeleting}
-                    >
-                        Load Timetable
-                    </button>
                     <button
                         onClick={() => handleSave()}
                         className="manual-action-btn manual-action-save"
@@ -482,27 +569,38 @@ const ManualTimetable = () => {
                     >
                         {isSaving ? 'Saving...' : 'Save Timetable'}
                     </button>
-                    <button
-                        onClick={() => handleSave(true)}
-                        className="manual-action-btn manual-action-save-as"
-                        disabled={isSaving || isDeleting}
-                    >
-                        Save As...
-                    </button>
-                    <button 
-                        onClick={handleClearAll}
-                        className="manual-action-btn manual-action-clear"
-                        disabled={isSaving || isDeleting}
-                    >
-                        Clear All Timetables
-                    </button>
-                    <button 
-                        onClick={handleDeleteTimetable}
-                        className="manual-action-btn manual-action-delete"
-                        disabled={isSaving || isDeleting}
-                    >
-                        {isDeleting ? 'Deleting...' : 'Delete Timetable'}
-                    </button>
+                    {!isEditingGeneratedTimetable && (
+                        <>
+                            <button
+                                onClick={handleLoad}
+                                className="manual-action-btn manual-action-load"
+                                disabled={isSaving || isDeleting}
+                            >
+                                Load Timetable
+                            </button>
+                            <button
+                                onClick={() => handleSave(true)}
+                                className="manual-action-btn manual-action-save-as"
+                                disabled={isSaving || isDeleting}
+                            >
+                                Save As...
+                            </button>
+                            <button
+                                onClick={handleClearAll}
+                                className="manual-action-btn manual-action-clear"
+                                disabled={isSaving || isDeleting}
+                            >
+                                Clear All Timetables
+                            </button>
+                            <button
+                                onClick={handleDeleteTimetable}
+                                className="manual-action-btn manual-action-delete"
+                                disabled={isSaving || isDeleting}
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete Timetable'}
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
             {classes.map(c => (
@@ -535,71 +633,86 @@ const ManualTimetable = () => {
                                         const hasLoadedOptions = options !== undefined;
                                         const slotSource = slotSources[c._id]?.[dayIndex]?.[hourIndex];
                                         const isLocked = !!lockedSlots[c._id]?.[dayIndex]?.[hourIndex];
-                                        const tdStyle = {
-                                            backgroundColor: isLocked
-                                                ? '#f6d365'
-                                                : slotSource === 'manual'
-                                                    ? '#d9ecff'
-                                                    : comboIdsInSlot && comboIdsInSlot.length > 0
-                                                        ? '#dff4dd'
-                                                        : '#fde2e1',
-                                            padding: '5px',
-                                            verticalAlign: 'top',
-                                        };
+                                        const cellKey = getCellKey(c._id, dayIndex, hourIndex);
+                                        const isActive = activeCellKey === cellKey;
+                                        const cellClassName = [
+                                            'manual-slot',
+                                            isLocked ? 'is-locked' : '',
+                                            slotSource === 'manual' ? 'is-manual' : '',
+                                            comboIdsInSlot && comboIdsInSlot.length > 0 ? 'has-value' : 'is-empty',
+                                            isActive ? 'is-active' : '',
+                                        ].filter(Boolean).join(' ');
 
                                         return (
-                                            <td key={hourIndex} style={tdStyle}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: '40px' }}>
-                                                    <div>
-                                                        {comboIdsInSlot?.map(comboId => {
-                                                            const details = comboIdToDetails[comboId];
-                                                            return (
-                                                                <div key={comboId} style={{ marginBottom: '5px' }}>
-                                                                    {details ? `${details.subject} - ${details.faculty}` : 'Loading...'}
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    {comboIdsInSlot && comboIdsInSlot.length > 0 && (
-                                                        <button 
-                                                            onClick={() => handleClearSlot(c._id, dayIndex, hourIndex)}
-                                                            disabled={isLocked}
-                                                            style={{ border: 'none', background: 'transparent', color: 'red', cursor: 'pointer', padding: '0', fontSize: '16px' }}
-                                                            title="Clear slot"
-                                                        >
-                                                            X
-                                                        </button>
+                                            <td key={hourIndex} className="manual-slot-cell">
+                                                <div className={cellClassName}>
+                                                    <button
+                                                        type="button"
+                                                        className="manual-slot-summary-btn"
+                                                        onClick={() => handleToggleCellEditor(c._id, dayIndex, hourIndex)}
+                                                    >
+                                                        <div className="manual-slot-topline">
+                                                            <span className="manual-slot-hour">H{hour}</span>
+                                                            {isLocked && <span className="manual-slot-badge">Locked</span>}
+                                                        </div>
+                                                        <div className="manual-slot-content">
+                                                            {comboIdsInSlot?.map(comboId => {
+                                                                const details = comboIdToDetails[comboId];
+                                                                return (
+                                                                    <div key={comboId} className="manual-slot-entry">
+                                                                        <strong>{details?.subject || 'Loading...'}</strong>
+                                                                        <span>{details?.faculty || ''}</span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                            {(!comboIdsInSlot || comboIdsInSlot.length === 0) && (
+                                                                <div className="manual-slot-empty">Empty slot</div>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                    {isActive && (
+                                                        <div className="manual-slot-editor">
+                                                            <div className="manual-slot-editor-actions">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleToggleLock(c._id, dayIndex, hourIndex)}
+                                                                    className={`manual-slot-icon-btn ${isLocked ? 'is-locked' : ''}`}
+                                                                >
+                                                                    {isLocked ? 'Unlock' : 'Lock'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleClearSlot(c._id, dayIndex, hourIndex)}
+                                                                    disabled={isLocked || !comboIdsInSlot || comboIdsInSlot.length === 0}
+                                                                    className="manual-slot-icon-btn is-danger"
+                                                                >
+                                                                    Clear
+                                                                </button>
+                                                            </div>
+                                                            <select
+                                                                onChange={(e) => {
+                                                                    if (e.target.value) {
+                                                                        handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value);
+                                                                        setActiveCellKey(null);
+                                                                    }
+                                                                }}
+                                                                disabled={isLocked}
+                                                                className="manual-slot-select"
+                                                                defaultValue=""
+                                                            >
+                                                                <option value="">Select subject</option>
+                                                                {hasLoadedOptions && options.length === 0 && (
+                                                                    <option value="">No options available</option>
+                                                                )}
+                                                                {options?.map(option => (
+                                                                    <option key={option.comboId} value={option.comboId}>
+                                                                        {option.subject} - {option.faculty}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
                                                     )}
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleToggleLock(c._id, dayIndex, hourIndex)}
-                                                    className="secondary-btn"
-                                                    style={{ marginBottom: '6px', width: '100%' }}
-                                                >
-                                                    {isLocked ? 'Unlock Slot' : 'Lock Slot'}
-                                                </button>
-                                                <select
-                                                    onFocus={() => handleGetOptions(c._id, dayIndex, hourIndex)}
-                                                    onChange={(e) => {
-                                                        if (e.target.value) { // Only place if a value is selected
-                                                            handlePlaceCombo(c._id, dayIndex, hourIndex, e.target.value);
-                                                        }
-                                                    }}
-                                                    disabled={isLocked}
-                                                    style={{ width: '100%', border: 'none', background: 'transparent' }}
-                                                    defaultValue=""
-                                                >
-                                                    <option value="">--Select--</option>
-                                                    {hasLoadedOptions && options.length === 0 && (
-                                                        <option value="" >-- No Options --</option> //dashboard
-                                                    )}
-                                                    {options?.map(option => (
-                                                        <option key={option.comboId} value={option.comboId}>
-                                                            {option.subject} - {option.faculty}
-                                                        </option>
-                                                    ))}
-                                                </select>
                                             </td>
                                         );
                                     })}
@@ -620,13 +733,21 @@ const ManualTimetable = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {c.subject_hours && Object.keys(c.subject_hours).map(subjectId => (
-                                    <tr key={subjectId}>
-                                        <td>{subjectIdToDetails[subjectId]?.name || 'Unknown Subject'}</td>
-                                        <td>{subjectHoursAssigned[c._id]?.[subjectId] || 0}</td>
-                                        <td>{c.subject_hours[subjectId]}</td>
+                                {getClassSummaryRows(c).length > 0 ? (
+                                    getClassSummaryRows(c).map(({ subjectId, name, assignedHours, requiredHours }) => (
+                                        <tr key={subjectId}>
+                                            <td>{name}</td>
+                                            <td>{assignedHours}</td>
+                                            <td>{requiredHours ?? '—'}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="3" className="manual-summary-empty">
+                                            No subject requirement data is available for this class yet.
+                                        </td>
                                     </tr>
-                                ))}
+                                )}
                             </tbody>
                         </table>
                         </div>

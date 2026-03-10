@@ -1,7 +1,6 @@
 import { Router } from "express";
 const router = Router();
 import ClassModel from "../models/Class.js";
-import TeacherSubjectCombination from "../models/TeacherSubjectCombination.js";
 import Faculty from "../models/Faculty.js";
 import Subject from "../models/Subject.js";
 
@@ -16,12 +15,15 @@ import {
   saveTimetable,
   getProcessedAssignments,
 } from "../services/manual-timetable/persistence.service.js";
+import {
+  resolveCombosFromState,
+  getClassCombosForEdit,
+} from "../services/manual-timetable/comboResolver.service.js";
 
 import { runAutoFill } from "../services/manual-timetable/autofill.service.js";
 
 import {
   computeAvailableCombos,
-  computeRemainingHours,
   checkTeacherConstraints,
 } from "../utils/timetableManualUtils.js";
 
@@ -93,31 +95,33 @@ router.post("/valid-options", async (req, res) => {
     const classObj = await ClassModel.findById(classId).lean();
     if (!classObj) return res.status(404).json({ ok: false, error: "Class not found" });
 
-    const combos = await TeacherSubjectCombination.find({
-      _id: { $in: classObj.assigned_teacher_subject_combos }
-    }).populate("faculty subject").lean();
+    const combos = await getClassCombosForEdit(state, classObj);
 
     const combosInSlot = classTimetable[classId]?.[day]?.[hour] || [];
     let validCombos = [];
 
     if (combosInSlot.length > 1) {
       // Slot has multiple electives; find other valid electives from the same group.
-      const combosDetailsInSlot = await TeacherSubjectCombination.find({ _id: { $in: combosInSlot } }).select('subject').lean();
-      const subjectIdsInSlot = combosDetailsInSlot.map(c => c.subject.toString());
+      const combosDetailsInSlot = await resolveCombosFromState(state, combosInSlot);
+      const subjectIdsInSlot = combosDetailsInSlot.map((c) => c.subjectId).filter(Boolean);
 
       const relevantGroup = electiveGroups.find(g => g.classId === classId && g.subjects.includes(subjectIdsInSlot[0]));
 
       if (relevantGroup) {
         const potentialSubjectIds = relevantGroup.subjects.filter(s => !subjectIdsInSlot.includes(s));
-        const remainingHours = computeRemainingHours(classObj, subjectHoursAssigned);
-        
         for (const combo of combos) {
-          const subjId = combo.subject._id.toString();
+          const subjId = String(combo.subject?._id || combo.subject || combo.subject_id || "");
+          const facultyIds = Array.isArray(combo.faculty_ids) && combo.faculty_ids.length > 0
+            ? combo.faculty_ids.map((id) => String(id))
+            : [String(combo.faculty?._id || combo.faculty || combo.faculty_id || "")].filter(Boolean);
           if (!potentialSubjectIds.includes(subjId)) continue;
 
-          // Check teacher and remaining hours
-          const teacherCheck = checkTeacherConstraints(teacherTimetable, combo.faculty._id.toString(), day, hour);
-          if (teacherCheck.ok && remainingHours[subjId] > 0) {
+          const teacherBlocked = facultyIds.some((facultyId) => {
+            const teacherCheck = checkTeacherConstraints(teacherTimetable, facultyId, day, hour);
+            return !teacherCheck.ok;
+          });
+
+          if (!teacherBlocked) {
             validCombos.push(combo);
           }
         }
@@ -138,7 +142,8 @@ router.post("/valid-options", async (req, res) => {
             teacherTimetable: tempState.teacherTimetable,
             subjectHoursAssigned: tempState.subjectHoursAssigned,
             day,
-            hour
+            hour,
+            allowHourOverflow: true,
           });
         }
       );
@@ -150,7 +155,15 @@ router.post("/valid-options", async (req, res) => {
       validOptions: validCombos.map(c => ({
         comboId: c._id,
         faculty: c.faculty.name,
-        subject: c.subject.name
+        subject: c.subject.name,
+        subjectId: c.subject?._id || c.subject || c.subject_id || "",
+        facultyIds: Array.isArray(c.faculty_ids)
+          ? c.faculty_ids
+          : c.faculty_id
+            ? [c.faculty_id]
+            : c.faculty
+              ? [c.faculty?._id || c.faculty]
+              : [],
       }))
     });
   } catch (e) {

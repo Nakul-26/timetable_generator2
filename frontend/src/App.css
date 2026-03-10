@@ -838,6 +838,30 @@ h2 {
   color: #ff6b6b;
 }
 
+.manual-edit-meta {
+  flex: 1;
+  min-width: 260px;
+}
+
+.manual-edit-meta p {
+  margin: 8px 0 0;
+}
+
+.manual-edit-name {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.manual-edit-name input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
 .manual-header-actions {
   display: flex;
   gap: 10px;
@@ -861,7 +885,12 @@ h2 {
 .manual-action-delete { background: #e74c3c; }
 
 .manual-class-block {
-  margin-bottom: 32px;
+  margin-bottom: 28px;
+  padding: 18px;
+  border: 1px solid #f3dfcf;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdfb 0%, #ffffff 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
 .manual-class-header {
@@ -872,9 +901,13 @@ h2 {
   flex-wrap: wrap;
 }
 
+.manual-class-header h2 {
+  margin: 0;
+}
+
 .manual-autofill-btn {
   border: none;
-  background: #ff8c42;
+  background: #ff7a45;
   color: #fff;
   padding: 8px 14px;
   border-radius: 8px;
@@ -888,6 +921,169 @@ h2 {
 
 .manual-summary-table {
   max-width: 780px;
+}
+
+.manual-summary-empty {
+  text-align: center;
+  color: #6b7280;
+  padding: 16px;
+}
+
+.manual-table thead th:first-child,
+.manual-table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff9f5;
+}
+
+.manual-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.manual-slot-cell {
+  padding: 8px;
+  vertical-align: top;
+  min-width: 150px;
+}
+
+.manual-slot {
+  min-height: 118px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #eadfd6;
+  background: #fff7f2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.manual-slot:hover,
+.manual-slot.is-active {
+  border-color: #ffb489;
+  box-shadow: 0 10px 22px rgba(255, 122, 69, 0.16);
+  transform: translateY(-1px);
+}
+
+.manual-slot-summary-btn {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.manual-slot.has-value {
+  background: #f3fbf4;
+}
+
+.manual-slot.is-manual {
+  background: #eef6ff;
+}
+
+.manual-slot.is-locked {
+  background: #fff4db;
+}
+
+.manual-slot-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.manual-slot-hour {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #8a4b24;
+  letter-spacing: 0.04em;
+}
+
+.manual-slot-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #8a4b24;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.manual-slot-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.manual-slot-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.manual-slot-entry strong {
+  font-size: 0.86rem;
+  color: #1f2937;
+}
+
+.manual-slot-entry span,
+.manual-slot-empty {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.manual-slot-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(138, 75, 36, 0.16);
+}
+
+.manual-slot-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.manual-slot-icon-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: #fff4ec;
+  color: #9a3412;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.manual-slot-icon-btn.is-locked {
+  background: #efe2c2;
+  color: #7c2d12;
+}
+
+.manual-slot-icon-btn.is-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.manual-slot-icon-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.manual-slot-select {
+  width: 100%;
+  border: 1px solid #d7dce3;
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #fff;
 }
 
 .actions-cell {
@@ -1240,6 +1436,14 @@ h2 {
     justify-content: flex-start;
   }
 
+  .manual-class-block {
+    padding: 14px;
+  }
+
+  .manual-slot-cell {
+    min-width: 136px;
+  }
+
   .tt-settings-section {
     padding: 12px;
   }
@@ -1255,6 +1459,15 @@ h2 {
   .home-container {
     margin: 12px auto;
     padding: 14px;
+  }
+
+  .manual-slot {
+    min-height: 104px;
+    padding: 8px;
+  }
+
+  .manual-slot-editor-actions {
+    flex-direction: column;
   }
 
   .form-container h2,
