@@ -250,6 +250,7 @@ const ManualTimetable = () => {
                 newDetails[opt.comboId] = {
                     subject: opt.subject || (opt.subjectId ? subjectIdToDetails[String(opt.subjectId)]?.name : null) || 'Unknown Subject',
                     faculty: opt.faculty || (Array.isArray(opt.facultyIds) ? opt.facultyIds.map((facultyId) => facultyIdToName[String(facultyId)] || `Faculty ${String(facultyId).slice(-4)}`).join(', ') : 'Unknown Teacher'),
+                    warnings: Array.isArray(opt.warnings) ? opt.warnings : [],
                 };
             });
             setComboIdToDetails(prev => ({ ...prev, ...newDetails }));
@@ -706,10 +707,15 @@ const ManualTimetable = () => {
                                                                 )}
                                                                 {options?.map(option => (
                                                                     <option key={option.comboId} value={option.comboId}>
-                                                                        {option.subject} - {option.faculty}
+                                                                        {option.subject} - {option.faculty}{option.warnings?.length ? ` (${option.warnings[0]})` : ""}
                                                                     </option>
                                                                 ))}
                                                             </select>
+                                                            {hasLoadedOptions && options?.length > 0 ? (
+                                                                <div className="manual-slot-option-warnings">
+                                                                    {options.slice(0, 3).some((option) => option.warnings?.length) ? "Some options include teacher preference warnings." : ""}
+                                                                </div>
+                                                            ) : null}
                                                         </div>
                                                     )}
                                                 </div>

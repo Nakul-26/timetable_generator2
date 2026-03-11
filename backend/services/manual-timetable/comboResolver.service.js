@@ -28,6 +28,7 @@ function normalizeCombo(combo) {
     subjectId,
     facultyIds,
     classIds,
+    combinedClassGroupId: combo.combined_class_group_id || combo.combinedClassGroupId || null,
     subjectName: combo.subject?.name || combo.subject_name || null,
     facultyNames: Array.isArray(combo.faculty_ids)
       ? combo.faculty_names || []
@@ -114,6 +115,7 @@ export async function getClassCombosForEdit(state, classObj) {
           class_ids: Array.isArray(combo.class_ids)
             ? combo.class_ids.map((id) => String(id))
             : [classId],
+          combined_class_group_id: combo.combined_class_group_id || combo.combinedClassGroupId || null,
         }))
     : [];
 

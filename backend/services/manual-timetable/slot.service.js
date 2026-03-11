@@ -20,7 +20,8 @@ export async function clearSlot({ classId, day, hour, state }) {
   const {
     classTimetable,
     teacherTimetable,
-    subjectHoursAssigned
+    subjectHoursAssigned,
+    teacherAvailability,
   } = state;
 
   const comboIds = classTimetable[classId]?.[day]?.[hour];
@@ -32,14 +33,30 @@ export async function clearSlot({ classId, day, hour, state }) {
     const combo = await resolveComboFromState(state, comboId);
     if (!combo) continue;
 
+    const targetClassIds = Array.isArray(combo.classIds) && combo.classIds.length > 0
+      ? combo.classIds
+      : [String(classId)];
+
     for (const facultyId of combo.facultyIds) {
       if (teacherTimetable[facultyId]?.[day]?.[hour] === comboId) {
         teacherTimetable[facultyId][day][hour] = null;
       }
     }
 
-    if (combo.subjectId && subjectHoursAssigned[classId]?.[combo.subjectId] > 0) {
-      subjectHoursAssigned[classId][combo.subjectId]--;
+    for (const targetClassId of targetClassIds) {
+      if (
+        combo.subjectId &&
+        subjectHoursAssigned[targetClassId]?.[combo.subjectId] > 0
+      ) {
+        subjectHoursAssigned[targetClassId][combo.subjectId]--;
+      }
+      if (
+        Array.isArray(classTimetable[targetClassId]?.[day]?.[hour]) &&
+        classTimetable[targetClassId][day][hour].includes(comboId)
+      ) {
+        classTimetable[targetClassId][day][hour] = classTimetable[targetClassId][day][hour]
+          .filter((id) => String(id) !== String(comboId));
+      }
     }
   }
 
@@ -98,7 +115,16 @@ export async function placeCombo({
   if (!combo) throw new Error("Combo not found");
 
   const subjectId = combo.subjectId;
+  const targetClassIds = Array.isArray(combo.classIds) && combo.classIds.length > 0
+    ? combo.classIds
+    : [String(classId)];
   let isReplacement = false;
+
+  for (const targetClassId of targetClassIds) {
+    if (lockedSlots?.[targetClassId]?.[day]?.[hour]) {
+      throw new Error("One of the combined class slots is locked.");
+    }
+  }
 
   if (combosInSlot.length > 0) {
     const existing = await resolveCombosFromState(newState, combosInSlot);
@@ -129,7 +155,7 @@ export async function placeCombo({
   const remainingHours = computeRemainingHours(classObj, subjectHoursAssigned);
 
   if (!isReplacement) {
-  const c1 = checkClassConstraints(
+    const c1 = checkClassConstraints(
       classTimetable,
       classObj,
       day,
@@ -141,17 +167,45 @@ export async function placeCombo({
     if (!c1.ok) throw new Error(c1.error);
   }
 
+  for (const targetClassId of targetClassIds) {
+    const targetClassObj = targetClassId === String(classObj._id)
+      ? classObj
+      : await ClassModel.findById(targetClassId).lean();
+    if (!targetClassObj) {
+      throw new Error("Combined class not found");
+    }
+    const targetRemainingHours = computeRemainingHours(targetClassObj, subjectHoursAssigned);
+    const c1 = checkClassConstraints(
+      classTimetable,
+      targetClassObj,
+      day,
+      hour,
+      subjectId,
+      targetRemainingHours,
+      { allowHourOverflow: true }
+    );
+    if (!c1.ok) throw new Error(c1.error);
+  }
+
   for (const facultyId of combo.facultyIds) {
-    const c2 = checkTeacherConstraints(
+      const c2 = checkTeacherConstraints(
       teacherTimetable,
       facultyId,
       day,
-      hour
+      hour,
+      teacherAvailability
     );
     if (!c2.ok) throw new Error(c2.error);
   }
 
-  classTimetable[classId][day][hour].push(comboId);
+  for (const targetClassId of targetClassIds) {
+    if (!Array.isArray(classTimetable[targetClassId]?.[day]?.[hour])) {
+      classTimetable[targetClassId][day][hour] = [];
+    }
+    if (!classTimetable[targetClassId][day][hour].includes(comboId)) {
+      classTimetable[targetClassId][day][hour].push(comboId);
+    }
+  }
 
   for (const facultyId of combo.facultyIds) {
     if (!teacherTimetable[facultyId]) {
@@ -163,8 +217,10 @@ export async function placeCombo({
 
     teacherTimetable[facultyId][day][hour] = comboId;
   }
-  subjectHoursAssigned[classId][subjectId] =
-    (subjectHoursAssigned[classId][subjectId] || 0) + 1;
+  for (const targetClassId of targetClassIds) {
+    subjectHoursAssigned[targetClassId][subjectId] =
+      (subjectHoursAssigned[targetClassId][subjectId] || 0) + 1;
+  }
 
   return newState;
 }

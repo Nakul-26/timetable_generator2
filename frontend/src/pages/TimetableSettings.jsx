@@ -1219,30 +1219,23 @@ function TimetableSettings() {
 
             <div className="tt-settings-json">
             <label style={{ display: "block", marginBottom: 6 }}>
-              {'Teacher Unavailable Slots JSON ({"teacherId":[{"day":0,"hour":2}]})'}
+              {'Teacher Unavailable Slots Preview'}
             </label>
             <textarea
               value={availabilityMapText}
-              onChange={(e) => setAvailabilityMapText(e.target.value)}
-              onBlur={() =>
-                updateConfig((prev) => ({
-                  ...prev,
-                  teacherAvailability: {
-                    ...prev.teacherAvailability,
-                    unavailableSlotsByTeacher: parseJsonOrDefault(availabilityMapText, {}),
-                  },
-                }))
-              }
               rows={6}
               style={{ width: "100%", fontFamily: "Consolas, Menlo, monospace" }}
+              readOnly
             />
-              <small>Use teacher IDs as keys and provide a list of blocked slots for each teacher.</small>
+              <small>Teacher-specific slots now come from the Teacher Availability page. This preview is saved only for reference.</small>
+              <div style={{ marginTop: 8 }}>
+                <Link className="secondary-btn" to="/teacher-availability">Open Teacher Availability</Link>
+              </div>
             </div>
           </>
         ) : (
           <div className="tt-settings-help">
-            Advanced JSON editors for availability are hidden. Enable Advanced Settings to edit
-            global and teacher-specific blocked slots.
+            Advanced availability controls are hidden. Enable Advanced Settings to edit global blocked slots.
           </div>
         )}
       </section>

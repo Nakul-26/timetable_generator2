@@ -4,7 +4,10 @@ import ClassModel from "../../models/Class.js";
 import ClassSubject from "../../models/ClassSubject.js";
 import TeacherSubjectCombination from "../../models/TeacherSubjectCombination.js";
 import ElectiveSubjectSetting from "../../models/ElectiveSubjectSetting.js";
+import TeachingAllocation from "../../models/TeachingAllocation.js";
 import converter from "../../models/lib/convertNewCollegeInputToGeneratorData.js";
+import { normalizeAvailabilitySlots } from "../../utils/teacherAvailability.js";
+import { normalizeTeacherPreferences } from "../../utils/teacherPreferences.js";
 
 export async function prepareGeneratorData() {
   const [
@@ -13,30 +16,67 @@ export async function prepareGeneratorData() {
     classes,
     classSubjectsRaw,
     combosRaw,
-    electiveSettings
+    electiveSettings,
+    teachingAllocations,
   ] = await Promise.all([
     Faculty.find().lean(),
     Subject.find().lean(),
     ClassModel.find().populate("faculties").lean(),
     ClassSubject.find().lean(),
     TeacherSubjectCombination.find().lean(),
-    ElectiveSubjectSetting.find().lean()
+    ElectiveSubjectSetting.find().lean(),
+    TeachingAllocation.find().lean(),
   ]);
 
-  const classSubjects = classSubjectsRaw.map(cs => ({
-    classId: cs.class,
-    subjectId: cs.subject,
-    hoursPerWeek: cs.hoursPerWeek
-  }));
-
-  const teacherSubjectCombos = combosRaw.map(c => ({
-    teacherId: c.faculty,
-    subjectId: c.subject
-  }));
-
+  const explicitClassSubjectKeys = new Set();
+  const explicitClassTeacherKeys = new Set();
+  const classSubjects = [];
+  const teacherSubjectCombos = [];
   const classTeachers = [];
+
+  teachingAllocations.forEach((allocation) => {
+    const classIds = (allocation.classIds || []).map((classId) => String(classId));
+    teacherSubjectCombos.push({
+      teacherId: allocation.teacher,
+      subjectId: allocation.subject,
+      classIds,
+      hoursPerWeek: allocation.hoursPerWeek,
+      combinedClassGroupId: allocation.combinedClassGroupId || null,
+    });
+
+    classIds.forEach((classId) => {
+      explicitClassSubjectKeys.add(`${classId}|${String(allocation.subject)}`);
+      explicitClassTeacherKeys.add(`${classId}|${String(allocation.teacher)}`);
+      classSubjects.push({
+        classId,
+        subjectId: allocation.subject,
+        hoursPerWeek: allocation.hoursPerWeek,
+      });
+      classTeachers.push({ classId, teacherId: allocation.teacher });
+    });
+  });
+
+  classSubjectsRaw.forEach((cs) => {
+    const key = `${String(cs.class)}|${String(cs.subject)}`;
+    if (explicitClassSubjectKeys.has(key)) return;
+    classSubjects.push({
+      classId: cs.class,
+      subjectId: cs.subject,
+      hoursPerWeek: cs.hoursPerWeek
+    });
+  });
+
+  combosRaw.forEach((c) => {
+    teacherSubjectCombos.push({
+      teacherId: c.faculty,
+      subjectId: c.subject
+    });
+  });
+
   classes.forEach(c => {
     (c.faculties || []).forEach(f => {
+      const key = `${String(c._id)}|${String(f._id)}`;
+      if (explicitClassTeacherKeys.has(key)) return;
       classTeachers.push({ classId: c._id, teacherId: f._id });
     });
   });
@@ -50,7 +90,11 @@ export async function prepareGeneratorData() {
   return converter.convertNewCollegeInput({
     classes,
     subjects,
-    teachers: faculties,
+    teachers: faculties.map((faculty) => ({
+      ...faculty,
+      unavailableSlots: normalizeAvailabilitySlots(faculty.unavailableSlots || []),
+      preferences: normalizeTeacherPreferences(faculty.preferences || {}),
+    })),
     classSubjects,
     classTeachers,
     teacherSubjectCombos,

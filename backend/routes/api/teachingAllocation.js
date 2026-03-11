@@ -5,6 +5,7 @@ import Subject from "../../models/Subject.js";
 import Faculty from "../../models/Faculty.js";
 import ClassSubject from "../../models/ClassSubject.js";
 import TeacherSubjectCombination from "../../models/TeacherSubjectCombination.js";
+import TeachingAllocation from "../../models/TeachingAllocation.js";
 
 const protectedRouter = Router();
 protectedRouter.use(auth);
@@ -13,54 +14,27 @@ const toId = (value) => String(value || "").trim();
 
 protectedRouter.get("/teaching-allocations", async (req, res) => {
   try {
-    const [classes, combos, classSubjects] = await Promise.all([
-      ClassModel.find()
-        .populate("faculties", "name id")
-        .lean(),
-      TeacherSubjectCombination.find()
-        .populate("faculty", "name id")
-        .populate("subject", "name id type")
-        .lean(),
-      ClassSubject.find().lean(),
-    ]);
+    const allocations = await TeachingAllocation.find()
+      .populate("classIds", "name id sem section")
+      .populate("subject", "name id type")
+      .populate("teacher", "name id")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const comboById = new Map(combos.map((c) => [toId(c._id), c]));
-    const classSubjectHours = new Map(
-      classSubjects.map((cs) => [`${toId(cs.class)}|${toId(cs.subject)}`, cs.hoursPerWeek])
+    res.json(
+      allocations.map((item) => ({
+        id: toId(item._id),
+        classes: Array.isArray(item.classIds) ? item.classIds : [],
+        class: Array.isArray(item.classIds) && item.classIds.length === 1 ? item.classIds[0] : null,
+        subject: item.subject,
+        teacher: item.teacher,
+        hoursPerWeek: item.hoursPerWeek,
+        combinedClassGroupId: item.combinedClassGroupId || null,
+        isCombined: Array.isArray(item.classIds) && item.classIds.length > 1,
+        isLab: String(item.subject?.type || "").toLowerCase() === "lab",
+        status: "active",
+      }))
     );
-
-    const allocations = [];
-    for (const cls of classes) {
-      const classId = toId(cls._id);
-      for (const comboIdRaw of cls.assigned_teacher_subject_combos || []) {
-        const comboId = toId(comboIdRaw);
-        const combo = comboById.get(comboId);
-        if (!combo) continue;
-
-        const subjectId = toId(combo.subject?._id || combo.subject);
-        const teacherId = toId(combo.faculty?._id || combo.faculty);
-        const hoursPerWeek = classSubjectHours.get(`${classId}|${subjectId}`) ?? 0;
-
-        allocations.push({
-          id: `${classId}|${subjectId}|${teacherId}`,
-          class: {
-            _id: cls._id,
-            id: cls.id,
-            name: cls.name,
-            sem: cls.sem,
-            section: cls.section,
-          },
-          subject: combo.subject,
-          teacher: combo.faculty,
-          comboId: combo._id,
-          hoursPerWeek,
-          isLab: String(combo.subject?.type || "").toLowerCase() === "lab",
-          status: "active",
-        });
-      }
-    }
-
-    res.json(allocations);
   } catch (e) {
     console.error("[GET /teaching-allocations] Error:", e);
     res.status(500).json({ error: "Internal Server Error" });
@@ -69,62 +43,73 @@ protectedRouter.get("/teaching-allocations", async (req, res) => {
 
 protectedRouter.post("/teaching-allocations", async (req, res) => {
   try {
-    const classId = toId(req.body.classId);
+    const classIdsRaw = Array.isArray(req.body.classIds)
+      ? req.body.classIds
+      : req.body.classId
+        ? [req.body.classId]
+        : [];
+    const classIds = [...new Set(classIdsRaw.map(toId).filter(Boolean))];
     const subjectId = toId(req.body.subjectId);
     const teacherId = toId(req.body.teacherId);
     const hoursPerWeek = Number(req.body.hoursPerWeek);
+    const combinedClassGroupIdRaw = String(req.body.combinedClassGroupId || "").trim();
+    const combinedClassGroupId = combinedClassGroupIdRaw || null;
 
-    if (!classId || !subjectId || !teacherId || !Number.isFinite(hoursPerWeek) || hoursPerWeek < 1) {
-      return res.status(400).json({ error: "classId, subjectId, teacherId and valid hoursPerWeek are required." });
+    if (classIds.length === 0 || !subjectId || !teacherId || !Number.isFinite(hoursPerWeek) || hoursPerWeek < 1) {
+      return res.status(400).json({ error: "classIds, subjectId, teacherId and valid hoursPerWeek are required." });
     }
 
-    const [klass, subject, teacher] = await Promise.all([
-      ClassModel.findById(classId),
+    if (classIds.length > 1 && !combinedClassGroupId) {
+      return res.status(400).json({ error: "combinedClassGroupId is required for combined classes." });
+    }
+
+    const [classes, subject, teacher] = await Promise.all([
+      ClassModel.find({ _id: { $in: classIds } }),
       Subject.findById(subjectId),
       Faculty.findById(teacherId),
     ]);
 
-    if (!klass || !subject || !teacher) {
+    if (classes.length !== classIds.length || !subject || !teacher) {
       return res.status(404).json({ error: "Class, subject, or teacher not found." });
     }
 
-    const combo = await TeacherSubjectCombination.findOneAndUpdate(
+    await TeacherSubjectCombination.findOneAndUpdate(
       { faculty: teacherId, subject: subjectId },
       { $setOnInsert: { faculty: teacherId, subject: subjectId } },
       { new: true, upsert: true }
     );
 
-    await ClassSubject.findOneAndUpdate(
-      { class: classId, subject: subjectId },
-      { $set: { hoursPerWeek } },
-      { new: true, upsert: true }
-    );
+    for (const classId of classIds) {
+      await ClassSubject.findOneAndUpdate(
+        { class: classId, subject: subjectId },
+        { $set: { hoursPerWeek } },
+        { new: true, upsert: true }
+      );
+      await ClassModel.findByIdAndUpdate(classId, {
+        $addToSet: {
+          faculties: teacherId,
+        },
+      });
+    }
 
-    await ClassModel.findByIdAndUpdate(classId, {
-      $addToSet: {
-        faculties: teacherId,
-        assigned_teacher_subject_combos: combo._id,
-      },
+    const allocation = await TeachingAllocation.create({
+      classIds,
+      subject: subjectId,
+      teacher: teacherId,
+      hoursPerWeek,
+      combinedClassGroupId,
     });
 
-    const populatedCombo = await TeacherSubjectCombination.findById(combo._id)
-      .populate("faculty", "name id")
+    const populatedAllocation = await TeachingAllocation.findById(allocation._id)
+      .populate("classIds", "name id sem section")
       .populate("subject", "name id type")
+      .populate("teacher", "name id")
       .lean();
 
     res.status(201).json({
       ok: true,
       message: "Teaching allocation saved.",
-      allocation: {
-        classId,
-        subjectId,
-        teacherId,
-        hoursPerWeek,
-        comboId: combo._id,
-        className: klass.name,
-        subjectName: populatedCombo?.subject?.name || "",
-        teacherName: populatedCombo?.faculty?.name || "",
-      },
+      allocation: populatedAllocation,
     });
   } catch (e) {
     console.error("[POST /teaching-allocations] Error:", e);
@@ -160,8 +145,7 @@ protectedRouter.post("/teaching-allocations/calculate", async (req, res) => {
     }
 
     const summary = [];
-    const bulkOps = [];
-    let totalCombos = 0;
+    let totalAllocations = 0;
 
     for (const klass of classes) {
       const classId = toId(klass._id);
@@ -177,13 +161,29 @@ protectedRouter.post("/teaching-allocations/calculate", async (req, res) => {
       }
 
       const finalComboIds = Array.from(derivedComboIds);
-      totalCombos += finalComboIds.length;
-      bulkOps.push({
-        updateOne: {
-          filter: { _id: klass._id },
-          update: { $set: { assigned_teacher_subject_combos: finalComboIds } },
-        },
-      });
+      for (const comboId of finalComboIds) {
+        const combo = combos.find((item) => toId(item._id) === comboId);
+        if (!combo) continue;
+        await TeachingAllocation.findOneAndUpdate(
+          {
+            classIds: [klass._id],
+            subject: combo.subject,
+            teacher: combo.faculty,
+            combinedClassGroupId: null,
+          },
+          {
+            $set: {
+              classIds: [klass._id],
+              subject: combo.subject,
+              teacher: combo.faculty,
+              hoursPerWeek: 1,
+              combinedClassGroupId: null,
+            },
+          },
+          { upsert: true, new: true }
+        );
+      }
+      totalAllocations += finalComboIds.length;
 
       summary.push({
         classId,
@@ -194,15 +194,11 @@ protectedRouter.post("/teaching-allocations/calculate", async (req, res) => {
       });
     }
 
-    if (bulkOps.length > 0) {
-      await ClassModel.bulkWrite(bulkOps);
-    }
-
     res.json({
       ok: true,
-      message: `Calculated combos for ${classes.length} classes.`,
+      message: `Calculated allocations for ${classes.length} classes.`,
       classesProcessed: classes.length,
-      totalGeneratedCombos: totalCombos,
+      totalGeneratedCombos: totalAllocations,
       summary,
     });
   } catch (e) {
@@ -213,46 +209,13 @@ protectedRouter.post("/teaching-allocations/calculate", async (req, res) => {
 
 protectedRouter.delete("/teaching-allocations", async (req, res) => {
   try {
-    const classId = toId(req.body.classId);
-    const subjectId = toId(req.body.subjectId);
-    const teacherId = toId(req.body.teacherId);
-
-    if (!classId || !subjectId || !teacherId) {
-      return res.status(400).json({ error: "classId, subjectId and teacherId are required." });
+    const allocationId = toId(req.body.id || req.body.allocationId);
+    if (!allocationId) {
+      return res.status(400).json({ error: "allocationId is required." });
     }
-
-    const combo = await TeacherSubjectCombination.findOne({
-      faculty: teacherId,
-      subject: subjectId,
-    }).lean();
-
-    if (combo) {
-      await ClassModel.findByIdAndUpdate(classId, {
-        $pull: { assigned_teacher_subject_combos: combo._id },
-      });
-    }
-
-    const currentClass = await ClassModel.findById(classId).lean();
-    const remainingComboIds = (currentClass?.assigned_teacher_subject_combos || []).map((id) => toId(id));
-
-    if (remainingComboIds.length === 0) {
-      await ClassSubject.deleteMany({ class: classId });
-      await ClassModel.findByIdAndUpdate(classId, { $set: { faculties: [] } });
-      return res.json({ ok: true, message: "Allocation deleted." });
-    }
-
-    const remainingCombos = await TeacherSubjectCombination.find({
-      _id: { $in: remainingComboIds },
-    }).lean();
-
-    const subjectStillAssigned = remainingCombos.some((c) => toId(c.subject) === subjectId);
-    if (!subjectStillAssigned) {
-      await ClassSubject.deleteOne({ class: classId, subject: subjectId });
-    }
-
-    const teacherStillAssigned = remainingCombos.some((c) => toId(c.faculty) === teacherId);
-    if (!teacherStillAssigned) {
-      await ClassModel.findByIdAndUpdate(classId, { $pull: { faculties: teacherId } });
+    const allocation = await TeachingAllocation.findByIdAndDelete(allocationId).lean();
+    if (!allocation) {
+      return res.status(404).json({ error: "Allocation not found." });
     }
 
     res.json({ ok: true, message: "Allocation deleted." });

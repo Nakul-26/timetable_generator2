@@ -3,6 +3,8 @@ import Faculty from '../../models/Faculty.js';
 import TeacherSubjectCombination from '../../models/TeacherSubjectCombination.js';
 import ClassModel from '../../models/Class.js';
 import auth from '../../middleware/auth.js';
+import { normalizeAvailabilitySlots } from '../../utils/teacherAvailability.js';
+import { normalizeTeacherPreferences } from '../../utils/teacherPreferences.js';
 
 
 const protectedRouter = Router();
@@ -16,6 +18,8 @@ protectedRouter.post('/faculties', async (req, res) => {
     const f = new Faculty();
     f.id = req.body.id;
     f.name = req.body.name;
+    f.unavailableSlots = normalizeAvailabilitySlots(req.body.unavailableSlots || []);
+    f.preferences = normalizeTeacherPreferences(req.body.preferences || {});
     await f.save();
     console.log("[POST /faculties] Saved faculty:", f);
     res.json(f);
@@ -44,6 +48,12 @@ protectedRouter.put('/faculties/:id', async (req, res) => {
     const { id } = req.params;
     const { name, id: facultyId } = req.body;
     const updateData = { name, id: facultyId };
+    if (Object.prototype.hasOwnProperty.call(req.body, "unavailableSlots")) {
+      updateData.unavailableSlots = normalizeAvailabilitySlots(req.body.unavailableSlots);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, "preferences")) {
+      updateData.preferences = normalizeTeacherPreferences(req.body.preferences);
+    }
 
     const updatedFaculty = await Faculty.findOneAndUpdate(
       { _id: id },
@@ -56,6 +66,86 @@ protectedRouter.put('/faculties/:id', async (req, res) => {
     }
     console.log("[PUT /faculties/:id] Updated faculty:", updatedFaculty);
     res.json(updatedFaculty);
+  } catch (e) {
+    res.status(400).json({ error: 'Bad Request' });
+  }
+});
+
+protectedRouter.get('/faculties/:id/preferences', async (req, res) => {
+  try {
+    const faculty = await Faculty.findById(req.params.id).select('name preferences').lean();
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty not found.' });
+    }
+
+    res.json({
+      teacherId: String(faculty._id),
+      teacherName: faculty.name,
+      preferences: normalizeTeacherPreferences(faculty.preferences),
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+protectedRouter.post('/faculties/:id/preferences', async (req, res) => {
+  try {
+    const preferences = normalizeTeacherPreferences(req.body?.preferences || req.body || {});
+    const faculty = await Faculty.findByIdAndUpdate(
+      req.params.id,
+      { preferences },
+      { new: true, runValidators: true }
+    ).select('name preferences');
+
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty not found.' });
+    }
+
+    res.json({
+      teacherId: String(faculty._id),
+      teacherName: faculty.name,
+      preferences: normalizeTeacherPreferences(faculty.preferences),
+    });
+  } catch (e) {
+    res.status(400).json({ error: 'Bad Request' });
+  }
+});
+
+protectedRouter.get('/faculties/:id/availability', async (req, res) => {
+  try {
+    const faculty = await Faculty.findById(req.params.id).select('name unavailableSlots').lean();
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty not found.' });
+    }
+
+    res.json({
+      teacherId: String(faculty._id),
+      teacherName: faculty.name,
+      unavailableSlots: normalizeAvailabilitySlots(faculty.unavailableSlots),
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+protectedRouter.post('/faculties/:id/availability', async (req, res) => {
+  try {
+    const unavailableSlots = normalizeAvailabilitySlots(req.body?.unavailableSlots || []);
+    const faculty = await Faculty.findByIdAndUpdate(
+      req.params.id,
+      { unavailableSlots },
+      { new: true, runValidators: true }
+    ).select('name unavailableSlots');
+
+    if (!faculty) {
+      return res.status(404).json({ error: 'Faculty not found.' });
+    }
+
+    res.json({
+      teacherId: String(faculty._id),
+      teacherName: faculty.name,
+      unavailableSlots: normalizeAvailabilitySlots(faculty.unavailableSlots),
+    });
   } catch (e) {
     res.status(400).json({ error: 'Bad Request' });
   }

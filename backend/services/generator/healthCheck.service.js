@@ -58,6 +58,30 @@ function normalizeTeacherSlotMap(raw) {
   return out;
 }
 
+function normalizeTeacherPreferencesMap(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return new Map();
+  const out = new Map();
+  for (const [teacherId, value] of Object.entries(raw)) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    out.set(String(teacherId), {
+      avoidFirstPeriod: Boolean(value.avoidFirstPeriod),
+      avoidLastPeriod: Boolean(value.avoidLastPeriod),
+      maxConsecutive:
+        Number.isInteger(Number(value.maxConsecutive)) && Number(value.maxConsecutive) > 0
+          ? Number(value.maxConsecutive)
+          : null,
+      preferredDays: Array.from(
+        new Set(
+          (Array.isArray(value.preferredDays) ? value.preferredDays : [])
+            .map((day) => toInt(day, -1))
+            .filter((day) => day >= 0)
+        )
+      ).sort((a, b) => a - b),
+    });
+  }
+  return out;
+}
+
 export function buildConstraintHealthReport({
   faculties = [],
   subjects = [],
@@ -80,6 +104,7 @@ export function buildConstraintHealthReport({
   const estimatedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
   const forcedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
   const teacherAvailabilityCfg = constraintConfig?.teacherAvailability || {};
+  const teacherPreferencesCfg = constraintConfig?.teacherPreferences || {};
   const weeklyBalanceCfg = constraintConfig?.teacherWeeklyLoadBalance || {};
   const classDailyMinCfg = constraintConfig?.classDailyMinimumLoad || {};
   const weeklySubjectHoursCfg = constraintConfig?.weeklySubjectHours || {};
@@ -214,6 +239,7 @@ export function buildConstraintHealthReport({
   );
   const teacherAvailabilityEnabled = Boolean(teacherAvailabilityCfg.enabled);
   const teacherAvailabilityHard = teacherAvailabilityCfg.hard !== false;
+  const teacherPreferences = normalizeTeacherPreferencesMap(teacherPreferencesCfg);
 
   for (const faculty of faculties) {
     const fid = String(faculty._id);
@@ -254,6 +280,25 @@ export function buildConstraintHealthReport({
         severity: "warning",
         type: "teacher_potential_overload",
         message: `Teacher "${faculty.name || fid}" estimated load ${Math.ceil(estimated)} exceeds capacity ${teacherWeeklyCapacity} (upper-bound potential: ${potential}).`,
+      });
+    }
+
+    const prefs = teacherPreferences.get(fid);
+    if (prefs?.preferredDays?.length) {
+      const preferredCapacity = prefs.preferredDays.length * usableSlotsPerDay;
+      if (estimated > preferredCapacity) {
+        warnings.push({
+          severity: "info",
+          type: "teacher_preferred_days_pressure",
+          message: `Teacher "${faculty.name || fid}" prefers ${prefs.preferredDays.length} day(s), but estimated load ${Math.ceil(estimated)} likely spills outside preferred days.`,
+        });
+      }
+    }
+    if (prefs?.maxConsecutive === 1 && estimated > schedule.daysPerWeek) {
+      warnings.push({
+        severity: "info",
+        type: "teacher_max_consecutive_pressure",
+        message: `Teacher "${faculty.name || fid}" prefers max consecutive 1, which may be hard to satisfy with estimated load ${Math.ceil(estimated)}.`,
       });
     }
   }

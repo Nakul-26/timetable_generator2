@@ -107,6 +107,39 @@ def _normalize_teacher_slot_map(raw: Any) -> Dict[str, set]:
     return out
 
 
+def _normalize_teacher_preferences_map(raw: Any) -> Dict[str, Dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for teacher_id, prefs in raw.items():
+        if not isinstance(prefs, dict):
+            continue
+        tid = str(teacher_id)
+        preferred_days_raw = prefs.get("preferredDays") or []
+        preferred_days = sorted(
+            {
+                int(day)
+                for day in preferred_days_raw
+                if isinstance(day, (int, float, str)) and str(day).strip().isdigit() and int(day) >= 0
+            }
+        )
+        max_consecutive_raw = prefs.get("maxConsecutive")
+        try:
+            max_consecutive = int(max_consecutive_raw) if max_consecutive_raw is not None else None
+        except Exception:
+            max_consecutive = None
+        if max_consecutive is not None and max_consecutive <= 0:
+            max_consecutive = None
+
+        out[tid] = {
+            "avoidFirstPeriod": _to_bool(prefs.get("avoidFirstPeriod"), False),
+            "avoidLastPeriod": _to_bool(prefs.get("avoidLastPeriod"), False),
+            "maxConsecutive": max_consecutive,
+            "preferredDays": preferred_days,
+        }
+    return out
+
+
 @app.on_event("startup")
 async def _install_loop_handler():
     loop = asyncio.get_running_loop()
@@ -350,6 +383,14 @@ async def solve(request: Request) -> Dict[str, Any]:
     teacher_boundary_overrides = (
         teacher_boundary_overrides_raw if isinstance(teacher_boundary_overrides_raw, dict) else {}
     )
+    teacher_preferences = _normalize_teacher_preferences_map(
+        payload.get("teacherPreferences")
+        or _cfg_get(constraint_config, ["teacherPreferences"], {})
+    )
+    teacher_pref_avoid_first_weight = 40
+    teacher_pref_avoid_last_weight = 40
+    teacher_pref_non_preferred_day_weight = 20
+    teacher_pref_max_consecutive_weight = 80
 
     applied_config = {
         "schedule": {"daysPerWeek": DAYS_PER_WEEK, "hoursPerDay": HOURS_PER_DAY, "breakHours": BREAK_HOURS},
@@ -419,6 +460,7 @@ async def solve(request: Request) -> Dict[str, Any]:
             "weight": teacher_boundary_weight,
             "teacherOverrides": teacher_boundary_overrides,
         },
+        "teacherPreferences": teacher_preferences,
         "solver": {"timeLimitSec": solver_time_limit_sec},
     }
 
@@ -475,8 +517,23 @@ async def solve(request: Request) -> Dict[str, Any]:
                 f"Fixed slot falls in break hour for class {class_id} at {day},{hour}"
             )
             continue
+        combo = combo_by_id.get(combo_id)
+        combo_class_ids = combo.get("class_ids", []) if combo else []
+        if combo and combo_class_ids and class_id not in combo_class_ids:
+            fixed_slot_warnings.append(
+                f"Fixed slot class {class_id} is not part of combo {combo_id}"
+            )
+            continue
+        if combo and any(
+            day >= int(class_by_id[cid].get("days_per_week") or DAYS_PER_WEEK)
+            for cid in combo_class_ids
+            if cid in class_by_id
+        ):
+            fixed_slot_warnings.append(
+                f"Fixed slot day out of range for one or more classes in combo {combo_id}: {day}"
+            )
+            continue
         if teacher_avail_enabled and teacher_avail_hard:
-            combo = combo_by_id.get(combo_id)
             if combo:
                 subj = subject_by_id.get(combo.get("subject_id"))
                 block = lab_block_size if subj and subj.get("type") == "lab" else theory_block_size
@@ -496,80 +553,62 @@ async def solve(request: Request) -> Dict[str, Any]:
 
     model = cp_model.CpModel()
 
-    # Decision variables: start placement per class/day/hour/combo
-    x: Dict[Tuple[str, int, int, str], cp_model.IntVar] = {}
+    # Decision variables: start placement per combo/day/hour.
+    x: Dict[Tuple[str, int, int], cp_model.IntVar] = {}
     covers: Dict[Tuple[str, int, int], List[cp_model.IntVar]] = {}
     teacher_covers: Dict[Tuple[str, int, int], List[cp_model.IntVar]] = {}
     subject_covers: Dict[Tuple[str, int, int, str], List[cp_model.IntVar]] = {}
     unmet_requirements: List[Dict[str, Any]] = []
     objective_terms: List[cp_model.LinearExpr] = []
 
-    for cls in classes:
-        class_id = cls["_id"]
-        days = int(cls.get("days_per_week") or DAYS_PER_WEEK)
-        # Use both explicit class assignment list and combo.class_ids mapping.
-        # This makes the solver robust to stale/incomplete assigned_teacher_subject_combos.
-        allowed_combo_ids = set(
-            str(c) for c in (cls.get("assigned_teacher_subject_combos") or [])
+    for combo in combos:
+        combo_id = combo["_id"]
+        class_ids = [cid for cid in (combo.get("class_ids") or []) if cid in class_by_id]
+        if not class_ids:
+            continue
+        subj = subject_by_id.get(combo["subject_id"])
+        if not subj:
+            continue
+        if any(required_hours_by_class_subject[cid].get(combo["subject_id"], 0) <= 0 for cid in class_ids):
+            continue
+        block = lab_block_size if subj.get("type") == "lab" else theory_block_size
+        max_days_for_combo = min(
+            [int(class_by_id[cid].get("days_per_week") or DAYS_PER_WEEK) for cid in class_ids] or [DAYS_PER_WEEK]
         )
-        for combo in combos:
-            class_ids = combo.get("class_ids") or []
-            if class_id in class_ids:
-                allowed_combo_ids.add(combo["_id"])
-        allowed_combos = list(allowed_combo_ids)
-
-        for day in range(days):
+        for day in range(max_days_for_combo):
             for hour in range(HOURS_PER_DAY):
                 if hour in break_hours_set:
                     continue
-                for combo_id in allowed_combos:
-                    combo = combo_by_id.get(combo_id)
-                    if not combo:
-                        continue
-                    if combo.get("class_ids") and class_id not in combo.get(
-                        "class_ids", []
-                    ):
-                        continue
-                    subj = subject_by_id.get(combo["subject_id"])
-                    if not subj:
-                        continue
-                    if (
-                        required_hours_by_class_subject[class_id].get(
-                            combo["subject_id"], 0
-                        )
-                        <= 0
-                    ):
-                        continue
-                    block = lab_block_size if subj.get("type") == "lab" else theory_block_size
-                    if hour + block > HOURS_PER_DAY:
-                        continue
-                    if any(h in break_hours_set for h in range(hour, hour + block)):
+                if hour + block > HOURS_PER_DAY:
+                    continue
+                if any(h in break_hours_set for h in range(hour, hour + block)):
+                    continue
+
+                violates_availability = False
+                if teacher_avail_enabled:
+                    for fid in combo.get("faculty_ids", []):
+                        if any(_is_teacher_unavailable(fid, day, h) for h in range(hour, hour + block)):
+                            violates_availability = True
+                            break
+                    if teacher_avail_hard and violates_availability:
                         continue
 
-                    violates_availability = False
-                    if teacher_avail_enabled:
-                        for fid in combo.get("faculty_ids", []):
-                            if any(_is_teacher_unavailable(fid, day, h) for h in range(hour, hour + block)):
-                                violates_availability = True
-                                break
-                        if teacher_avail_hard and violates_availability:
-                            continue
+                var = model.NewBoolVar(f"x_{combo_id}_{day}_{hour}")
+                x[(combo_id, day, hour)] = var
+                if (
+                    teacher_avail_enabled
+                    and not teacher_avail_hard
+                    and teacher_avail_weight > 0
+                    and violates_availability
+                ):
+                    objective_terms.append(var * teacher_avail_weight)
 
-                    var = model.NewBoolVar(f"x_{class_id}_{day}_{hour}_{combo_id}")
-                    x[(class_id, day, hour, combo_id)] = var
-                    if (
-                        teacher_avail_enabled
-                        and not teacher_avail_hard
-                        and teacher_avail_weight > 0
-                        and violates_availability
-                    ):
-                        objective_terms.append(var * teacher_avail_weight)
-
-                    for h in range(hour, hour + block):
+                for h in range(hour, hour + block):
+                    for class_id in class_ids:
                         covers.setdefault((class_id, day, h), []).append(var)
-                        for fid in combo.get("faculty_ids", []):
-                            teacher_covers.setdefault((fid, day, h), []).append(var)
                         subject_covers.setdefault((class_id, day, h, combo["subject_id"]), []).append(var)
+                    for fid in combo.get("faculty_ids", []):
+                        teacher_covers.setdefault((fid, day, h), []).append(var)
 
     # Constraint: at most one lesson per class per hour
     for cls in classes:
@@ -626,7 +665,7 @@ async def solve(request: Request) -> Dict[str, Any]:
 
     # Weekly subject hours: configurable hard/soft behavior.
     x_by_class_subject: Dict[Tuple[str, str], List[Tuple[cp_model.IntVar, int]]] = {}
-    for (c_id, _day, _hour, combo_id), var in x.items():
+    for (combo_id, _day, _hour), var in x.items():
         combo = combo_by_id.get(combo_id)
         if not combo:
             continue
@@ -634,9 +673,10 @@ async def solve(request: Request) -> Dict[str, Any]:
         if not subj:
             continue
         block = lab_block_size if subj.get("type") == "lab" else theory_block_size
-        x_by_class_subject.setdefault((c_id, combo["subject_id"]), []).append(
-            (var, block)
-        )
+        for class_id in combo.get("class_ids", []):
+            x_by_class_subject.setdefault((class_id, combo["subject_id"]), []).append(
+                (var, block)
+            )
 
     for cls in classes:
         class_id = cls["_id"]
@@ -661,9 +701,27 @@ async def solve(request: Request) -> Dict[str, Any]:
                 objective_terms.append(shortage * weekly_hours_shortage_weight)
 
     # Soft constraint: teacher continuity.
-    if teacher_cont_enabled and teacher_cont_weight > 0:
-        win_len = teacher_cont_max + 1
-        for fid in faculty_ids:
+    teacher_continuity_teachers = [
+        fid for fid in faculty_ids
+        if (teacher_cont_enabled and teacher_cont_weight > 0)
+        or teacher_preferences.get(fid, {}).get("maxConsecutive")
+    ]
+    if teacher_continuity_teachers:
+        for fid in teacher_continuity_teachers:
+            pref_max_consecutive = teacher_preferences.get(fid, {}).get("maxConsecutive")
+            max_consecutive = (
+                int(pref_max_consecutive)
+                if pref_max_consecutive is not None
+                else teacher_cont_max
+            )
+            weight = (
+                teacher_pref_max_consecutive_weight
+                if pref_max_consecutive is not None
+                else teacher_cont_weight
+            )
+            if max_consecutive <= 0 or weight <= 0:
+                continue
+            win_len = max_consecutive + 1
             for day in range(DAYS_PER_WEEK):
                 for start in range(HOURS_PER_DAY - win_len + 1):
                     if any(h in break_hours_set for h in range(start, start + win_len)):
@@ -674,8 +732,8 @@ async def solve(request: Request) -> Dict[str, Any]:
                     excess = model.NewIntVar(
                         0, win_len, f"teacher_cont_excess_{fid}_{day}_{start}"
                     )
-                    model.Add(excess >= win - teacher_cont_max)
-                    objective_terms.append(excess * teacher_cont_weight)
+                    model.Add(excess >= win - max_consecutive)
+                    objective_terms.append(excess * weight)
 
     # Soft constraint: class continuity.
     if class_cont_enabled and class_cont_weight > 0:
@@ -743,7 +801,7 @@ async def solve(request: Request) -> Dict[str, Any]:
         day = int(fs.get("day"))
         hour = int(fs.get("hour"))
         combo_id = str(fs.get("combo"))
-        var = x.get((class_id, day, hour, combo_id))
+        var = x.get((combo_id, day, hour))
         if var is None:
             fixed_slot_warnings.append(
                 f"Fixed slot invalid for class {class_id} combo {combo_id} at {day},{hour}"
@@ -888,6 +946,32 @@ async def solve(request: Request) -> Dict[str, Any]:
                     if avoid_last and last_hour != first_hour:
                         objective_terms.append(
                             teacher_occ[(fid, day, last_hour)] * teacher_boundary_weight
+                        )
+
+    valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
+    if valid_hours:
+        first_hour = valid_hours[0]
+        last_hour = valid_hours[-1]
+        for fid, prefs in teacher_preferences.items():
+            if fid not in faculty_ids:
+                continue
+            avoid_first = bool(prefs.get("avoidFirstPeriod"))
+            avoid_last = bool(prefs.get("avoidLastPeriod"))
+            preferred_days = set(prefs.get("preferredDays") or [])
+
+            for day in range(DAYS_PER_WEEK):
+                if avoid_first:
+                    objective_terms.append(
+                        teacher_occ[(fid, day, first_hour)] * teacher_pref_avoid_first_weight
+                    )
+                if avoid_last and last_hour != first_hour:
+                    objective_terms.append(
+                        teacher_occ[(fid, day, last_hour)] * teacher_pref_avoid_last_weight
+                    )
+                if preferred_days and day not in preferred_days:
+                    for hour in valid_hours:
+                        objective_terms.append(
+                            teacher_occ[(fid, day, hour)] * teacher_pref_non_preferred_day_weight
                         )
 
     # Soft objective: reduce subject clustering within a day.
@@ -1116,14 +1200,15 @@ async def solve(request: Request) -> Dict[str, Any]:
             table.append(row)
         faculty_timetables[fid] = table
 
-    for (class_id, day, hour, combo_id), var in x.items():
+    for (combo_id, day, hour), var in x.items():
         if solver.Value(var) != 1:
             continue
         combo = combo_by_id[combo_id]
         subj = subject_by_id[combo["subject_id"]]
         block = lab_block_size if subj.get("type") == "lab" else theory_block_size
         for h in range(hour, hour + block):
-            class_timetables[class_id][day][h] = combo_id
+            for class_id in combo.get("class_ids", []):
+                class_timetables[class_id][day][h] = combo_id
             for fid in combo.get("faculty_ids", []):
                 faculty_timetables[fid][day][h] = combo_id
 

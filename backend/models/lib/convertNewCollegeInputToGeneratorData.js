@@ -77,8 +77,18 @@ export function convertNewCollegeInput({
     };
     
     const teachersByCategory = new Map();
+    const explicitAllocations = [];
     for (const combo of teacherSubjectCombos) {
         const subjectIdStr = String(combo.subjectId);
+        if (Array.isArray(combo.classIds) && combo.classIds.length > 0) {
+            explicitAllocations.push({
+                teacherId: String(combo.teacherId),
+                subjectId: subjectIdStr,
+                classIds: combo.classIds.map(String),
+                hoursPerWeek: Number(combo.hoursPerWeek || 0),
+                combinedClassGroupId: combo.combinedClassGroupId || null,
+            });
+        }
         if (!teachersByCategory.has(subjectIdStr)) {
             teachersByCategory.set(subjectIdStr, []);
         }
@@ -137,11 +147,42 @@ export function convertNewCollegeInput({
     // 2. Generate ALL Combos
     //------------------------------------------------------------
 
-    // Stage A: Generate NORMAL, single-teacher combos
+    const explicitAllocationKeys = new Set();
+    const explicitCoveredClassSubjectKeys = new Set();
+    for (const allocation of explicitAllocations) {
+        const classIds = [...new Set((allocation.classIds || []).map(String))].sort();
+        const subjectId = String(allocation.subjectId);
+        if (!subjectId || classIds.length === 0) continue;
+        if (classIds.some((classId) => realSubjectsInElectives.has(`${classId}|${subjectId}`))) {
+            continue;
+        }
+        const hoursRequired = Number(allocation.hoursPerWeek || 0);
+        if (hoursRequired <= 0) continue;
+        classIds.forEach((classId) => explicitCoveredClassSubjectKeys.add(`${classId}|${subjectId}`));
+        const key = `${allocation.teacherId}|${subjectId}|${classIds.join(",")}|${allocation.combinedClassGroupId || ""}`;
+        if (explicitAllocationKeys.has(key)) continue;
+        explicitAllocationKeys.add(key);
+        combos.push({
+            _id: "C" + comboIndex++,
+            faculty_ids: [String(allocation.teacherId)],
+            subject_id: subjectId,
+            class_ids: classIds,
+            combined_class_group_id: allocation.combinedClassGroupId || null,
+            hours_per_week: hoursRequired,
+            hours_per_class: Object.fromEntries(classIds.map((classId) => [classId, hoursRequired])),
+            combo_name: allocation.combinedClassGroupId
+                ? `GROUP_${allocation.combinedClassGroupId}`
+                : `T${allocation.teacherId}_S${subjectId}_C${classIds.join("_")}`
+        });
+    }
+
+    // Stage A: Generate NORMAL, single-teacher combos for legacy mappings not covered by explicit allocations
     for (const cs of classSubjects) {
         const classId = String(cs.classId), subjectId = String(cs.subjectId);
-        // Fix 1 & 2 cont'd: Check the class-scoped key
         if (realSubjectsInElectives.has(`${classId}|${subjectId}`)) {
+            continue;
+        }
+        if (explicitCoveredClassSubjectKeys.has(`${classId}|${subjectId}`)) {
             continue;
         }
         const hoursRequired = hoursPerClassSubject[`${classId}|${subjectId}`] || 0;
@@ -242,7 +283,12 @@ export function convertNewCollegeInput({
     });
 
     return {
-        faculties: teachers.map(t => ({ _id: t._id, name: t.name || "" })),
+        faculties: teachers.map(t => ({
+            _id: t._id,
+            name: t.name || "",
+            unavailableSlots: Array.isArray(t.unavailableSlots) ? t.unavailableSlots : [],
+            preferences: t.preferences || {},
+        })),
         subjects: subjectsOut,
         classes: classesOut,
         combos

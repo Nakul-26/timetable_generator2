@@ -75,6 +75,18 @@ export const initializeState = (timetableId, classes, faculties, subjects, { day
         version: (existingState.version || 0) + 1,
         updatedAt: Date.now(),
         config: { days, hours },
+        teacherAvailability: Object.fromEntries(
+          (faculties || []).map((faculty) => [
+            String(faculty._id),
+            Array.isArray(faculty.unavailableSlots) ? faculty.unavailableSlots : [],
+          ])
+        ),
+        teacherPreferences: Object.fromEntries(
+          (faculties || []).map((faculty) => [
+            String(faculty._id),
+            faculty.preferences && typeof faculty.preferences === "object" ? faculty.preferences : {},
+          ])
+        ),
         ...(electiveGroups && { electiveGroups }) // Only update electiveGroups if provided
     });
 
@@ -155,4 +167,3 @@ export const assertState = (timetableId) => {
         throw new Error(`Timetable with ID ${timetableId} not found.`);
     }
 };
-

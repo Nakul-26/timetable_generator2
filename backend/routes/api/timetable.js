@@ -19,6 +19,8 @@ import {
   getGenerationStatus,
 } from "../../services/generator/workerManager.service.js";
 import auth from '../../middleware/auth.js';
+import { mergeTeacherAvailabilityConstraintConfig } from '../../utils/teacherAvailability.js';
+import { mergeTeacherPreferenceConstraintConfig } from '../../utils/teacherPreferences.js';
 
 
 const protectedRouter = Router();
@@ -130,6 +132,13 @@ protectedRouter.post('/generate', async (req, res) => {
       const generatorData = await prepareGeneratorData({
         classElectiveSubjects, // Pass the fetched settings
       });
+      const mergedConstraintConfig = mergeTeacherPreferenceConstraintConfig(
+        mergeTeacherAvailabilityConstraintConfig(
+          constraintConfig,
+          generatorData.faculties || []
+        ),
+        generatorData.faculties || []
+      );
   
       const taskId = startGenerationWorker({
         payload: {
@@ -137,7 +146,7 @@ protectedRouter.post('/generate', async (req, res) => {
           fixedSlots,
           DAYS_PER_WEEK: daysPerWeek,
           HOURS_PER_DAY: hoursPerDay,
-          constraintConfig,
+          constraintConfig: mergedConstraintConfig,
         },
       });
   
@@ -162,11 +171,18 @@ protectedRouter.post('/health-check', async (req, res) => {
       const generatorData = await prepareGeneratorData({
         classElectiveSubjects,
       });
+      const mergedConstraintConfig = mergeTeacherPreferenceConstraintConfig(
+        mergeTeacherAvailabilityConstraintConfig(
+          constraintConfig,
+          generatorData.faculties || []
+        ),
+        generatorData.faculties || []
+      );
 
       const report = buildConstraintHealthReport({
         ...generatorData,
         fixedSlots,
-        constraintConfig,
+        constraintConfig: mergedConstraintConfig,
       });
 
       res.json(report);
@@ -310,6 +326,13 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
       }));
   
       const generatorData = await prepareGeneratorData({ classElectiveSubjects });
+      const mergedConstraintConfig = mergeTeacherPreferenceConstraintConfig(
+        mergeTeacherAvailabilityConstraintConfig(
+          constraintConfig,
+          generatorData.faculties || []
+        ),
+        generatorData.faculties || []
+      );
     
     const { faculties, subjects, classes, combos } = generatorData;
 
@@ -321,7 +344,7 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
       fixedSlots,
       DAYS_PER_WEEK: daysPerWeek,
       HOURS_PER_DAY: hoursPerDay,
-      constraintConfig,
+      constraintConfig: mergedConstraintConfig,
     });
 
     if (!bestClassTimetables) {

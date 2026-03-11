@@ -18,6 +18,7 @@ import {
 import {
   resolveCombosFromState,
   getClassCombosForEdit,
+  resolveComboFromState,
 } from "../services/manual-timetable/comboResolver.service.js";
 
 import { runAutoFill } from "../services/manual-timetable/autofill.service.js";
@@ -25,6 +26,7 @@ import { runAutoFill } from "../services/manual-timetable/autofill.service.js";
 import {
   computeAvailableCombos,
   checkTeacherConstraints,
+  getTeacherPreferenceWarnings,
 } from "../utils/timetableManualUtils.js";
 
 import {
@@ -90,7 +92,7 @@ router.post("/valid-options", async (req, res) => {
     assertState(timetableId);
 
     const state = getState(timetableId);
-    const { classTimetable, teacherTimetable, subjectHoursAssigned, electiveGroups } = state;
+    const { classTimetable, teacherTimetable, subjectHoursAssigned, electiveGroups, teacherAvailability, teacherPreferences, config } = state;
 
     const classObj = await ClassModel.findById(classId).lean();
     if (!classObj) return res.status(404).json({ ok: false, error: "Class not found" });
@@ -117,12 +119,27 @@ router.post("/valid-options", async (req, res) => {
           if (!potentialSubjectIds.includes(subjId)) continue;
 
           const teacherBlocked = facultyIds.some((facultyId) => {
-            const teacherCheck = checkTeacherConstraints(teacherTimetable, facultyId, day, hour);
+            const teacherCheck = checkTeacherConstraints(
+              teacherTimetable,
+              facultyId,
+              day,
+              hour,
+              teacherAvailability
+            );
             return !teacherCheck.ok;
           });
 
           if (!teacherBlocked) {
-            validCombos.push(combo);
+            validCombos.push({
+              ...combo,
+              preferenceWarnings: getTeacherPreferenceWarnings(
+                facultyIds,
+                teacherPreferences,
+                day,
+                hour,
+                Number(config?.hours) || 8
+              ),
+            });
           }
         }
       }
@@ -140,6 +157,7 @@ router.post("/valid-options", async (req, res) => {
             combos,
             classTimetable: tempState.classTimetable,
             teacherTimetable: tempState.teacherTimetable,
+            teacherAvailability: tempState.teacherAvailability,
             subjectHoursAssigned: tempState.subjectHoursAssigned,
             day,
             hour,
@@ -164,6 +182,22 @@ router.post("/valid-options", async (req, res) => {
             : c.faculty
               ? [c.faculty?._id || c.faculty]
               : [],
+        warnings:
+          Array.isArray(c.preferenceWarnings) && c.preferenceWarnings.length > 0
+            ? c.preferenceWarnings
+            : getTeacherPreferenceWarnings(
+                Array.isArray(c.faculty_ids)
+                  ? c.faculty_ids
+                  : c.faculty_id
+                    ? [c.faculty_id]
+                    : c.faculty
+                      ? [c.faculty?._id || c.faculty]
+                      : [],
+                teacherPreferences,
+                day,
+                hour,
+                Number(config?.hours) || 8
+              ),
       }))
     });
   } catch (e) {
@@ -190,13 +224,21 @@ router.post("/place", async (req, res) => {
       comboId
     });
 
-    if (!newState.slotSources[classId]) {
-      newState.slotSources[classId] = [];
+    const placedCombo = await resolveComboFromState(newState, comboId);
+    const targetClassIds =
+      Array.isArray(placedCombo?.classIds) && placedCombo.classIds.length > 0
+        ? placedCombo.classIds
+        : [String(classId)];
+
+    for (const targetClassId of targetClassIds) {
+      if (!newState.slotSources[targetClassId]) {
+        newState.slotSources[targetClassId] = [];
+      }
+      if (!newState.slotSources[targetClassId][day]) {
+        newState.slotSources[targetClassId][day] = [];
+      }
+      newState.slotSources[targetClassId][day][hour] = "manual";
     }
-    if (!newState.slotSources[classId][day]) {
-      newState.slotSources[classId][day] = [];
-    }
-    newState.slotSources[classId][day][hour] = "manual";
 
     setState(timetableId, newState);
     return res.json({ ok: true, ...newState });
@@ -262,6 +304,8 @@ router.post("/load", async (req, res) => {
     loadState(timetableId, {
       ...savedState,
       electiveGroups: currentState.electiveGroups || [],
+      teacherAvailability: currentState.teacherAvailability || {},
+      teacherPreferences: currentState.teacherPreferences || {},
     });
     res.json({ ok: true, ...getState(timetableId) });
   } catch (e) {
@@ -322,14 +366,24 @@ router.post("/clear-slot", async (req, res) => {
     if (newState.lockedSlots?.[classId]?.[day]?.[hour]) {
       return res.status(400).json({ ok: false, error: "This slot is locked." });
     }
+    const comboIds = newState.classTimetable?.[classId]?.[day]?.[hour] || [];
+    const resolved = await resolveCombosFromState(newState, comboIds);
     await clearSlot({ classId, day, hour, state: newState });
-    if (!newState.slotSources[classId]) {
-      newState.slotSources[classId] = [];
+    const affectedClassIds = new Set([String(classId)]);
+    for (const combo of resolved) {
+      for (const targetClassId of combo.classIds || []) {
+        affectedClassIds.add(String(targetClassId));
+      }
     }
-    if (!newState.slotSources[classId][day]) {
-      newState.slotSources[classId][day] = [];
+    for (const targetClassId of affectedClassIds) {
+      if (!newState.slotSources[targetClassId]) {
+        newState.slotSources[targetClassId] = [];
+      }
+      if (!newState.slotSources[targetClassId][day]) {
+        newState.slotSources[targetClassId][day] = [];
+      }
+      newState.slotSources[targetClassId][day][hour] = "manual";
     }
-    newState.slotSources[classId][day][hour] = "manual";
     setState(timetableId, newState);
     return res.json({ ok: true, ...newState });
   } catch (e) {

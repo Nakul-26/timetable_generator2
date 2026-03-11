@@ -20,6 +20,21 @@ export function computeRemainingHours(classObj, subjectHoursAssigned) {
   return remaining;
 }
 
+function normalizeUnavailableSlots(rawSlots = []) {
+  const slots = Array.isArray(rawSlots) ? rawSlots : [];
+  const out = new Set();
+
+  for (const slot of slots) {
+    const day = Number(slot?.day);
+    const hour = Number(slot?.hour);
+    if (!Number.isInteger(day) || day < 0) continue;
+    if (!Number.isInteger(hour) || hour < 0) continue;
+    out.add(`${day}|${hour}`);
+  }
+
+  return out;
+}
+
 function getComboSubjectId(combo) {
   return String(combo?.subject?._id || combo?.subject || combo?.subject_id || "");
 }
@@ -37,11 +52,49 @@ function getComboFacultyIds(combo) {
   return [];
 }
 
+export function getTeacherPreferenceWarnings(
+  facultyIds = [],
+  teacherPreferences = {},
+  day,
+  hour,
+  totalHours = 8
+) {
+  const warnings = [];
+
+  for (const facultyId of facultyIds.map(String)) {
+    const prefs = teacherPreferences?.[facultyId] || {};
+    const preferredDays = Array.isArray(prefs.preferredDays) ? prefs.preferredDays.map(Number) : [];
+
+    if (prefs.avoidFirstPeriod && hour === 0) {
+      warnings.push("Teacher prefers to avoid first period");
+    }
+    if (prefs.avoidLastPeriod && hour === Math.max(0, totalHours - 1)) {
+      warnings.push("Teacher prefers to avoid last period");
+    }
+    if (preferredDays.length > 0 && !preferredDays.includes(day)) {
+      warnings.push("Teacher prefers different teaching days");
+    }
+  }
+
+  return [...new Set(warnings)];
+}
+
 
 //---------------------------------------------------------
 // Teacher constraint checker
 //---------------------------------------------------------
-export function checkTeacherConstraints(teacherTimetable, facultyId, day, hour) {
+export function checkTeacherConstraints(
+  teacherTimetable,
+  facultyId,
+  day,
+  hour,
+  teacherAvailability = {}
+) {
+  const blockedSlots = normalizeUnavailableSlots(teacherAvailability?.[facultyId] || []);
+  if (blockedSlots.has(`${day}|${hour}`)) {
+    return { ok: false, error: "Teacher is unavailable at this time." };
+  }
+
   // Already booked?
   if (teacherTimetable?.[facultyId]?.[day]?.[hour] !== undefined && teacherTimetable?.[facultyId]?.[day]?.[hour] !== null) {
     return { ok: false, error: "Teacher not available at this time." };
@@ -91,6 +144,21 @@ export function checkClassConstraints(classTimetable, classObj, day, hour, subjI
   return { ok: true };
 }
 
+export function checkMultiClassConstraints(
+  classTimetable,
+  classIds,
+  day,
+  hour
+) {
+  for (const classId of (classIds || []).map(String)) {
+    const slot = classTimetable?.[classId]?.[day]?.[hour];
+    if (Array.isArray(slot) && slot.length > 0) {
+      return { ok: false, error: "One of the combined classes already has a lesson in this slot." };
+    }
+  }
+  return { ok: true };
+}
+
 
 //---------------------------------------------------------
 // Compute available combos for a class slot
@@ -100,6 +168,8 @@ export function computeAvailableCombos({
   combos,
   classTimetable,
   teacherTimetable,
+  teacherAvailability = {},
+  targetClassIds = null,
   day,
   hour,
   subjectHoursAssigned,
@@ -112,6 +182,11 @@ export function computeAvailableCombos({
   for (const cb of combos) {
     const subjId = getComboSubjectId(cb);
     const facultyIds = getComboFacultyIds(cb);
+    const comboClassIds = Array.isArray(cb?.class_ids)
+      ? cb.class_ids.map(String)
+      : Array.isArray(targetClassIds)
+        ? targetClassIds.map(String)
+        : [String(classObj?._id || "")];
 
     // Check class constraints
     const classCheck = checkClassConstraints(
@@ -125,12 +200,21 @@ export function computeAvailableCombos({
     );
     if (!classCheck.ok) continue;
 
+    const multiClassCheck = checkMultiClassConstraints(
+      classTimetable,
+      comboClassIds,
+      day,
+      hour
+    );
+    if (!multiClassCheck.ok) continue;
+
     const teacherBlocked = facultyIds.some((facultyId) => {
       const teacherCheck = checkTeacherConstraints(
         teacherTimetable,
         facultyId,
         day,
-        hour
+        hour,
+        teacherAvailability
       );
       return !teacherCheck.ok;
     });
@@ -147,7 +231,7 @@ export async function autoFillTimetable(classId, currentState) {
      * Auto-fill currently does NOT handle elective group placement.
      * It only fills single-subject slots.
      */
-    const { config, classTimetable, teacherTimetable, subjectHoursAssigned } = currentState;
+    const { config, classTimetable, teacherTimetable, subjectHoursAssigned, teacherAvailability } = currentState;
 
     const classObj = await ClassModel.findById(classId).lean();
     if (!classObj) {
@@ -185,6 +269,7 @@ export async function autoFillTimetable(classId, currentState) {
                 combos,
                 classTimetable: newClassTimetable,
                 teacherTimetable: newTeacherTimetable,
+                teacherAvailability,
                 day,
                 hour,
                 subjectHoursAssigned: newSubjectHoursAssigned
@@ -241,6 +326,7 @@ export async function autoFillTimetable(classId, currentState) {
             classTimetable: newClassTimetable, 
             teacherTimetable: newTeacherTimetable, 
             subjectHoursAssigned: newSubjectHoursAssigned,
+            teacherAvailability,
             config: currentState.config,
             version: currentState.version
         },

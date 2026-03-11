@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import FacultyManager from '../src/pages/teacher/ManageTeacher';
+import TeacherAvailability from './pages/teacher/TeacherAvailability';
+import TeacherPreferences from './pages/teacher/TeacherPreferences';
 import SubjectManager from './pages/subject/ManageSubject';
 import ClassManager from './pages/Class/ManageClass';
 import Timetable from './pages/Timetable';
@@ -91,6 +93,8 @@ function App() {
           <Route path="/timetable/settings" element={<PrivateRoute><TimetableSettings /></PrivateRoute>} />
           <Route path="/timetable/:id" element={<PrivateRoute><ViewTimetable /></PrivateRoute>} />
           <Route path="/teacher/add" element={<PrivateRoute><AddTeacher /></PrivateRoute>} />
+          <Route path="/teacher-availability" element={<PrivateRoute><TeacherAvailability /></PrivateRoute>} />
+          <Route path="/teacher-preferences" element={<PrivateRoute><TeacherPreferences /></PrivateRoute>} />
           <Route path="/subject/add" element={<PrivateRoute><AddSubject /></PrivateRoute>} />
           <Route path="/class/add" element={<PrivateRoute><AddClass /></PrivateRoute>} />
           <Route path="/teacher-subject-combos" element={<PrivateRoute><ManageTeacherSubject /></PrivateRoute>} />

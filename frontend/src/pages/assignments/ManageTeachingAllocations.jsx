@@ -10,6 +10,7 @@ const ManageTeachingAllocations = () => {
   const [selectedSubjects, setSelectedSubjects] = useState([]);
   const [selectedTeachers, setSelectedTeachers] = useState([]);
   const [hoursPerWeek, setHoursPerWeek] = useState("");
+  const [combinedClassGroupId, setCombinedClassGroupId] = useState("");
   const [showFilters, setShowFilters] = useState(false);
 
   const [allocations, setAllocations] = useState([]);
@@ -42,7 +43,10 @@ const ManageTeachingAllocations = () => {
 
   const filteredAllocations = useMemo(() => {
     return allocations.filter((item) => {
-      const classMatch = !filterClassId || String(item?.class?._id) === String(filterClassId);
+      const classMatch =
+        !filterClassId ||
+        String(item?.class?._id) === String(filterClassId) ||
+        (item?.classes || []).some((cls) => String(cls?._id) === String(filterClassId));
       const subjectMatch = !filterSubjectId || String(item?.subject?._id) === String(filterSubjectId);
       const teacherMatch = !filterTeacherId || String(item?.teacher?._id) === String(filterTeacherId);
       return classMatch && subjectMatch && teacherMatch;
@@ -87,23 +91,26 @@ const ManageTeachingAllocations = () => {
       setError("Please select at least one class, subject, teacher and valid hours/week.");
       return;
     }
+    if (selectedClasses.length > 1 && !combinedClassGroupId.trim()) {
+      setError("Combined Class Group ID is required when multiple classes are selected.");
+      return;
+    }
 
     setSubmitting(true);
     setError("");
     try {
       const requests = [];
-      for (const cls of selectedClasses) {
-        for (const subject of selectedSubjects) {
-          for (const teacher of selectedTeachers) {
-            requests.push(
-              api.post("/teaching-allocations", {
-                classId: cls.value,
-                subjectId: subject.value,
-                teacherId: teacher.value,
-                hoursPerWeek: Number(hoursPerWeek),
-              })
-            );
-          }
+      for (const subject of selectedSubjects) {
+        for (const teacher of selectedTeachers) {
+          requests.push(
+            api.post("/teaching-allocations", {
+              classIds: selectedClasses.map((item) => item.value),
+              subjectId: subject.value,
+              teacherId: teacher.value,
+              hoursPerWeek: Number(hoursPerWeek),
+              combinedClassGroupId: selectedClasses.length > 1 ? combinedClassGroupId : null,
+            })
+          );
         }
       }
 
@@ -117,6 +124,7 @@ const ManageTeachingAllocations = () => {
       setSelectedSubjects([]);
       setSelectedTeachers([]);
       setHoursPerWeek("");
+      setCombinedClassGroupId("");
       await fetchAllocations();
     } catch (e) {
       setError(e?.response?.data?.error || "Failed to save teaching allocation.");
@@ -130,9 +138,7 @@ const ManageTeachingAllocations = () => {
     try {
       await api.delete("/teaching-allocations", {
         data: {
-          classId: item.class?._id,
-          subjectId: item.subject?._id,
-          teacherId: item.teacher?._id,
+          allocationId: item.id,
         },
       });
       await fetchAllocations();
@@ -227,6 +233,17 @@ const ManageTeachingAllocations = () => {
             />
           </div>
 
+          <div className="form-group cst-field">
+            <label>Combined Class Group ID</label>
+            <input
+              type="text"
+              className="hours-input"
+              placeholder="Required when multiple classes are selected"
+              value={combinedClassGroupId}
+              onChange={(e) => setCombinedClassGroupId(e.target.value)}
+            />
+          </div>
+
           <div className="cst-actions">
             <button type="submit" className="primary-btn" disabled={submitting}>
               {submitting ? "Saving..." : "Add Combo"}
@@ -304,6 +321,7 @@ const ManageTeachingAllocations = () => {
               <th>Subject</th>
               <th>Teacher</th>
               <th>Hours/Week</th>
+              <th>Combined Group</th>
               <th>Type</th>
               <th>Status</th>
               <th>Actions</th>
@@ -312,10 +330,15 @@ const ManageTeachingAllocations = () => {
           <tbody>
             {filteredAllocations.map((item) => (
               <tr key={item.id}>
-                <td>{item?.class?.name}</td>
+                <td>
+                  {item?.isCombined
+                    ? (item?.classes || []).map((cls) => cls?.name).filter(Boolean).join(" + ")
+                    : item?.class?.name}
+                </td>
                 <td>{item?.subject?.name}</td>
                 <td>{item?.teacher?.name}</td>
                 <td>{item?.hoursPerWeek ?? 0}</td>
+                <td>{item?.combinedClassGroupId || "—"}</td>
                 <td>{item?.isLab ? "Lab" : "Theory"}</td>
                 <td>{item?.status || "active"}</td>
                 <td>
@@ -327,7 +350,7 @@ const ManageTeachingAllocations = () => {
             ))}
             {filteredAllocations.length === 0 ? (
               <tr>
-                <td colSpan="7">No allocations found.</td>
+                <td colSpan="8">No allocations found.</td>
               </tr>
             ) : null}
           </tbody>

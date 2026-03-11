@@ -480,12 +480,12 @@ function Timetable() {
 
   const getSlotDisplay = (slot) => {
     if (!slot || slot === -1 || slot === "BREAK") {
-      return { subjectName: "-", facultyNames: [] };
+      return { subjectName: "-", facultyNames: [], combinedWith: [] };
     }
 
     const combo = comboById.get(String(slot));
     if (!combo) {
-      return { subjectName: "?", facultyNames: [] };
+      return { subjectName: "?", facultyNames: [], combinedWith: [] };
     }
 
     const subject = subjectById.get(String(combo.subject_id));
@@ -502,7 +502,11 @@ function Timetable() {
       facultyNames = [fac ? fac.name : "N/A"];
     }
 
-    return { subjectName, facultyNames };
+    const combinedWith = Array.isArray(combo.class_ids)
+      ? combo.class_ids.map(String)
+      : [];
+
+    return { subjectName, facultyNames, combinedWith };
   };
 
   const buildPdfHtml = ({ entries, filtered }) => {
@@ -524,11 +528,14 @@ function Timetable() {
             const cells = row
               .map((slot) => {
                 const matches = filtered ? isCellMatching(slot) : true;
-                const { subjectName, facultyNames } = getSlotDisplay(slot);
+                const { subjectName, facultyNames, combinedWith } = getSlotDisplay(slot);
                 const facultyLine = facultyNames.length
                   ? `<div class="faculty">${escapeHtml(facultyNames.join(", "))}</div>`
                   : "";
-                return `<td class="${matches ? "" : "dim"}"><div class="subject">${escapeHtml(subjectName)}</div>${facultyLine}</td>`;
+                const combinedLine = combinedWith.length > 1
+                  ? `<div class="faculty">Combined: ${escapeHtml(combinedWith.map((id) => getClassName(id)).join(" + "))}</div>`
+                  : "";
+                return `<td class="${matches ? "" : "dim"}"><div class="subject">${escapeHtml(subjectName)}</div>${facultyLine}${combinedLine}</td>`;
               })
               .join("");
             return `<tr><td class="day">Day ${dayIndex + 1}</td>${cells}</tr>`;
@@ -1038,12 +1045,20 @@ function Timetable() {
                                 }
                             }
 
+                            const combinedClassIds = Array.isArray(combo.class_ids)
+                              ? combo.class_ids.map(String)
+                              : [];
+                            const combinedLabel = combinedClassIds.length > 1
+                              ? combinedClassIds.map((id) => getClassName(id)).join(" + ")
+                              : "";
+
                             return (
                               <td key={h} className={cellClassName}>
                                 <div>
                                   <b>{subjectName}</b>
                                 </div>
                                 {facultyNames.map((name, i) => <div key={i}>{name}</div>)}
+                                {combinedLabel ? <div>Combined: {combinedLabel}</div> : null}
                               </td>
                             );
                           })}

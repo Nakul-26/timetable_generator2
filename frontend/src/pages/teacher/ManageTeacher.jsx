@@ -171,6 +171,14 @@ const ManageTeacher = () => {
     navigate("/teacher/add");
   };
 
+  const handleEditAvailability = () => {
+    navigate("/teacher-availability");
+  };
+
+  const handleEditPreferences = () => {
+    navigate("/teacher-preferences");
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this teacher?")) return;
     try {
@@ -221,6 +229,8 @@ const ManageTeacher = () => {
       <h2>Manage Teachers</h2>
       <div className="actions-bar">
         <button onClick={handleAddTeacher}>Add Teacher</button>
+        <button onClick={handleEditAvailability} className="secondary-btn">Edit Availability</button>
+        <button onClick={handleEditPreferences} className="secondary-btn">Edit Preferences</button>
         <button onClick={handleDownloadTemplate} className="secondary-btn">Download Excel Template</button>
         <button onClick={triggerExcelUpload} className="secondary-btn" disabled={uploadingExcel}>
           {uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
@@ -274,6 +284,8 @@ const ManageTeacher = () => {
               <th>Faculty ID</th>
               <th>Assigned Classes</th>
               <th>Assigned Subjects</th>
+              <th>Blocked Slots</th>
+              <th>Preferences</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -316,6 +328,12 @@ const ManageTeacher = () => {
                         .map(c => (
                             <div key={c._id}>{c.subject?.name}</div>
                         ))}
+                  </td>
+                  <td>{Array.isArray(teacher.unavailableSlots) ? teacher.unavailableSlots.length : 0}</td>
+                  <td>
+                    {teacher.preferences?.avoidFirstPeriod || teacher.preferences?.avoidLastPeriod || teacher.preferences?.maxConsecutive || (teacher.preferences?.preferredDays || []).length > 0
+                      ? "Configured"
+                      : "Default"}
                   </td>
                   <td className="actions-cell">
                     {editId === teacher._id ? (
