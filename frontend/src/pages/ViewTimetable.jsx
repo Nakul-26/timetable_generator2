@@ -131,6 +131,10 @@ const ViewTimetable = () => {
                 } else if (combo?.faculty_id) {
                     facultyName = facultyMap[String(combo.faculty_id)] || `Faculty ${String(combo.faculty_id).slice(-4)}`;
                 }
+                const subjectType = String(subjects.find((s) => String(s._id) === String(subjectId))?.type || '').toLowerCase();
+                if (facultyName === 'N/A' && subjectType === 'no_teacher') {
+                    facultyName = 'No Teacher';
+                }
 
                 acc[String(combo._id)] = {
                     subject: subjectName,
@@ -205,6 +209,10 @@ const ViewTimetable = () => {
         } else if (embeddedCombo?.faculty_id) {
             facultyName = facultyMap[String(embeddedCombo.faculty_id)] || `Faculty ${String(embeddedCombo.faculty_id).slice(-4)}`;
             facultyIds = [String(embeddedCombo.faculty_id)];
+        }
+        const subjectType = String(subjects.find((s) => String(s._id) === subjectId)?.type || '').toLowerCase();
+        if (facultyName === 'N/A' && subjectType === 'no_teacher') {
+            facultyName = 'No Teacher';
         }
 
         return {

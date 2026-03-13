@@ -22,7 +22,7 @@ const SubjectSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ["theory", "lab"],
+      enum: ["theory", "lab", "no_teacher"],
       required: true,
     },
     combined_classes: {

@@ -33,6 +33,7 @@ function normalizeCombo(combo) {
     facultyNames: Array.isArray(combo.faculty_ids)
       ? combo.faculty_names || []
       : [combo.faculty?.name || combo.faculty_name].filter(Boolean),
+    subjectType: String(combo.subject?.type || combo.subject_type || combo.type || "theory"),
   };
 }
 
@@ -51,7 +52,7 @@ export async function resolveComboFromState(state, comboId) {
   }
 
   const combo = await TeacherSubjectCombination.findById(comboIdStr)
-    .populate("subject", "name")
+    .populate("subject", "name type")
     .populate("faculty", "name")
     .lean();
 
@@ -90,6 +91,7 @@ export async function getClassCombosForEdit(state, classObj) {
           subject: {
             _id: String(combo.subject?._id || combo.subject || combo.subject_id || ""),
             name: combo.subject?.name || combo.subject_name || "Unknown Subject",
+            type: combo.subject?.type || combo.subject_type || combo.type || "theory",
           },
           faculty: {
             _id: String(
@@ -102,7 +104,7 @@ export async function getClassCombosForEdit(state, classObj) {
               combo.faculty?.name ||
               combo.faculty_name ||
               (Array.isArray(combo.faculty_names) ? combo.faculty_names.join(", ") : null) ||
-              "Unknown Teacher",
+              ((combo.subject?.type || combo.subject_type || combo.type) === "no_teacher" ? "No Teacher" : "Unknown Teacher"),
           },
           faculty_ids: Array.isArray(combo.faculty_ids)
             ? combo.faculty_ids.map((id) => String(id))
@@ -126,11 +128,11 @@ export async function getClassCombosForEdit(state, classObj) {
     )];
 
     const [subjects, faculties] = await Promise.all([
-      subjectIds.length > 0 ? Subject.find({ _id: { $in: subjectIds } }).select("name").lean() : Promise.resolve([]),
+      subjectIds.length > 0 ? Subject.find({ _id: { $in: subjectIds } }).select("name type").lean() : Promise.resolve([]),
       facultyIds.length > 0 ? Faculty.find({ _id: { $in: facultyIds } }).select("name").lean() : Promise.resolve([]),
     ]);
 
-    const subjectMap = new Map(subjects.map((subject) => [String(subject._id), subject.name]));
+    const subjectMap = new Map(subjects.map((subject) => [String(subject._id), subject]));
     const facultyMap = new Map(faculties.map((faculty) => [String(faculty._id), faculty.name]));
 
     storedCombos = storedCombos.map((combo) => ({
@@ -139,8 +141,12 @@ export async function getClassCombosForEdit(state, classObj) {
         ...combo.subject,
         name:
           combo.subject?.name ||
-          subjectMap.get(String(combo.subject?._id || "")) ||
+          subjectMap.get(String(combo.subject?._id || ""))?.name ||
           `Subject ${String(combo.subject?._id || "").slice(-4)}`,
+        type:
+          combo.subject?.type ||
+          subjectMap.get(String(combo.subject?._id || ""))?.type ||
+          "theory",
       },
       faculty: {
         ...combo.faculty,

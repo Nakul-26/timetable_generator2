@@ -51,12 +51,13 @@ protectedRouter.post("/teaching-allocations", async (req, res) => {
     const classIds = [...new Set(classIdsRaw.map(toId).filter(Boolean))];
     const subjectId = toId(req.body.subjectId);
     const teacherId = toId(req.body.teacherId);
+    const normalizedTeacherId = teacherId || null;
     const hoursPerWeek = Number(req.body.hoursPerWeek);
     const combinedClassGroupIdRaw = String(req.body.combinedClassGroupId || "").trim();
     const combinedClassGroupId = combinedClassGroupIdRaw || null;
 
-    if (classIds.length === 0 || !subjectId || !teacherId || !Number.isFinite(hoursPerWeek) || hoursPerWeek < 1) {
-      return res.status(400).json({ error: "classIds, subjectId, teacherId and valid hoursPerWeek are required." });
+    if (classIds.length === 0 || !subjectId || !Number.isFinite(hoursPerWeek) || hoursPerWeek < 1) {
+      return res.status(400).json({ error: "classIds, subjectId and valid hoursPerWeek are required." });
     }
 
     if (classIds.length > 1 && !combinedClassGroupId) {
@@ -66,18 +67,35 @@ protectedRouter.post("/teaching-allocations", async (req, res) => {
     const [classes, subject, teacher] = await Promise.all([
       ClassModel.find({ _id: { $in: classIds } }),
       Subject.findById(subjectId),
-      Faculty.findById(teacherId),
+      normalizedTeacherId ? Faculty.findById(normalizedTeacherId) : Promise.resolve(null),
     ]);
 
-    if (classes.length !== classIds.length || !subject || !teacher) {
-      return res.status(404).json({ error: "Class, subject, or teacher not found." });
+    if (classes.length !== classIds.length || !subject) {
+      return res.status(404).json({ error: "Class or subject not found." });
     }
 
-    await TeacherSubjectCombination.findOneAndUpdate(
-      { faculty: teacherId, subject: subjectId },
-      { $setOnInsert: { faculty: teacherId, subject: subjectId } },
-      { new: true, upsert: true }
-    );
+    const subjectType = String(subject.type || "").toLowerCase();
+    const requiresTeacher = subjectType !== "no_teacher";
+
+    if (requiresTeacher && !teacher) {
+      return res.status(404).json({ error: "Teacher not found." });
+    }
+
+    if (!requiresTeacher && normalizedTeacherId) {
+      return res.status(400).json({ error: "No-teacher subjects must not have a teacher assigned." });
+    }
+
+    if (requiresTeacher && !normalizedTeacherId) {
+      return res.status(400).json({ error: "teacherId is required for non no-teacher subjects." });
+    }
+
+    if (requiresTeacher) {
+      await TeacherSubjectCombination.findOneAndUpdate(
+        { faculty: normalizedTeacherId, subject: subjectId },
+        { $setOnInsert: { faculty: normalizedTeacherId, subject: subjectId } },
+        { new: true, upsert: true }
+      );
+    }
 
     for (const classId of classIds) {
       await ClassSubject.findOneAndUpdate(
@@ -85,17 +103,19 @@ protectedRouter.post("/teaching-allocations", async (req, res) => {
         { $set: { hoursPerWeek } },
         { new: true, upsert: true }
       );
-      await ClassModel.findByIdAndUpdate(classId, {
-        $addToSet: {
-          faculties: teacherId,
-        },
-      });
+      if (requiresTeacher) {
+        await ClassModel.findByIdAndUpdate(classId, {
+          $addToSet: {
+            faculties: normalizedTeacherId,
+          },
+        });
+      }
     }
 
     const allocation = await TeachingAllocation.create({
       classIds,
       subject: subjectId,
-      teacher: teacherId,
+      teacher: normalizedTeacherId,
       hoursPerWeek,
       combinedClassGroupId,
     });

@@ -82,12 +82,15 @@ export function convertNewCollegeInput({
         const subjectIdStr = String(combo.subjectId);
         if (Array.isArray(combo.classIds) && combo.classIds.length > 0) {
             explicitAllocations.push({
-                teacherId: String(combo.teacherId),
+                teacherId: combo.teacherId ? String(combo.teacherId) : null,
                 subjectId: subjectIdStr,
                 classIds: combo.classIds.map(String),
                 hoursPerWeek: Number(combo.hoursPerWeek || 0),
                 combinedClassGroupId: combo.combinedClassGroupId || null,
             });
+        }
+        if (!combo.teacherId) {
+            continue;
         }
         if (!teachersByCategory.has(subjectIdStr)) {
             teachersByCategory.set(subjectIdStr, []);
@@ -164,7 +167,7 @@ export function convertNewCollegeInput({
         explicitAllocationKeys.add(key);
         combos.push({
             _id: "C" + comboIndex++,
-            faculty_ids: [String(allocation.teacherId)],
+            faculty_ids: allocation.teacherId ? [String(allocation.teacherId)] : [],
             subject_id: subjectId,
             class_ids: classIds,
             combined_class_group_id: allocation.combinedClassGroupId || null,
@@ -172,7 +175,9 @@ export function convertNewCollegeInput({
             hours_per_class: Object.fromEntries(classIds.map((classId) => [classId, hoursRequired])),
             combo_name: allocation.combinedClassGroupId
                 ? `GROUP_${allocation.combinedClassGroupId}`
-                : `T${allocation.teacherId}_S${subjectId}_C${classIds.join("_")}`
+                : allocation.teacherId
+                    ? `T${allocation.teacherId}_S${subjectId}_C${classIds.join("_")}`
+                    : `NT_S${subjectId}_C${classIds.join("_")}`
         });
     }
 

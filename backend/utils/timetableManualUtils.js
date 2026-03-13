@@ -79,6 +79,10 @@ export function getTeacherPreferenceWarnings(
   return [...new Set(warnings)];
 }
 
+function isNoTeacherCombo(combo) {
+  return String(combo?.subject?.type || combo?.subject_type || combo?.type || "").toLowerCase() === "no_teacher";
+}
+
 
 //---------------------------------------------------------
 // Teacher constraint checker
@@ -218,7 +222,7 @@ export function computeAvailableCombos({
       );
       return !teacherCheck.ok;
     });
-    if (teacherBlocked) continue;
+    if (!isNoTeacherCombo(cb) && teacherBlocked) continue;
 
     valid.push(cb);
   }

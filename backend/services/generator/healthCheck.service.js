@@ -100,6 +100,20 @@ export function buildConstraintHealthReport({
   const subjectById = new Map(subjects.map((s) => [String(s._id), s]));
   const comboById = new Map(combos.map((c) => [String(c._id), c]));
 
+  for (const combo of combos) {
+    const subjectId = String(combo?.subject_id || "");
+    const subject = subjectById.get(subjectId);
+    if (!subject || String(subject.type || "").toLowerCase() !== "no_teacher") continue;
+    const facultyIds = getComboFacultyIds(combo);
+    if (facultyIds.length > 0) {
+      warnings.push({
+        severity: "warning",
+        type: "no_teacher_has_teacher",
+        message: `No-teacher subject "${subject.name || subjectId}" has teacher assignment(s): ${facultyIds.join(", ")}.`,
+      });
+    }
+  }
+
   const potentialTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
   const estimatedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));
   const forcedTeacherLoad = new Map(faculties.map((f) => [String(f._id), 0]));

@@ -144,7 +144,8 @@ function ManageSubject() {
         const id = getCellValue(row, ["id", "ID", "code", "Code", "subjectCode", "Subject Code"]);
         const sem = getCellValue(row, ["sem", "Sem", "semester", "Semester", "class", "Class"]);
         const typeRaw = getCellValue(row, ["type", "Type"]) || "theory";
-        const type = typeRaw.toLowerCase() === "lab" ? "lab" : "theory";
+        const normalizedType = typeRaw.toLowerCase();
+        const type = ["lab", "no_teacher"].includes(normalizedType) ? normalizedType : "theory";
         const isElectiveRaw = getCellValue(row, ["isElective", "elective", "Elective"]);
         const combinedClassesRaw = getCellValue(row, ["combinedClasses", "combined_classes", "Combined Classes"]);
 
@@ -405,6 +406,7 @@ function ManageSubject() {
                       >
                         <option value="theory">Theory</option>
                         <option value="lab">Lab</option>
+                        <option value="no_teacher">Not Single Teacher</option>
                       </select>
                     ) : (
                       subject.type

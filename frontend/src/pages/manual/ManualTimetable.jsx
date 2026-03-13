@@ -90,7 +90,7 @@ const ManualTimetable = () => {
                 combo?.faculty?.name ||
                 combo?.faculty_name ||
                 facultyIds.map((facultyId) => facultyIdToName[facultyId] || `Faculty ${facultyId.slice(-4)}`).join(', ') ||
-                'Unknown Teacher',
+                (String(combo?.subject?.type || combo?.subject_type || combo?.type || '').toLowerCase() === 'no_teacher' ? 'No Teacher' : 'Unknown Teacher'),
             subjectId,
             classId,
         };
@@ -713,7 +713,7 @@ const ManualTimetable = () => {
                                                             </select>
                                                             {hasLoadedOptions && options?.length > 0 ? (
                                                                 <div className="manual-slot-option-warnings">
-                                                                    {options.slice(0, 3).some((option) => option.warnings?.length) ? "Some options include teacher preference warnings." : ""}
+                                                                    {options.slice(0, 3).some((option) => option.warnings?.length) ? "Some options include placement warnings or teacher preference warnings." : ""}
                                                                 </div>
                                                             ) : null}
                                                         </div>

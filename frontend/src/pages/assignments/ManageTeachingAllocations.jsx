@@ -23,6 +23,12 @@ const ManageTeachingAllocations = () => {
   const [filterClassId, setFilterClassId] = useState("");
   const [filterSubjectId, setFilterSubjectId] = useState("");
   const [filterTeacherId, setFilterTeacherId] = useState("");
+  const allSelectedSubjectsNoTeacher =
+    selectedSubjects.length > 0 &&
+    selectedSubjects.every((subjectOption) => {
+      const subject = subjects.find((s) => String(s._id) === String(subjectOption.value));
+      return String(subject?.type || "").toLowerCase() === "no_teacher";
+    });
 
   const fetchAllocations = async () => {
     setLoading(true);
@@ -48,7 +54,10 @@ const ManageTeachingAllocations = () => {
         String(item?.class?._id) === String(filterClassId) ||
         (item?.classes || []).some((cls) => String(cls?._id) === String(filterClassId));
       const subjectMatch = !filterSubjectId || String(item?.subject?._id) === String(filterSubjectId);
-      const teacherMatch = !filterTeacherId || String(item?.teacher?._id) === String(filterTeacherId);
+      const teacherMatch =
+        !filterTeacherId ||
+        String(item?.teacher?._id) === String(filterTeacherId) ||
+        (!item?.teacher && filterTeacherId === "__none__");
       return classMatch && subjectMatch && teacherMatch;
     });
   }, [allocations, filterClassId, filterSubjectId, filterTeacherId]);
@@ -85,10 +94,17 @@ const ManageTeachingAllocations = () => {
     if (
       selectedClasses.length === 0 ||
       selectedSubjects.length === 0 ||
-      selectedTeachers.length === 0 ||
+      (!allSelectedSubjectsNoTeacher && selectedTeachers.length === 0) ||
       Number(hoursPerWeek) < 1
     ) {
-      setError("Please select at least one class, subject, teacher and valid hours/week.");
+      setError("Please select at least one class, subject, and valid hours/week. Teachers are optional only for no-teacher subjects.");
+      return;
+    }
+    if (!allSelectedSubjectsNoTeacher && selectedSubjects.some((subjectOption) => {
+      const subject = subjects.find((s) => String(s._id) === String(subjectOption.value));
+      return String(subject?.type || "").toLowerCase() === "no_teacher";
+    })) {
+      setError("Add no-teacher subjects separately from teacher-assigned subjects.");
       return;
     }
     if (selectedClasses.length > 1 && !combinedClassGroupId.trim()) {
@@ -101,12 +117,15 @@ const ManageTeachingAllocations = () => {
     try {
       const requests = [];
       for (const subject of selectedSubjects) {
-        for (const teacher of selectedTeachers) {
+        const subjectData = subjects.find((s) => String(s._id) === String(subject.value));
+        const isNoTeacher = String(subjectData?.type || "").toLowerCase() === "no_teacher";
+        const teachersToUse = isNoTeacher ? [null] : selectedTeachers;
+        for (const teacher of teachersToUse) {
           requests.push(
             api.post("/teaching-allocations", {
               classIds: selectedClasses.map((item) => item.value),
               subjectId: subject.value,
-              teacherId: teacher.value,
+              teacherId: teacher?.value || null,
               hoursPerWeek: Number(hoursPerWeek),
               combinedClassGroupId: selectedClasses.length > 1 ? combinedClassGroupId : null,
             })
@@ -215,8 +234,9 @@ const ManageTeachingAllocations = () => {
               options={teacherOptions}
               value={selectedTeachers}
               onChange={(value) => setSelectedTeachers(value || [])}
-              placeholder="Select Teachers"
+              placeholder={allSelectedSubjectsNoTeacher ? "Not required for no-teacher subjects" : "Select Teachers"}
               isMulti
+              isDisabled={allSelectedSubjectsNoTeacher}
             />
           </div>
 
@@ -284,6 +304,7 @@ const ManageTeachingAllocations = () => {
               <label>Teacher</label>
               <select value={filterTeacherId} onChange={(e) => setFilterTeacherId(e.target.value)}>
                 <option value="">All Teachers</option>
+                <option value="__none__">No Teacher</option>
                 {faculties.map((f) => (
                   <option key={f._id} value={f._id}>
                     {f.name}
@@ -336,10 +357,10 @@ const ManageTeachingAllocations = () => {
                     : item?.class?.name}
                 </td>
                 <td>{item?.subject?.name}</td>
-                <td>{item?.teacher?.name}</td>
+                <td>{item?.teacher?.name || "No Teacher"}</td>
                 <td>{item?.hoursPerWeek ?? 0}</td>
                 <td>{item?.combinedClassGroupId || "—"}</td>
-                <td>{item?.isLab ? "Lab" : "Theory"}</td>
+                <td>{item?.subject?.type === "no_teacher" ? "No Teacher" : item?.isLab ? "Lab" : "Theory"}</td>
                 <td>{item?.status || "active"}</td>
                 <td>
                   <button className="danger-btn" onClick={() => handleDelete(item)}>

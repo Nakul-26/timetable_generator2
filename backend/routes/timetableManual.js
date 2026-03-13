@@ -53,6 +53,10 @@ function buildSessionMeta(existingState = {}, overrides = {}) {
   };
 }
 
+function isNoTeacherCombo(combo) {
+  return String(combo?.subject?.type || combo?.subject_type || combo?.type || "").toLowerCase() === "no_teacher";
+}
+
 router.post("/initialize", async (req, res) => {
   try {
     const {
@@ -139,6 +143,9 @@ router.post("/valid-options", async (req, res) => {
                 hour,
                 Number(config?.hours) || 8
               ),
+              placementWarnings: isNoTeacherCombo(combo) && hour < Math.max(0, (Number(config?.hours) || 8) - 2)
+                ? ["Recommended for later periods"]
+                : [],
             });
           }
         }
@@ -172,7 +179,7 @@ router.post("/valid-options", async (req, res) => {
       ok: true,
       validOptions: validCombos.map(c => ({
         comboId: c._id,
-        faculty: c.faculty.name,
+        faculty: isNoTeacherCombo(c) ? "No Teacher" : (c.faculty?.name || "Unknown Teacher"),
         subject: c.subject.name,
         subjectId: c.subject?._id || c.subject || c.subject_id || "",
         facultyIds: Array.isArray(c.faculty_ids)
@@ -183,9 +190,11 @@ router.post("/valid-options", async (req, res) => {
               ? [c.faculty?._id || c.faculty]
               : [],
         warnings:
-          Array.isArray(c.preferenceWarnings) && c.preferenceWarnings.length > 0
-            ? c.preferenceWarnings
-            : getTeacherPreferenceWarnings(
+          [
+            ...(
+              Array.isArray(c.preferenceWarnings) && c.preferenceWarnings.length > 0
+                ? c.preferenceWarnings
+                : getTeacherPreferenceWarnings(
                 Array.isArray(c.faculty_ids)
                   ? c.faculty_ids
                   : c.faculty_id
@@ -197,7 +206,16 @@ router.post("/valid-options", async (req, res) => {
                 day,
                 hour,
                 Number(config?.hours) || 8
-              ),
+              )
+            ),
+            ...(
+              Array.isArray(c.placementWarnings)
+                ? c.placementWarnings
+                : (isNoTeacherCombo(c) && hour < Math.max(0, (Number(config?.hours) || 8) - 2))
+                  ? ["Recommended for later periods"]
+                  : []
+            ),
+          ],
       }))
     });
   } catch (e) {

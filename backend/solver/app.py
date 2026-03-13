@@ -391,6 +391,9 @@ async def solve(request: Request) -> Dict[str, Any]:
     teacher_pref_avoid_last_weight = 40
     teacher_pref_non_preferred_day_weight = 20
     teacher_pref_max_consecutive_weight = 80
+    no_teacher_early_slot_weight = max(
+        0, int(_cfg_get(constraint_config, ["noTeacherSessions", "earlySlotWeight"], 40))
+    )
 
     applied_config = {
         "schedule": {"daysPerWeek": DAYS_PER_WEEK, "hoursPerDay": HOURS_PER_DAY, "breakHours": BREAK_HOURS},
@@ -461,6 +464,7 @@ async def solve(request: Request) -> Dict[str, Any]:
             "teacherOverrides": teacher_boundary_overrides,
         },
         "teacherPreferences": teacher_preferences,
+        "noTeacherSessions": {"earlySlotWeight": no_teacher_early_slot_weight},
         "solver": {"timeLimitSec": solver_time_limit_sec},
     }
 
@@ -560,6 +564,9 @@ async def solve(request: Request) -> Dict[str, Any]:
     subject_covers: Dict[Tuple[str, int, int, str], List[cp_model.IntVar]] = {}
     unmet_requirements: List[Dict[str, Any]] = []
     objective_terms: List[cp_model.LinearExpr] = []
+    valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
+    hour_rank = {h: i for i, h in enumerate(valid_hours)}
+    valid_hour_count = len(valid_hours)
 
     for combo in combos:
         combo_id = combo["_id"]
@@ -602,6 +609,15 @@ async def solve(request: Request) -> Dict[str, Any]:
                     and violates_availability
                 ):
                     objective_terms.append(var * teacher_avail_weight)
+                if (
+                    no_teacher_early_slot_weight > 0
+                    and str(subj.get("type") or "").lower() == "no_teacher"
+                    and valid_hour_count > 0
+                ):
+                    slot_rank = hour_rank.get(hour, 0)
+                    early_penalty = max(0, valid_hour_count - slot_rank - 1)
+                    if early_penalty > 0:
+                        objective_terms.append(var * no_teacher_early_slot_weight * early_penalty)
 
                 for h in range(hour, hour + block):
                     for class_id in class_ids:
@@ -948,7 +964,6 @@ async def solve(request: Request) -> Dict[str, Any]:
                             teacher_occ[(fid, day, last_hour)] * teacher_boundary_weight
                         )
 
-    valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
     if valid_hours:
         first_hour = valid_hours[0]
         last_hour = valid_hours[-1]
@@ -1059,9 +1074,6 @@ async def solve(request: Request) -> Dict[str, Any]:
 
     # High-hour subjects preference for early/late periods in a day.
     if high_load_timing_enabled and high_load_timing_weight > 0:
-        valid_hours = [h for h in range(HOURS_PER_DAY) if h not in break_hours_set]
-        hour_rank = {h: i for i, h in enumerate(valid_hours)}
-        valid_hour_count = len(valid_hours)
         for cls in classes:
             class_id = cls["_id"]
             days = int(cls.get("days_per_week") or DAYS_PER_WEEK)

@@ -119,6 +119,7 @@ function AddSubject() {
         >
           <option value="theory">Theory</option>
           <option value="lab">Lab</option>
+          <option value="no_teacher">Not Single Teacher</option>
         </select>
       </div>
       <div className="form-group elective-highlight-group">

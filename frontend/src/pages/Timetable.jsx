@@ -93,10 +93,12 @@ function Timetable() {
         const facultyNames = (Array.isArray(combo.faculty_ids) ? combo.faculty_ids : [])
           .map((fid) => facultyById.get(String(fid))?.name || "N/A")
           .join(" & ");
+        const facultyLabel =
+          facultyNames || (String(subject?.type || "").toLowerCase() === "no_teacher" ? "No Teacher" : "N/A");
 
         classOptions.push({
           id: String(combo._id),
-          label: `${facultyNames || "N/A"} : ${subjectName}`,
+          label: `${facultyLabel} : ${subjectName}`,
         });
       }
       out.set(classId, classOptions);
@@ -500,6 +502,9 @@ function Timetable() {
     } else if (combo.faculty_id) {
       const fac = facultyById.get(String(combo.faculty_id));
       facultyNames = [fac ? fac.name : "N/A"];
+    }
+    if (facultyNames.length === 0 && String(subject?.type || "").toLowerCase() === "no_teacher") {
+      facultyNames = ["No Teacher"];
     }
 
     const combinedWith = Array.isArray(combo.class_ids)
@@ -1043,6 +1048,9 @@ function Timetable() {
                                 } else {
                                     facultyNames.push("N/A");
                                 }
+                            }
+                            if (facultyNames.length === 0 && String(subject?.type || "").toLowerCase() === "no_teacher") {
+                                facultyNames.push("No Teacher");
                             }
 
                             const combinedClassIds = Array.isArray(combo.class_ids)
