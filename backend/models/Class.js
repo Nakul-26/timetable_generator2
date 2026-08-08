@@ -53,6 +53,13 @@ const ClassSchema = new Schema(
       { type: Schema.Types.ObjectId, ref: 'Faculty' }
     ],
 
+    // Class teacher / mentor for this class
+    classTeacherId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Faculty',
+      default: null,
+    },
+
     // Pre-assigned teacher-subject pairs (assignment-only flow)
     assigned_teacher_subject_combos: [
       { type: Schema.Types.ObjectId, ref: 'TeacherSubjectCombination' }
