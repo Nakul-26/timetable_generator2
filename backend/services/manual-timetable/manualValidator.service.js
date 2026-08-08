@@ -1,6 +1,6 @@
 import ClassModel from "../../models/Class.js";
 import { clearSlot, placeCombo } from "./slot.service.js";
-import { resolveComboFromState } from "./comboResolver.service.js";
+import { resolveComboFromState } from "./assignmentResolver.service.js";
 import { getTeacherPreferenceWarnings } from "../../utils/timetableManualUtils.js";
 
 function getConstraintConfig(state = {}) {

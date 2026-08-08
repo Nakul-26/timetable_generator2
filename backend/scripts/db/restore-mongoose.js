@@ -18,12 +18,6 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-if (!fs.existsSync(BACKUP_PATH)) {
-  console.error(`❌ Backup directory not found: ${BACKUP_PATH}`);
-  console.error("Please ensure you have created a backup first using 'node backend/backup-mongoose.js'");
-  process.exit(1);
-}
-
 const collections = [
   'faculties',
   'admins',
@@ -33,6 +27,23 @@ const collections = [
   'teachersubjectcombinations',
   'timetableresults',
 ];
+
+if (process.env.NODE_ENV === 'production') {
+  console.error("❌ Refusing to run restore-mongoose.js with NODE_ENV=production. This drops and overwrites live collections.");
+  process.exit(1);
+}
+
+if (!process.argv.includes('--yes')) {
+  console.error(`❌ This script drops and replaces these collections in "${DB_NAME}" with the contents of a local backup: ${collections.join(', ')}`);
+  console.error("Re-run with --yes to confirm you intend to overwrite the target database.");
+  process.exit(1);
+}
+
+if (!fs.existsSync(BACKUP_PATH)) {
+  console.error(`❌ Backup directory not found: ${BACKUP_PATH}`);
+  console.error("Please ensure you have created a backup first using 'node backend/backup-mongoose.js'");
+  process.exit(1);
+}
 
 async function restoreData() {
   console.log("🚀 Starting database restore...");

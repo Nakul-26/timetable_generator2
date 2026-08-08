@@ -8,6 +8,17 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
+if (process.env.NODE_ENV === 'production') {
+  console.error("❌ Refusing to run clearFaculties.js with NODE_ENV=production. This drops the faculties collection for every college.");
+  process.exit(1);
+}
+
+if (!process.argv.includes('--yes')) {
+  console.error("❌ This script drops the ENTIRE 'faculties' collection, for every college, with no way to scope it to one tenant.");
+  console.error("Re-run with --yes to confirm you intend to do this.");
+  process.exit(1);
+}
+
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI, {

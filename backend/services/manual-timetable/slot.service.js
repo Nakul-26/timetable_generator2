@@ -10,7 +10,7 @@ import { getState } from "../../state/timetableState.js";
 import {
   resolveComboFromState,
   resolveCombosFromState,
-} from "./comboResolver.service.js";
+} from "./assignmentResolver.service.js";
 
 /* ------------------------------------------------ */
 /* ---------------- Slot Utilities ---------------- */

@@ -56,17 +56,13 @@ protectedRouter.post('/users/create', adminAuth, async (req, res) => {
 
 router.post('/login', loginLimiter, async (req, res) => {
     try {
-        console.log('Login request body:', req.body);
         const { email, password } = req.body;
         const admin = await Admin.findOne({ email });
-        console.log('Attempting login for email:', email);
-        console.log('Found admin:', admin);
         if (!admin) {
             console.error('Login failed: Admin not found for email', email);
             return res.status(400).json({ success: false, message: 'Invalid credentials' });
         }
         const isMatch = await admin.matchPassword(password);
-        console.log('Password match result:', isMatch);
         if (!isMatch) {
             console.error('Login failed: Incorrect password for email', email);
             return res.status(400).json({ success: false, message: 'Invalid credentials' });

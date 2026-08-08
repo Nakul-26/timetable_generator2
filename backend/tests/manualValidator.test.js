@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { validateAndSimulateMove } from "../services/manual-timetable/manualValidator.service.js";
 import * as slotService from "../services/manual-timetable/slot.service.js";
-import * as comboResolver from "../services/manual-timetable/comboResolver.service.js";
+import * as comboResolver from "../services/manual-timetable/assignmentResolver.service.js";
 import ClassModel from "../models/Class.js";
 
 vi.mock("../services/manual-timetable/slot.service.js");
-vi.mock("../services/manual-timetable/comboResolver.service.js");
+vi.mock("../services/manual-timetable/assignmentResolver.service.js");
 vi.mock("../models/Class.js");
 vi.mock("../utils/timetableManualUtils.js", () => ({
   getTeacherPreferenceWarnings: vi.fn(() => []),
@@ -59,7 +59,7 @@ describe("manualValidator - validateAndSimulateMove", () => {
         subjectId: combo.subject_id,
         facultyIds: combo.faculty_ids,
         classIds: combo.class_ids,
-        subjectType: combo.subject_type,
+        type: (combo.subject_type || "theory").toUpperCase(),
       };
     });
 

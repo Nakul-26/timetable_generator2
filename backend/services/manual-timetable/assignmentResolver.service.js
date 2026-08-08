@@ -212,3 +212,83 @@ export async function buildAssignmentLookup(collegeId, assignmentIds = []) {
   }
   return map;
 }
+
+// ---------------------------------------------------------------------------
+// Combo-shaped compatibility wrappers (Phase 2c bridge)
+//
+// Preserve the exact function names/signatures of the retired
+// comboResolver.service.js so manual-timetable call sites (slot.service.js,
+// manualValidator.service.js, routes/timetableManual.js) don't need to change,
+// while reading exclusively through TeachingAllocation via the assignment
+// resolvers above instead of TeacherSubjectCombination. The canonical combo
+// "type" vocabulary (THEORY/LAB/ELECTIVE) matches TeachingAssignment "mode"
+// 1:1 (see allocationTypeToMode in legacyAdapter.js).
+// ---------------------------------------------------------------------------
+
+function assignmentToCombo(assignment) {
+  if (!assignment) return null;
+  const facultyIds = Array.isArray(assignment.teacherIds) ? assignment.teacherIds : [];
+  const facultyNames = Array.isArray(assignment.teacherNames) ? assignment.teacherNames : [];
+  const type = assignment.mode || "THEORY";
+
+  return {
+    _id: assignment.id,
+    subjectId: assignment.subjectId,
+    facultyIds,
+    classIds: Array.isArray(assignment.classIds) ? assignment.classIds : [],
+    type,
+    subjectName: assignment.subjectName,
+    facultyNames,
+    combinedClassGroupId: assignment.classGroupId || null,
+    // Legacy display fields kept for callers still reading combo.subject/combo.faculty
+    subject: {
+      _id: assignment.subjectId,
+      name: assignment.subjectName,
+      type: assignment.subjectMode || type,
+    },
+    faculty: {
+      _id: facultyIds[0] || "",
+      name: facultyNames.join(", ") || (type === "NO_TEACHER" ? "No Teacher" : "Unknown Teacher"),
+    },
+  };
+}
+
+/**
+ * Resolve a combo-shaped view of an assignment by id from in-memory state,
+ * falling back to the DB. Replaces comboResolver.service.js's function of
+ * the same name.
+ *
+ * @param {object} state
+ * @param {string} comboId
+ * @returns {Promise<ReturnType<typeof assignmentToCombo>>}
+ */
+export async function resolveComboFromState(state, comboId) {
+  const assignment = await resolveAssignment(state, comboId, { withNames: true });
+  return assignmentToCombo(assignment);
+}
+
+/**
+ * Resolve multiple combo-shaped assignments. Order preserved; missing ids omitted.
+ *
+ * @param {object} state
+ * @param {string[]} comboIds
+ * @returns {Promise<ReturnType<typeof assignmentToCombo>[]>}
+ */
+export async function resolveCombosFromState(state, comboIds = []) {
+  const assignments = await resolveAssignments(state, comboIds, { withNames: true });
+  return assignments.map(assignmentToCombo).filter(Boolean);
+}
+
+/**
+ * Return all combo-shaped assignments that apply to a given class.
+ * Replaces getClassCombosForEdit() from comboResolver.service.js.
+ *
+ * @param {object} state
+ * @param {object} classObj - Class document with _id
+ * @returns {Promise<ReturnType<typeof assignmentToCombo>[]>}
+ */
+export async function getClassCombosForEdit(state, classObj) {
+  const classId = String(classObj?._id || "");
+  const assignments = await getClassAssignmentsForEdit(state?.collegeId, classId, state?.combos);
+  return assignments.map(assignmentToCombo).filter(Boolean);
+}

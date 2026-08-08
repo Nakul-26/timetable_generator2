@@ -2,10 +2,10 @@ import { Router } from 'express';
 import Faculty from '../../models/Faculty.js';
 import TeacherSubjectCombination from '../../models/TeacherSubjectCombination.js';
 import ClassModel from '../../models/Class.js';
-import TeachingAllocation from '../../models/TeachingAllocation.js';
 import auth from '../../middleware/auth.js';
 import { normalizeAvailabilitySlots } from '../../utils/teacherAvailability.js';
 import { normalizeTeacherPreferences } from '../../utils/teacherPreferences.js';
+import { unassignTeacherFromAllocations } from '../../services/domain/teachingAllocation.service.js';
 
 
 const protectedRouter = Router();
@@ -14,7 +14,6 @@ protectedRouter.use(auth);
 // --- Faculties CRUD ---
 //add faculties
 protectedRouter.post('/faculties', async (req, res) => {
-  console.log("[POST /faculties] Body:", req.body);
   try {
     const f = new Faculty();
     f.collegeId = req.collegeId;
@@ -23,30 +22,16 @@ protectedRouter.post('/faculties', async (req, res) => {
     f.unavailableSlots = normalizeAvailabilitySlots(req.body.unavailableSlots || []);
     f.preferences = normalizeTeacherPreferences(req.body.preferences || {});
     await f.save();
-    console.log("[POST /faculties] Saved faculty:", f);
     res.json(f);
   } catch (e) {
-    console.log(e);
     res.status(400).json({ error: 'Bad Request' });
   }
 });
 
 //get all faculties
 protectedRouter.get('/faculties', async (req, res) => {
-  console.log("[GET /faculties] Fetching all faculties, collegeId=", req.collegeId);
   try {
-    // Debug: log distinct collegeIds and a sample doc when unexpected results
-    try {
-      const distinct = await Faculty.distinct('collegeId');
-      console.log('[GET /faculties] distinct collegeIds sample:', distinct.slice(0,10));
-      const sample = await Faculty.findOne().lean();
-      console.log('[GET /faculties] sample doc collegeId:', sample ? sample.collegeId : null);
-    } catch (dbgErr) {
-      console.error('[GET /faculties] debug error:', dbgErr);
-    }
-
     const faculties = await Faculty.find({ collegeId: req.collegeId }).lean();
-    console.log('[GET /faculties] Found:', faculties.length, 'records');
     res.json(faculties);
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -55,7 +40,6 @@ protectedRouter.get('/faculties', async (req, res) => {
 
 // Update an existing faculty
 protectedRouter.put('/faculties/:id', async (req, res) => {
-  console.log("[PUT /faculties/:id] Params:", req.params, "Body:", req.body);
   try {
     const { id } = req.params;
     const { name, id: facultyId } = req.body;
@@ -73,10 +57,8 @@ protectedRouter.put('/faculties/:id', async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!updatedFaculty) {
-      console.warn("[PUT /faculties/:id] Faculty not found for _id:", id);
       return res.status(404).json({ error: 'Faculty not found.' });
     }
-    console.log("[PUT /faculties/:id] Updated faculty:", updatedFaculty);
     res.json(updatedFaculty);
   } catch (e) {
     res.status(400).json({ error: 'Bad Request' });
@@ -165,12 +147,10 @@ protectedRouter.post('/faculties/:id/availability', async (req, res) => {
 
 // Delete a faculty
 protectedRouter.delete('/faculties/:id', async (req, res) => {
-  console.log("[DELETE /faculties/:id] Params:", req.params);
   try {
     const { id } = req.params;
     const deletedFaculty = await Faculty.findOneAndDelete({ _id: id, collegeId: req.collegeId });
     if (!deletedFaculty) {
-      console.warn("[DELETE /faculties/:id] Faculty not found:", id);
       return res.status(404).json({ error: 'Faculty not found.' });
     }
 
@@ -181,26 +161,8 @@ protectedRouter.delete('/faculties/:id', async (req, res) => {
     await ClassModel.updateMany({ collegeId: req.collegeId }, { $pull: { faculties: id } });
 
     // Handle TeachingAllocations
-    // 1. For allocations where this teacher is the main teacher (NORMAL/LAB)
-    await TeachingAllocation.updateMany(
-      { collegeId: req.collegeId, teacher: id },
-      { $set: { teacher: null } }
-    );
+    await unassignTeacherFromAllocations(req.collegeId, id);
 
-    // 2. For allocations where this teacher is in the teachers array (LAB/ELECTIVE)
-    await TeachingAllocation.updateMany(
-      { collegeId: req.collegeId, teachers: id },
-      { $pull: { teachers: id } }
-    );
-
-    // 3. For elective allocations where this teacher is assigned to a specific subject
-    await TeachingAllocation.updateMany(
-      { collegeId: req.collegeId, "subjects.teacher": id },
-      { $set: { "subjects.$[elem].teacher": null } },
-      { arrayFilters: [{ "elem.teacher": id }] }
-    );
-
-    console.log("[DELETE /faculties/:id] Deleted faculty and associated data:", deletedFaculty);
     res.json({ message: 'Faculty deleted successfully.' });
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });

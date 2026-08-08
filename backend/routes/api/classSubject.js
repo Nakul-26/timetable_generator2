@@ -97,9 +97,13 @@ protectedRouter.put('/class-subjects/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { hoursPerWeek } = req.body;
+        const validatedHours = toPositiveNumber(hoursPerWeek);
+        if (!validatedHours) {
+            return res.status(400).json({ error: "hoursPerWeek must be a positive number." });
+        }
         const updatedAssignment = await ClassSubject.findOneAndUpdate(
             { _id: id, collegeId: req.collegeId },
-            { hoursPerWeek },
+            { hoursPerWeek: validatedHours },
             { new: true }
         );
         if (!updatedAssignment) {

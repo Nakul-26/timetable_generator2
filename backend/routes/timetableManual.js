@@ -23,7 +23,7 @@ import {
   resolveCombosFromState,
   getClassCombosForEdit,
   resolveComboFromState,
-} from "../services/manual-timetable/comboResolver.service.js";
+} from "../services/manual-timetable/assignmentResolver.service.js";
 
 import { runAutoFill } from "../services/manual-timetable/autofill.service.js";
 import { validateAndSimulateMove } from "../services/manual-timetable/manualValidator.service.js";

@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../api/axios";
 import axios from "../api/axios";
 import { DEFAULT_CONSTRAINT_CONFIG, loadConstraintConfig, normalizeConstraintConfig } from "./constraintConfig";
-import { getComboSubjectDisplayName } from "./subjectDisplay";
 
 import HealthReport from "../components/timetable/HealthReport";
 import GenerationProgress from "../components/timetable/GenerationProgress";
@@ -203,24 +202,17 @@ function Timetable() {
     for (const classId of allClassIds) {
       const classOptions = [];
       for (const combo of fixedSlotCombos) {
-        const classIds = Array.isArray(combo.class_ids)
-          ? combo.class_ids.map((id) => String(id))
-          : [];
+        const classIds = Array.isArray(combo.classIds) ? combo.classIds.map(String) : [];
         const appliesToClass = classIds.length === 0 || classIds.includes(classId);
         if (!appliesToClass) continue;
 
-        const subjectName = getComboSubjectDisplayName(combo, subjectById, "N/A");
-        const comboSubjectType = String(
-          combo?.subject?.type || subjectById.get(String(combo.subject_id))?.type || ""
-        ).toLowerCase();
-        const facultyNames = (Array.isArray(combo.faculty_ids) ? combo.faculty_ids : [])
-          .map((fid) => facultyById.get(String(fid))?.name || "N/A")
-          .join(" & ");
+        const subjectName = combo.subjectName || "N/A";
+        const facultyNames = (combo.teacherNames || []).join(" & ");
         const facultyLabel =
-          facultyNames || (comboSubjectType === "no_teacher" ? "No Teacher" : "N/A");
+          facultyNames || (String(combo.mode || "").toLowerCase() === "no_teacher" ? "No Teacher" : "N/A");
 
         classOptions.push({
-          id: String(combo._id),
+          id: String(combo.id),
           label: `${facultyLabel} : ${subjectName}`,
         });
       }
@@ -228,7 +220,7 @@ function Timetable() {
     }
 
     return out;
-  }, [classes, fixedSlotCombos, subjectById, facultyById]);
+  }, [classes, fixedSlotCombos]);
 
   const normalizeTableShape = useCallback((table) => {
     if (!table || typeof table !== "object") return null;

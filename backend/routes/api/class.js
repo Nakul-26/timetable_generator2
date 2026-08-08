@@ -6,6 +6,7 @@ import TeacherSubjectCombination from '../../models/TeacherSubjectCombination.js
 import TeachingAllocation from '../../models/TeachingAllocation.js';
 import auth from '../../middleware/auth.js';
 import { validateOwnership, validateOwnershipMany } from '../../utils/validateTenantRefs.js';
+import { unassignTeacherFromAllocations } from '../../services/domain/teachingAllocation.service.js';
 
 
 const protectedRouter = Router();
@@ -14,7 +15,6 @@ protectedRouter.use(auth);
 // --- Classes CRUD ---
 //add classes
 protectedRouter.post('/classes', async (req, res) => {
-  console.log("[POST /classes] Body:", req.body);
   try {
     const comboIds = Array.isArray(req.body.assigned_teacher_subject_combos)
       ? req.body.assigned_teacher_subject_combos
@@ -42,7 +42,6 @@ protectedRouter.post('/classes', async (req, res) => {
       total_class_hours: req.body.total_class_hours || 0
     });
     await c.save();
-    console.log("[POST /classes] Saved class:", c);
     res.json(c);
   } catch (e) {
     res.status(e.status || 400).json({ error: e.message || 'Bad Request' });
@@ -51,10 +50,8 @@ protectedRouter.post('/classes', async (req, res) => {
 
 //get all classes
 protectedRouter.get('/classes', async (req, res) => {
-  console.log("[GET /classes] Fetching all classes");
   try {
     const classes = await ClassModel.find({ collegeId: req.collegeId }).populate('faculties').lean();
-    console.log("[GET /classes] Found:", classes.length, "records");
     res.json(classes);
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });
@@ -151,24 +148,7 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
         }
 
         // Handle TeachingAllocations
-        // 1. NORMAL/LAB where teacher matches
-        await TeachingAllocation.updateMany(
-            { collegeId: req.collegeId, classIds: classId, teacher: facultyId },
-            { $set: { teacher: null } }
-        );
-
-        // 2. teachers array (LAB/ELECTIVE)
-        await TeachingAllocation.updateMany(
-            { collegeId: req.collegeId, classIds: classId, teachers: facultyId },
-            { $pull: { teachers: facultyId } }
-        );
-
-        // 3. elective subjects array
-        await TeachingAllocation.updateMany(
-            { collegeId: req.collegeId, classIds: classId, "subjects.teacher": facultyId },
-            { $set: { "subjects.$[elem].teacher": null } },
-            { arrayFilters: [{ "elem.teacher": facultyId }] }
-        );
+        await unassignTeacherFromAllocations(req.collegeId, facultyId, { classId });
 
         res.json(updatedClass);
     } catch (e) {

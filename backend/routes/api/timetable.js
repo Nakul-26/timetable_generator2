@@ -19,13 +19,11 @@ import { mergeTeacherAvailabilityConstraintConfig } from '../../utils/teacherAva
 import { mergeTeacherPreferenceConstraintConfig } from '../../utils/teacherPreferences.js';
 import { exportTimetableExcel } from "../../services/export/timetableExport.service.js";
 import { buildSubjectMap, collectSubjectIdsFromEncodedSubjectId, getComboSubjectDisplayName } from "../../utils/subjectDisplay.js";
+import { normalizeCombo } from "../../utils/comboNormalizer.js";
+import { loadElectiveSettingsForClass, loadElectiveSettings } from "../../services/legacy/legacyAdapter.js";
 import { startEC2, waitForEC2, waitForSolver } from '../../utils/ec2.js';
 
 const SOLVER_BASE_URL = String(process.env.SOLVER_URL || 'http://127.0.0.1:8001').replace(/\/+$/, '');
-console.log("Using SOLVER_BASE_URL:", SOLVER_BASE_URL);
-if (!SOLVER_BASE_URL) {
-  throw new Error("SOLVER_URL is not defined");
-}
 
 const serializeJobStatus = (job) => {
   if (!job) return null;
@@ -162,13 +160,34 @@ protectedRouter.get('/fixed-slot-combos', async (req, res) => {
       await prepareGeneratorData(req.collegeId, inputMode)
     );
 
-    res.json({
-      inputMode,
-      classes: generatorData.classes || [],
-      subjects: generatorData.subjects || [],
-      faculties: generatorData.faculties || [],
-      combos: generatorData.combos || [],
-    });
+    // The generator adapter produces snake_case GeneratorCombo objects for the
+    // solver only — translate to a camelCase AssignmentDTO shape at this route
+    // boundary rather than leaking the internal generator format to the client.
+    const [subjectDocs, facultyDocs] = await Promise.all([
+      Subject.find({ collegeId: req.collegeId }).select("name type").lean(),
+      Faculty.find({ collegeId: req.collegeId }).select("name").lean(),
+    ]);
+    const subjectMap = new Map(subjectDocs.map((s) => [String(s._id), s]));
+    const facultyMap = new Map(facultyDocs.map((f) => [String(f._id), f.name]));
+
+    const combos = (generatorData.combos || [])
+      .map((rawCombo) => {
+        const canonical = normalizeCombo(rawCombo);
+        if (!canonical) return null;
+        const subjectDoc = subjectMap.get(canonical.subjectId);
+        return {
+          id: canonical._id,
+          subjectId: canonical.subjectId,
+          subjectName: canonical.subjectName || subjectDoc?.name || null,
+          teacherIds: canonical.facultyIds,
+          teacherNames: canonical.facultyIds.map((id) => facultyMap.get(id) || null).filter(Boolean),
+          classIds: canonical.classIds,
+          mode: canonical.type,
+        };
+      })
+      .filter(Boolean);
+
+    res.json({ inputMode, combos });
   } catch (e) {
     console.error("[GET /fixed-slot-combos] Error:", e);
     res.status(500).json({ error: "Internal Server Error" });
@@ -329,14 +348,6 @@ protectedRouter.post('/generate', async (req, res) => {
       const daysPerWeek = Number(constraintConfig?.schedule?.daysPerWeek) || 6;
       const hoursPerDay = Number(constraintConfig?.schedule?.hoursPerDay) || 8;
 
-      console.log("[POST /generate] Generation request:", {
-        fixedSlots: !!fixedSlots,
-        constraintConfig: !!constraintConfig,
-        solutionCount,
-        inputMode,
-        userSettingsLoaded: !!userSettings,
-      });
-
       const generatorData = await prepareGeneratorData(req.collegeId, inputMode);
       
       const filteredGeneratorData = filterGeneratorDataForSolver(generatorData);
@@ -369,11 +380,6 @@ protectedRouter.post('/generate', async (req, res) => {
         filteredGeneratorData.faculties || []
       );
 
-      console.log("[POST /generate] Merged constraint config:", mergedConstraintConfig,
-
-        "22222222222222222222222222222222222222222222222222222222222222"
-      );
-
       if (filteredGeneratorData.skippedClasses.length > 0) {
         console.warn(
           "[POST /generate] Skipping classes without assigned teacher-subject combos:",
@@ -384,14 +390,10 @@ protectedRouter.post('/generate', async (req, res) => {
         );
       }
 
-      console.log("33333333333333333333333333333333333333333333333333333333333333333");
-
       const normalizedSolutionCount = Math.max(
         1,
         Math.min(5, Number(solutionCount) || Number(constraintConfig?.solver?.solutionCount) || 5)
       );
-
-      console.log("44444444444444444444444444444444444444444444444444444444444444");
 
       const job = await GenerationJob.create({
         collegeId: req.collegeId,
@@ -424,15 +426,12 @@ protectedRouter.post('/generate', async (req, res) => {
         },
       });
 
-      console.log("555555555555555555555555555555555555555555555555555555555555555555555");
       // IMPORTANT (Vercel/serverless): avoid keeping the event loop alive with long-running
       // fire-and-forget requests. Default to "pull" mode on Vercel: solver polls MongoDB
       // for pending jobs and starts them itself.
       const solverStartMode = String(
         process.env.SOLVER_JOB_START_MODE || (process.env.VERCEL ? "pull" : "push")
       ).toLowerCase();
-
-      console.log("666666666666666666666666666666666666666666666666666666666666");
 
       if (solverStartMode === "push") {
         // If an EC2 instance id is provided and we're in production, ensure the instance is running before calling the solver
@@ -453,23 +452,10 @@ protectedRouter.post('/generate', async (req, res) => {
           }
         }
 
-        console.log("77777777777777777777777777777777777777777777777777777777777777");
-
         const requestBody = {
           jobId: String(job._id),
           payload: job.payload,
         };
-
-        console.log("**************************************************************************************[POST /generate] Sending job to solver with payload:", {
-          jobId: requestBody.jobId,
-          payloadSummary: {
-            collegeId: requestBody.payload.collegeId,
-            inputMode: requestBody.payload.inputMode,
-            solutionCount: requestBody.payload.solutionCount,
-          },
-          constraintConfig: requestBody.payload.constraintConfig,
-          completePayload: requestBody.payload, // This can be very large; be cautious when logging in production
-        });
 
         // Best-effort push with a short timeout; do not block the response.
         try {
@@ -584,10 +570,10 @@ protectedRouter.post('/audit', async (req, res) => {
 protectedRouter.get('/elective-settings/:classId', async (req, res) => {
     try {
         const { classId } = req.params;
-        const settings = await ElectiveSubjectSetting.find({ class: classId, collegeId: req.collegeId }).lean();
-        
+        const settings = await loadElectiveSettingsForClass(req.collegeId, classId);
+
         const settingsMap = settings.map(setting => ({
-            subjectId: setting.subject.toString(),
+            subjectId: setting.subjectId,
             teacherCategoryRequirements: setting.teacherCategoryRequirements || {}
         }));
 
@@ -600,20 +586,14 @@ protectedRouter.get('/elective-settings/:classId', async (req, res) => {
 
     protectedRouter.get('/elective-groups', async (req, res) => {
       try {
-        const settings = await ElectiveSubjectSetting.find({ collegeId: req.collegeId }).lean();
+        const settings = await loadElectiveSettings(req.collegeId);
 
         const groups = [];
         const seen = new Set();
 
         for (const setting of settings || []) {
-          const classId = String(setting?.class || "");
-
-          const requirementsRaw = setting?.teacherCategoryRequirements;
-          const requirements = requirementsRaw instanceof Map
-            ? Object.fromEntries(requirementsRaw.entries())
-            : (requirementsRaw || {});
-
-          const subjects = Object.keys(requirements || {}).map(String).filter(Boolean);
+          const classId = setting.classId;
+          const subjects = Object.keys(setting.teacherCategoryRequirements || {}).map(String).filter(Boolean);
           if (!classId || subjects.length === 0) continue;
 
           subjects.sort();
@@ -993,21 +973,6 @@ protectedRouter.post("/result/regenerate", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-protectedRouter.delete("/timetables", async (req, res) => {
-  try {
-    // Delete all timetables
-    const result = await TimetableResult.deleteMany({ collegeId: req.collegeId });
-
-    res.status(200).json({
-      ok: true,
-      deletedCount: result.deletedCount, // tells how many docs were removed
-      message: "All timetables deleted successfully"
-    });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: "Internal Server Error" });
   }
 });
 

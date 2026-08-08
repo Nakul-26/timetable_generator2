@@ -15,6 +15,7 @@
 import TeacherSubjectCombination from "../../models/TeacherSubjectCombination.js";
 import ClassSubject from "../../models/ClassSubject.js";
 import TeachingAllocation from "../../models/TeachingAllocation.js";
+import ElectiveSubjectSetting from "../../models/ElectiveSubjectSetting.js";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -185,4 +186,64 @@ export async function loadAssignment(collegeId, assignmentId) {
   }).lean();
 
   return doc ? fromTeachingAllocation(doc) : null;
+}
+
+// ---------------------------------------------------------------------------
+// ElectiveSubjectSetting mapper
+//
+// An ElectiveSubjectSetting captures a *requirement* — which teacher
+// categories are needed for a subject within a class's elective group — not
+// a resolved TeachingAssignment (it pins no specific teacher). Callers that
+// need the raw requirement shape should use fromElectiveSetting() below
+// rather than importing ElectiveSubjectSetting directly.
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a raw ElectiveSubjectSetting document into a domain-shaped record.
+ *
+ * @param {object} doc - lean() ElectiveSubjectSetting document
+ * @returns {{ classId: string, subjectId: string, teacherCategoryRequirements: object } | null}
+ */
+export function fromElectiveSetting(doc) {
+  if (!doc) return null;
+
+  const classId = toStr(doc.class?._id || doc.class);
+  const subjectId = toStr(doc.subject?._id || doc.subject);
+  if (!classId || !subjectId) return null;
+
+  let requirements = doc.teacherCategoryRequirements || {};
+  if (requirements instanceof Map) {
+    requirements = Object.fromEntries(requirements.entries());
+  } else if (typeof requirements.toObject === "function") {
+    requirements = requirements.toObject();
+  }
+
+  return { classId, subjectId, teacherCategoryRequirements: requirements };
+}
+
+/**
+ * Load elective settings for a single class.
+ *
+ * @param {string} collegeId
+ * @param {string} classId
+ * @returns {Promise<ReturnType<typeof fromElectiveSetting>[]>}
+ */
+export async function loadElectiveSettingsForClass(collegeId, classId) {
+  if (!collegeId || !classId) return [];
+
+  const docs = await ElectiveSubjectSetting.find({ class: classId, collegeId }).lean();
+  return docs.map(fromElectiveSetting).filter(Boolean);
+}
+
+/**
+ * Load all elective settings for a college.
+ *
+ * @param {string} collegeId
+ * @returns {Promise<ReturnType<typeof fromElectiveSetting>[]>}
+ */
+export async function loadElectiveSettings(collegeId) {
+  if (!collegeId) return [];
+
+  const docs = await ElectiveSubjectSetting.find({ collegeId }).lean();
+  return docs.map(fromElectiveSetting).filter(Boolean);
 }

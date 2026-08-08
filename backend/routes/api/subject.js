@@ -30,7 +30,6 @@ protectedRouter.use(auth);
 // --- Subjects CRUD ---
 // Add a subject
 protectedRouter.post('/subjects', async (req, res) => {
-  console.log("[POST /subjects] Body:", req.body);
   try {
     const { id, name, sem, isElective } = req.body;
     const classesPerWeek = parseOptionalPositiveNumber(req.body.classesPerWeek, 'classesPerWeek');
@@ -45,7 +44,6 @@ protectedRouter.post('/subjects', async (req, res) => {
     });
 
     await s.save();
-    console.log("[POST /subjects] Saved subject:", s);
     res.json(s);
   } catch (e) {
     res.status(400).json({ error: e.message || 'Bad Request' });
@@ -54,10 +52,8 @@ protectedRouter.post('/subjects', async (req, res) => {
 
 // Get all subjects
 protectedRouter.get('/subjects', async (req, res) => {
-  console.log("[GET /subjects] Fetching all subjects");
   try {
     const subjects = await Subject.find({ collegeId: req.collegeId }).lean();
-    console.log("[GET /subjects] Found:", subjects.length, "records");
     res.json(subjects);
   } catch (e) {
     res.status(500).json({ error: 'Internal Server Error' });

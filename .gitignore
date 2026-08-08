@@ -41,3 +41,9 @@ Thumbs.db
 issues
 
 issue-*.log
+
+# Solver debug payload dumps (may contain real college/faculty/subject data)
+backend/solver/generation_payload.json
+backend/solver/last_job_payload_summary.json
+backend/solver/last_job_payload_summary_error.txt
+backend/solver/received_payload.json
