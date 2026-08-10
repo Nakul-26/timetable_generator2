@@ -10,11 +10,7 @@ import TimetableSettings from './pages/TimetableSettings';
 import AddTeacher from './pages/teacher/AddTeacher';
 import AddSubject from './pages/subject/AddSubject';
 import AddClass from './pages/Class/AddClass';
-import ManageClassSubject from './pages/assignments/ManageClassSubject';
-import ManageClassFaculty from './pages/assignments/ManageClassFaculty';
-import ManageTeacherSubject from './pages/assignments/ManageTeacherSubject';
-import ManageElectiveSubjects from './pages/assignments/ManageElectiveSubjects';
-import ManageTeachingAllocations from './pages/assignments/ManageTeachingAllocations';
+import ClassWorkspace from './pages/assignments/ClassWorkspace';
 import ManualTimetable from './pages/manual/ManualTimetable.jsx';
 import SavedTimetables from './pages/SavedTimetables.jsx';
 import Generations from './pages/Generations.jsx';
@@ -116,10 +112,8 @@ function App() {
           <Route path="/faculties" element={<PrivateRoute><FacultyManager /></PrivateRoute>} />
           <Route path="/subjects" element={<PrivateRoute><SubjectManager /></PrivateRoute>} />
           <Route path="/classes" element={<PrivateRoute><ClassManager /></PrivateRoute>} />
-          <Route path="/class-subjects" element={<PrivateRoute><ManageClassSubject /></PrivateRoute>} />
-          <Route path="/class-faculties" element={<PrivateRoute><ManageClassFaculty /></PrivateRoute>} />
-          <Route path="/teaching-allocations" element={<PrivateRoute><ManageTeachingAllocations /></PrivateRoute>} />
-          <Route path="/class-elective-subjects" element={<PrivateRoute><ManageElectiveSubjects /></PrivateRoute>} />
+          <Route path="/class-workspace" element={<PrivateRoute><ClassWorkspace /></PrivateRoute>} />
+          <Route path="/class-workspace/:classId" element={<PrivateRoute><ClassWorkspace /></PrivateRoute>} />
           <Route path="/timetable" element={<PrivateRoute><Timetable /></PrivateRoute>} />
           <Route path="/timetable/settings" element={<PrivateRoute><TimetableSettings /></PrivateRoute>} />
           <Route path="/timetable/:id" element={<PrivateRoute><ViewTimetable /></PrivateRoute>} />
@@ -128,7 +122,6 @@ function App() {
           <Route path="/teacher-preferences" element={<PrivateRoute><TeacherPreferences /></PrivateRoute>} />
           <Route path="/subject/add" element={<PrivateRoute><AddSubject /></PrivateRoute>} />
           <Route path="/class/add" element={<PrivateRoute><AddClass /></PrivateRoute>} />
-          <Route path="/teacher-subject-combos" element={<PrivateRoute><ManageTeacherSubject /></PrivateRoute>} />
           <Route path="/manual-timetable" element={<PrivateRoute><ManualTimetable /></PrivateRoute>} />
           <Route path="/saved-timetables" element={<PrivateRoute><SavedTimetables /></PrivateRoute>} />
           <Route path="/generations" element={<PrivateRoute><Generations /></PrivateRoute>} />

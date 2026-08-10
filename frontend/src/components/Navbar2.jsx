@@ -76,11 +76,7 @@ const Navbar = () => {
             <NavLink to="/subjects" className="nav-item" onClick={() => setIsMenuOpen(false)}>Subjects</NavLink>
             <NavLink to="/classes" className="nav-item" onClick={() => setIsMenuOpen(false)}>Classes</NavLink>
             
-            <NavLink to="/teaching-allocations" className="nav-item" onClick={() => setIsMenuOpen(false)}>Allocations</NavLink>
-            <NavLink to="/class-subjects" className="nav-item" onClick={() => setIsMenuOpen(false)}>Class-Subjects</NavLink>
-            <NavLink to="/teacher-subject-combos" className="nav-item" onClick={() => setIsMenuOpen(false)}>Teacher-Subjects</NavLink>
-            <NavLink to="/class-faculties" className="nav-item" onClick={() => setIsMenuOpen(false)}>Class-Faculties</NavLink>
-            <NavLink to="/class-elective-subjects" className="nav-item" onClick={() => setIsMenuOpen(false)}>Electives</NavLink>
+            <NavLink to="/class-workspace" className="nav-item" onClick={() => setIsMenuOpen(false)}>Assignments</NavLink>
             
             <NavLink to="/teacher-availability" className="nav-item" onClick={() => setIsMenuOpen(false)}>Availability</NavLink>
             <NavLink to="/teacher-preferences" className="nav-item" onClick={() => setIsMenuOpen(false)}>Preferences</NavLink>

@@ -497,6 +497,13 @@ function ManageClass() {
                     ) : (
                       <div className="actions-buttons">
                         <button
+                          onClick={() => navigate(`/class-workspace/${classItem._id}`)}
+                          className="secondary-btn"
+                          disabled={Boolean(mutationMessage)}
+                        >
+                          🧩 Assignments
+                        </button>
+                        <button
                           onClick={() => handleEdit(classItem)}
                           className="primary-btn"
                           disabled={Boolean(mutationMessage)}

@@ -787,63 +787,6 @@ protectedRouter.post("/teaching-allocations/calculate", async (req, res) => {
   }
 });
 
-protectedRouter.post("/teaching-allocations/sync-to-mappings", async (req, res) => {
-  try {
-    const allocations = await TeachingAllocation.find({ collegeId: req.collegeId }).lean();
-    
-    let totalMappingsCreated = 0;
-    let totalFacultiesLinked = 0;
-
-    for (const alloc of allocations) {
-      const classIds = Array.isArray(alloc.classIds) ? alloc.classIds : [];
-      const pairs = extractAllocationPairs(alloc);
-      const hoursPerWeek = Number(alloc.hoursPerWeek || 1) || 1;
-
-      for (const pair of pairs) {
-        if (!pair.subject) continue;
-        
-        // 1. Sync Teacher-Subject Combination
-        if (pair.teacher) {
-          const combo = await TeacherSubjectCombination.findOneAndUpdate(
-            { faculty: pair.teacher, subject: pair.subject, collegeId: req.collegeId },
-            { $setOnInsert: { faculty: pair.teacher, subject: pair.subject, collegeId: req.collegeId } },
-            { upsert: true, new: true }
-          );
-          if (combo) totalMappingsCreated++;
-        }
-
-        // 2. Sync Class-Subject Mappings
-        for (const classId of classIds) {
-          await ClassSubject.findOneAndUpdate(
-            { class: classId, subject: pair.subject, collegeId: req.collegeId },
-            { $set: { hoursPerWeek, collegeId: req.collegeId } },
-            { upsert: true }
-          );
-          
-          // 3. Link Faculty to Class
-          if (pair.teacher) {
-            const updatedClass = await ClassModel.findOneAndUpdate(
-              { _id: classId, collegeId: req.collegeId },
-              { $addToSet: { faculties: pair.teacher } }
-            );
-            if (updatedClass) totalFacultiesLinked++;
-          }
-        }
-      }
-    }
-
-    res.json({
-      ok: true,
-      message: "Successfully synchronized allocations back to mappings.",
-      totalMappingsCreated,
-      totalFacultiesLinked
-    });
-  } catch (e) {
-    console.error("[POST /teaching-allocations/sync-to-mappings] Error:", e);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
 protectedRouter.get("/teaching-allocations/:id/history", async (req, res) => {
   try {
     const allocationId = toId(req.params.id);

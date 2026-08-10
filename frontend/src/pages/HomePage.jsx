@@ -17,13 +17,9 @@ const HomePage = () => {
     },
     {
       title: "Step 2: Assign & Map",
-      description: "Link teachers and subjects to classes.",
+      description: "Pick a class, then configure everything it has in one place.",
       cards: [
-        { title: "Allocations", description: "Directly assign teaching hours", path: "/teaching-allocations", icon: "📝" },
-        { title: "Class Subjects", description: "Map subjects to classes", path: "/class-subjects", icon: "🔗" },
-        { title: "Teacher Subjects", description: "Define who can teach what", path: "/teacher-subject-combos", icon: "🤝" },
-        { title: "Class Faculties", description: "Assign teachers to classes", path: "/class-faculties", icon: "👤" },
-        { title: "Electives", description: "Manage elective subject groups", path: "/class-elective-subjects", icon: "🔀" },
+        { title: "Class Workspace", description: "Subjects, teachers, combos, electives & class teacher", path: "/class-workspace", icon: "🧩" },
       ]
     },
     {
@@ -89,7 +85,7 @@ const HomePage = () => {
             <strong>Health Check:</strong> Always run the "Pre-Generation Audit" on the Generator page to catch data errors.
           </div>
           <div className="tip-item">
-            <strong>Bulk Mappings:</strong> Use Method B (Mappings) for large colleges to save time.
+            <strong>Class Workspace:</strong> Select a class to add subjects, teachers, combos, electives and its class teacher in one place.
           </div>
           <div className="tip-item">
             <strong>Manual Adjust:</strong> If the generator is 95% there, use the Manual Editor to fix the last few slots.
