@@ -1,19 +1,16 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import DataContext from "../../context/DataContext";
-import * as XLSX from "xlsx";
+import useBulkSelection from "../../hooks/useBulkSelection";
+import useExcelImport from "../../hooks/useExcelImport";
+import { downloadTemplate, exportRows, getCellValue } from "../../utils/excelIO";
 
 function ManageClass() {
   const { classes, assignments, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
-  const [excelMessage, setExcelMessage] = useState("");
-  const [excelError, setExcelError] = useState("");
-  const [uploadingExcel, setUploadingExcel] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
-  const [selectedClassIds, setSelectedClassIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const fileInputRef = useRef(null);
 
   // State variables for editing a class
   const [editName, setEditName] = useState("");
@@ -31,21 +28,6 @@ function ManageClass() {
 
   const navigate = useNavigate();
 
-  const clearExcelStatus = () => {
-    setExcelMessage("");
-    setExcelError("");
-  };
-
-  const getCellValue = (row, keys) => {
-    for (const key of keys) {
-      const raw = row[key];
-      if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
-        return String(raw).trim();
-      }
-    }
-    return "";
-  };
-
   const parseDaysPerWeek = (value) => {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return 5;
@@ -54,20 +36,18 @@ function ManageClass() {
   };
 
   const handleDownloadTemplate = () => {
-    clearExcelStatus();
-    const rows = [
+    excelImport.clearExcelStatus();
+    downloadTemplate(
       ["id", "name", "sem", "section", "days_per_week"],
-      ["", "", "", "", "5"]
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Classes");
-    XLSX.writeFile(workbook, "classes_template.xlsx");
-    setExcelMessage("Template downloaded.");
+      ["", "", "", "", "5"],
+      "Classes",
+      "classes_template.xlsx"
+    );
+    excelImport.setExcelMessage("Template downloaded.");
   };
 
   const handleExportClasses = () => {
-    clearExcelStatus();
+    excelImport.clearExcelStatus();
     const rows = classes.map((classItem) => {
       const assignedSubjects = assignments
         .filter((a) => a.class?._id === classItem._id)
@@ -90,95 +70,36 @@ function ManageClass() {
       };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Classes");
-    XLSX.writeFile(workbook, "classes_export.xlsx");
-    setExcelMessage("Classes exported.");
+    exportRows(rows, "Classes", "classes_export.xlsx");
+    excelImport.setExcelMessage("Classes exported.");
   };
 
-  const triggerExcelUpload = () => {
-    clearExcelStatus();
-    fileInputRef.current?.click();
-  };
+  const existingByClassId = new Map(
+    classes.filter((c) => c?.id).map((c) => [String(c.id).toLowerCase(), c])
+  );
 
-  const handleExcelUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    clearExcelStatus();
-    setUploadingExcel(true);
-
-    try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.SheetNames?.[0];
-      if (!firstSheet) {
-        throw new Error("No sheet found in the uploaded file.");
+  const excelImport = useExcelImport({
+    entityLabel: "class",
+    requiredColumnsHint: "id, name, sem, section",
+    normalizeRow: (row) => ({
+      id: getCellValue(row, ["id", "ID", "classId", "Class ID"]),
+      name: getCellValue(row, ["name", "Name", "className", "Class Name"]),
+      sem: getCellValue(row, ["sem", "Sem", "semester", "Semester", "class", "Class"]),
+      section: getCellValue(row, ["section", "Section"]),
+      days_per_week: parseDaysPerWeek(getCellValue(row, ["days_per_week", "daysPerWeek", "Days Per Week"]))
+    }),
+    isValidRow: (row) => Boolean(row.id && row.name && row.sem && row.section),
+    upsertRow: async (row) => {
+      const existing = existingByClassId.get(row.id.toLowerCase());
+      if (existing) {
+        await api.put(`/classes/${existing._id}`, row);
+        return true;
       }
-
-      const sheet = workbook.Sheets[firstSheet];
-      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-      if (!Array.isArray(rawRows) || rawRows.length === 0) {
-        throw new Error("The uploaded sheet is empty.");
-      }
-
-      const normalizedRows = rawRows.map((row) => ({
-        id: getCellValue(row, ["id", "ID", "classId", "Class ID"]),
-        name: getCellValue(row, ["name", "Name", "className", "Class Name"]),
-        sem: getCellValue(row, ["sem", "Sem", "semester", "Semester", "class", "Class"]),
-        section: getCellValue(row, ["section", "Section"]),
-        days_per_week: parseDaysPerWeek(getCellValue(row, ["days_per_week", "daysPerWeek", "Days Per Week"]))
-      }));
-
-      const validRows = normalizedRows.filter((row) => row.id && row.name && row.sem && row.section);
-      if (validRows.length === 0) {
-        throw new Error("No valid rows found. Required columns: id, name, sem, section.");
-      }
-
-      const duplicateIds = new Set();
-      const seenIds = new Set();
-      validRows.forEach((row) => {
-        const key = row.id.toLowerCase();
-        if (seenIds.has(key)) duplicateIds.add(row.id);
-        seenIds.add(key);
-      });
-      if (duplicateIds.size > 0) {
-        throw new Error(`Duplicate class IDs in file: ${Array.from(duplicateIds).join(", ")}`);
-      }
-
-      const existingById = new Map(
-        classes
-          .filter((c) => c?.id)
-          .map((c) => [String(c.id).toLowerCase(), c])
-      );
-
-      let createdCount = 0;
-      let updatedCount = 0;
-      for (const row of validRows) {
-        const existing = existingById.get(row.id.toLowerCase());
-        if (existing) {
-          await api.put(`/classes/${existing._id}`, row);
-          updatedCount += 1;
-        } else {
-          await api.post("/classes", row);
-          createdCount += 1;
-        }
-      }
-
-      refetchData(["classes"]);
-      setExcelMessage(`Upload complete. Created: ${createdCount}, Updated: ${updatedCount}.`);
-    } catch (err) {
-      const message =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Failed to upload classes from Excel.";
-      setExcelError(message);
-    } finally {
-      setUploadingExcel(false);
-      if (event.target) event.target.value = "";
-    }
-  };
+      await api.post("/classes", row);
+      return false;
+    },
+    onDone: () => refetchData(["classes"])
+  });
 
   const handleAddClass = () => {
     navigate("/class/add");
@@ -189,7 +110,7 @@ function ManageClass() {
     setMutationMessage("Deleting class. Please wait...");
     try {
       await api.delete(`/classes/${id}`);
-      setSelectedClassIds((prev) => prev.filter((itemId) => itemId !== id));
+      selection.remove(id);
       refetchData(['classes']);
     } catch (err) {
       console.log(`Error: ${err.message}`);
@@ -199,13 +120,13 @@ function ManageClass() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedClassIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedClassIds.length} selected class(es)?`)) return;
+    if (selection.selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selection.selectedIds.length} selected class(es)?`)) return;
     setBulkDeleting(true);
     setMutationMessage("Deleting selected classes. Please wait...");
     try {
-      await Promise.allSettled(selectedClassIds.map((id) => api.delete(`/classes/${id}`)));
-      setSelectedClassIds([]);
+      await Promise.allSettled(selection.selectedIds.map((id) => api.delete(`/classes/${id}`)));
+      selection.clear();
       refetchData(['classes']);
     } catch (err) {
       console.log(`Error: ${err.message}`);
@@ -255,10 +176,7 @@ function ManageClass() {
     );
   });
   const filteredClassIds = filteredClasses.map((classItem) => classItem._id);
-  const allVisibleClassesSelected =
-    filteredClassIds.length > 0 && filteredClassIds.every((id) => selectedClassIds.includes(id));
-  const someVisibleClassesSelected =
-    filteredClassIds.some((id) => selectedClassIds.includes(id));
+  const selection = useBulkSelection(filteredClassIds);
 
   const resetFilters = () => {
     setFilterClassId("");
@@ -273,8 +191,8 @@ function ManageClass() {
       <div className="actions-bar">
         <button onClick={handleAddClass}>Add new class</button>
         <button onClick={handleDownloadTemplate} className="secondary-btn">Download Excel Template</button>
-        <button onClick={triggerExcelUpload} className="secondary-btn" disabled={uploadingExcel}>
-          {uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
+        <button onClick={excelImport.triggerExcelUpload} className="secondary-btn" disabled={excelImport.uploadingExcel}>
+          {excelImport.uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
         </button>
         <button onClick={handleExportClasses} className="secondary-btn">Export Classes Excel</button>
         <button onClick={() => setShowFilters(!showFilters)}>
@@ -282,17 +200,17 @@ function ManageClass() {
         </button>
       </div>
       <input
-        ref={fileInputRef}
+        ref={excelImport.fileInputRef}
         type="file"
         accept=".xlsx,.xls"
         style={{ display: "none" }}
-        onChange={handleExcelUpload}
+        onChange={excelImport.handleExcelUpload}
       />
 
-      {uploadingExcel ? <div className="success-message">Uploading classes from Excel. Please wait...</div> : null}
+      {excelImport.uploadingExcel ? <div className="success-message">Uploading classes from Excel. Please wait...</div> : null}
       {mutationMessage ? <div className="loading-message">{mutationMessage}</div> : null}
-      {excelMessage ? <div className="success-message">{excelMessage}</div> : null}
-      {excelError ? <div className="error-message">{excelError}</div> : null}
+      {excelImport.excelMessage ? <div className="success-message">{excelImport.excelMessage}</div> : null}
+      {excelImport.excelError ? <div className="error-message">{excelImport.excelError}</div> : null}
 
       {/* 🔽 Filters */}
       {showFilters && (
@@ -327,25 +245,20 @@ function ManageClass() {
         </div>
       )}
 
-      {selectedClassIds.length > 0 ? (
+      {selection.selectedIds.length > 0 ? (
         <div className="bulk-actions-bar">
           <label className="bulk-select-all">
             <input
               type="checkbox"
-              checked={allVisibleClassesSelected}
+              checked={selection.allVisibleSelected}
               ref={(input) => {
-                if (input) input.indeterminate = !allVisibleClassesSelected && someVisibleClassesSelected;
+                if (input) input.indeterminate = !selection.allVisibleSelected && selection.someVisibleSelected;
               }}
-              onChange={(e) => {
-                const nextSelected = e.target.checked
-                  ? Array.from(new Set([...selectedClassIds, ...filteredClassIds]))
-                  : selectedClassIds.filter((id) => !filteredClassIds.includes(id));
-                setSelectedClassIds(nextSelected);
-              }}
+              onChange={(e) => selection.toggleAllVisible(e.target.checked)}
             />
             Select all visible
           </label>
-          <span className="bulk-selection-count">{selectedClassIds.length} selected</span>
+          <span className="bulk-selection-count">{selection.selectedIds.length} selected</span>
           <button
             type="button"
             className="danger-btn"
@@ -357,7 +270,7 @@ function ManageClass() {
           <button
             type="button"
             className="secondary-btn"
-            onClick={() => setSelectedClassIds([])}
+            onClick={selection.clear}
             disabled={bulkDeleting || Boolean(mutationMessage)}
           >
             Clear selection
@@ -377,13 +290,11 @@ function ManageClass() {
               <th className="selection-column">
                 <input
                   type="checkbox"
-                  checked={allVisibleClassesSelected}
+                  checked={selection.allVisibleSelected}
                   ref={(input) => {
-                    if (input) input.indeterminate = !allVisibleClassesSelected && someVisibleClassesSelected;
+                    if (input) input.indeterminate = !selection.allVisibleSelected && selection.someVisibleSelected;
                   }}
-                  onChange={(e) => {
-                    setSelectedClassIds(e.target.checked ? filteredClassIds : []);
-                  }}
+                  onChange={(e) => selection.setAllVisible(e.target.checked)}
                 />
               </th>
               <th>Class ID</th>
@@ -399,18 +310,12 @@ function ManageClass() {
           <tbody>
             {Array.isArray(filteredClasses) &&
               filteredClasses.map((classItem) => (
-                <tr key={classItem._id} className={selectedClassIds.includes(classItem._id) ? "row-selected" : ""}>
+                <tr key={classItem._id} className={selection.isSelected(classItem._id) ? "row-selected" : ""}>
                   <td className="selection-cell">
                     <input
                       type="checkbox"
-                      checked={selectedClassIds.includes(classItem._id)}
-                      onChange={(e) => {
-                        setSelectedClassIds((prev) =>
-                          e.target.checked
-                            ? Array.from(new Set([...prev, classItem._id]))
-                            : prev.filter((id) => id !== classItem._id)
-                        );
-                      }}
+                      checked={selection.isSelected(classItem._id)}
+                      onChange={(e) => selection.toggle(classItem._id, e.target.checked)}
                     />
                   </td>
                   <td>

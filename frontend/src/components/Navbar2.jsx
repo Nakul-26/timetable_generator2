@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import "../styles/Navbar.css";
 import { useAuth } from "../context/AuthContext";
-import API from "../api/axios";
+import api from "../api/axios";
 
 const Navbar = () => {
   const { user, loading, logout } = useAuth();
@@ -21,7 +21,7 @@ const Navbar = () => {
     let mounted = true;
     (async () => {
       try {
-        const res = await API.get('/superadmin/colleges');
+        const res = await api.get('/superadmin/colleges');
         const list = res?.data?.colleges || res?.data || [];
         if (mounted && Array.isArray(list)) {
           setColleges(list);

@@ -24,7 +24,7 @@ protectedRouter.post('/faculties', async (req, res) => {
     await f.save();
     res.json(f);
   } catch (e) {
-    res.status(400).json({ error: 'Bad Request' });
+    res.status(e.status || 400).json({ error: e.message || 'Bad Request' });
   }
 });
 
@@ -61,7 +61,7 @@ protectedRouter.put('/faculties/:id', async (req, res) => {
     }
     res.json(updatedFaculty);
   } catch (e) {
-    res.status(400).json({ error: 'Bad Request' });
+    res.status(e.status || 400).json({ error: e.message || 'Bad Request' });
   }
 });
 
@@ -101,7 +101,7 @@ protectedRouter.post('/faculties/:id/preferences', async (req, res) => {
       preferences: normalizeTeacherPreferences(faculty.preferences),
     });
   } catch (e) {
-    res.status(400).json({ error: 'Bad Request' });
+    res.status(e.status || 400).json({ error: e.message || 'Bad Request' });
   }
 });
 
@@ -141,7 +141,7 @@ protectedRouter.post('/faculties/:id/availability', async (req, res) => {
       unavailableSlots: normalizeAvailabilitySlots(faculty.unavailableSlots),
     });
   } catch (e) {
-    res.status(400).json({ error: 'Bad Request' });
+    res.status(e.status || 400).json({ error: e.message || 'Bad Request' });
   }
 });
 

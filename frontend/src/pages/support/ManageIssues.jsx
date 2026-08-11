@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import API from "../../api/axios";
+import api from "../../api/axios";
 import "../../styles/App.css";
 
 const ManageIssues = () => {
@@ -16,7 +16,7 @@ const ManageIssues = () => {
   const fetchIssues = async () => {
     try {
       setLoading(true);
-      const res = await API.get("/issues");
+      const res = await api.get("/issues");
       setIssues(res.data);
       setLoading(false);
     } catch (err) {

@@ -77,6 +77,6 @@ const ClassSchema = new Schema(
 // Useful indexes
 ClassSchema.index({ collegeId: 1, id: 1 }, { unique: true });
 ClassSchema.index({ collegeId: 1, sem: 1 });
-ClassSchema.index({ collegeId: 1, name: 1, section: 1 });
+ClassSchema.index({ collegeId: 1, name: 1, section: 1 }, { unique: true });
 
 export default mongoose.model('Class', ClassSchema);

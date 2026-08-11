@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import API from "../../api/axios";
+import api from "../../api/axios";
 
 const CreateIssue = () => {
   const [formData, setFormData] = useState({
@@ -85,7 +85,7 @@ const CreateIssue = () => {
         data.append("images", file);
       });
 
-      await API.post("/issues", data, {
+      await api.post("/issues", data, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       navigate("/support");

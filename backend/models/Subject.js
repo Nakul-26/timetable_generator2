@@ -27,7 +27,7 @@ const SubjectSchema = new Schema(
     },
     type: {
       type: String,
-      enum: ["theory", "lab", "no_teacher"],
+      enum: ["theory", "lab", "no_teacher", "elective"],
       required: true,
     },
     classesPerWeek: {

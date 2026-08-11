@@ -1,19 +1,16 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import API from "../../api/axios";
+import api from "../../api/axios";
 import DataContext from "../../context/DataContext";
-import * as XLSX from "xlsx";
+import useBulkSelection from "../../hooks/useBulkSelection";
+import useExcelImport from "../../hooks/useExcelImport";
+import { downloadTemplate, exportRows, getCellValue } from "../../utils/excelIO";
 
 const ManageTeacher = () => {
   const { faculties, classes, combos, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
-  const [excelMessage, setExcelMessage] = useState("");
-  const [excelError, setExcelError] = useState("");
-  const [uploadingExcel, setUploadingExcel] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
-  const [selectedTeacherIds, setSelectedTeacherIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const fileInputRef = useRef(null);
 
   // Edit form states
   const [editName, setEditName] = useState("");
@@ -26,41 +23,14 @@ const ManageTeacher = () => {
 
   const navigate = useNavigate();
 
-  const clearExcelStatus = () => {
-    setExcelMessage("");
-    setExcelError("");
-  };
-
-  const getCellValue = (row, keys) => {
-    for (const key of keys) {
-      const raw = row[key];
-      if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
-        return String(raw).trim();
-      }
-    }
-    return "";
-  };
-
-  const buildTemplateWorkbook = () => {
-    const rows = [
-      ["name", "id"],
-      ["", ""]
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Teachers");
-    return workbook;
-  };
-
   const handleDownloadTemplate = () => {
-    clearExcelStatus();
-    const workbook = buildTemplateWorkbook();
-    XLSX.writeFile(workbook, "teachers_template.xlsx");
-    setExcelMessage("Template downloaded.");
+    excelImport.clearExcelStatus();
+    downloadTemplate(["name", "id"], ["", ""], "Teachers", "teachers_template.xlsx");
+    excelImport.setExcelMessage("Template downloaded.");
   };
 
   const handleExportTeachers = () => {
-    clearExcelStatus();
+    excelImport.clearExcelStatus();
     const rows = faculties.map((teacher) => {
       const assignedClassNames = classes
         .filter((cls) => cls.faculties?.some((f) => f._id === teacher._id))
@@ -80,95 +50,33 @@ const ManageTeacher = () => {
       };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Teachers");
-    XLSX.writeFile(workbook, "teachers_export.xlsx");
-    setExcelMessage("Teachers exported.");
+    exportRows(rows, "Teachers", "teachers_export.xlsx");
+    excelImport.setExcelMessage("Teachers exported.");
   };
 
-  const triggerExcelUpload = () => {
-    clearExcelStatus();
-    fileInputRef.current?.click();
-  };
+  const existingById = new Map(
+    faculties.filter((f) => f?.id).map((f) => [String(f.id).toLowerCase(), f])
+  );
 
-  const handleExcelUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    clearExcelStatus();
-    setUploadingExcel(true);
-
-    try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.SheetNames?.[0];
-      if (!firstSheet) {
-        throw new Error("No sheet found in the uploaded file.");
+  const excelImport = useExcelImport({
+    entityLabel: "teacher",
+    requiredColumnsHint: "name and id",
+    normalizeRow: (row) => ({
+      name: getCellValue(row, ["name", "Name", "teacherName", "Teacher Name"]),
+      id: getCellValue(row, ["id", "ID", "facultyId", "Faculty ID", "teacherId", "Teacher ID"])
+    }),
+    isValidRow: (row) => Boolean(row.name && row.id),
+    upsertRow: async (row) => {
+      const existing = existingById.get(row.id.toLowerCase());
+      if (existing) {
+        await api.put(`/faculties/${existing._id}`, { name: row.name, id: row.id });
+        return true;
       }
-
-      const sheet = workbook.Sheets[firstSheet];
-      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-
-      if (!Array.isArray(rawRows) || rawRows.length === 0) {
-        throw new Error("The uploaded sheet is empty.");
-      }
-
-      const normalizedRows = rawRows.map((row) => {
-        const name = getCellValue(row, ["name", "Name", "teacherName", "Teacher Name"]);
-        const id = getCellValue(row, ["id", "ID", "facultyId", "Faculty ID", "teacherId", "Teacher ID"]);
-        return { name, id };
-      });
-
-      const validRows = normalizedRows.filter((row) => row.name && row.id);
-      if (validRows.length === 0) {
-        throw new Error("No valid rows found. Required columns: name and id.");
-      }
-
-      const duplicateIds = new Set();
-      const seenIds = new Set();
-      validRows.forEach((row) => {
-        const key = row.id.toLowerCase();
-        if (seenIds.has(key)) duplicateIds.add(row.id);
-        seenIds.add(key);
-      });
-      if (duplicateIds.size > 0) {
-        throw new Error(`Duplicate teacher IDs in file: ${Array.from(duplicateIds).join(", ")}`);
-      }
-
-      const existingById = new Map(
-        faculties
-          .filter((f) => f?.id)
-          .map((f) => [String(f.id).toLowerCase(), f])
-      );
-
-      let createdCount = 0;
-      let updatedCount = 0;
-
-      for (const row of validRows) {
-        const existing = existingById.get(row.id.toLowerCase());
-        if (existing) {
-          await API.put(`/faculties/${existing._id}`, { name: row.name, id: row.id });
-          updatedCount += 1;
-        } else {
-          await API.post("/faculties", { name: row.name, id: row.id });
-          createdCount += 1;
-        }
-      }
-
-      refetchData(["faculties"]);
-      setExcelMessage(`Upload complete. Created: ${createdCount}, Updated: ${updatedCount}.`);
-    } catch (err) {
-      const message =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Failed to upload teachers from Excel.";
-      setExcelError(message);
-    } finally {
-      setUploadingExcel(false);
-      if (event.target) event.target.value = "";
-    }
-  };
+      await api.post("/faculties", { name: row.name, id: row.id });
+      return false;
+    },
+    onDone: () => refetchData(["faculties"])
+  });
 
   const handleAddTeacher = () => {
     navigate("/teacher/add");
@@ -186,8 +94,8 @@ const ManageTeacher = () => {
     if (!window.confirm("Are you sure you want to delete this teacher?")) return;
     setMutationMessage("Deleting teacher. Please wait...");
     try {
-      await API.delete(`/faculties/${id}`);
-      setSelectedTeacherIds((prev) => prev.filter((itemId) => itemId !== id));
+      await api.delete(`/faculties/${id}`);
+      selection.remove(id);
       refetchData(['faculties']);
     } catch (err) {
       console.log(`Error: ${err.message}`);
@@ -197,13 +105,13 @@ const ManageTeacher = () => {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedTeacherIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedTeacherIds.length} selected teacher(s)?`)) return;
+    if (selection.selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selection.selectedIds.length} selected teacher(s)?`)) return;
     setBulkDeleting(true);
     setMutationMessage("Deleting selected teachers. Please wait...");
     try {
-      await Promise.allSettled(selectedTeacherIds.map((id) => API.delete(`/faculties/${id}`)));
-      setSelectedTeacherIds([]);
+      await Promise.allSettled(selection.selectedIds.map((id) => api.delete(`/faculties/${id}`)));
+      selection.clear();
       refetchData(['faculties']);
     } catch (err) {
       console.log(`Error: ${err.message}`);
@@ -224,7 +132,7 @@ const ManageTeacher = () => {
     setMutationMessage("Saving teacher changes. Please wait...");
     try {
       const updatedTeacher = { name: editName, id: editFacultyId };
-      await API.put(`/faculties/${editId}`, updatedTeacher);
+      await api.put(`/faculties/${editId}`, updatedTeacher);
 
       setEditId(null);
       setEditName("");
@@ -246,10 +154,7 @@ const ManageTeacher = () => {
     );
   });
   const filteredTeacherIds = filteredTeachers.map((teacher) => teacher._id);
-  const allVisibleTeachersSelected =
-    filteredTeacherIds.length > 0 && filteredTeacherIds.every((id) => selectedTeacherIds.includes(id));
-  const someVisibleTeachersSelected =
-    filteredTeacherIds.some((id) => selectedTeacherIds.includes(id));
+  const selection = useBulkSelection(filteredTeacherIds);
 
   const resetFilters = () => {
     setFilterName("");
@@ -264,8 +169,8 @@ const ManageTeacher = () => {
         <button onClick={handleEditAvailability} className="secondary-btn">Edit Availability</button>
         <button onClick={handleEditPreferences} className="secondary-btn">Edit Preferences</button>
         <button onClick={handleDownloadTemplate} className="secondary-btn">Download Excel Template</button>
-        <button onClick={triggerExcelUpload} className="secondary-btn" disabled={uploadingExcel}>
-          {uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
+        <button onClick={excelImport.triggerExcelUpload} className="secondary-btn" disabled={excelImport.uploadingExcel}>
+          {excelImport.uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
         </button>
         <button onClick={handleExportTeachers} className="secondary-btn">Export Teachers Excel</button>
         <button onClick={() => setShowFilters(!showFilters)}>
@@ -273,17 +178,17 @@ const ManageTeacher = () => {
         </button>
       </div>
       <input
-        ref={fileInputRef}
+        ref={excelImport.fileInputRef}
         type="file"
         accept=".xlsx,.xls"
         style={{ display: "none" }}
-        onChange={handleExcelUpload}
+        onChange={excelImport.handleExcelUpload}
       />
 
-      {uploadingExcel ? <div className="success-message">Uploading teachers from Excel. Please wait...</div> : null}
+      {excelImport.uploadingExcel ? <div className="success-message">Uploading teachers from Excel. Please wait...</div> : null}
       {mutationMessage ? <div className="loading-message">{mutationMessage}</div> : null}
-      {excelMessage ? <div className="success-message">{excelMessage}</div> : null}
-      {excelError ? <div className="error-message">{excelError}</div> : null}
+      {excelImport.excelMessage ? <div className="success-message">{excelImport.excelMessage}</div> : null}
+      {excelImport.excelError ? <div className="error-message">{excelImport.excelError}</div> : null}
 
       {/* 🔽 Filters */}
       {showFilters && (
@@ -306,29 +211,24 @@ const ManageTeacher = () => {
         </div>
       )}
 
-      {selectedTeacherIds.length > 0 ? (
+      {selection.selectedIds.length > 0 ? (
         <div className="bulk-actions-bar">
           <label className="bulk-select-all">
             <input
               type="checkbox"
-              checked={allVisibleTeachersSelected}
+              checked={selection.allVisibleSelected}
               ref={(input) => {
-                if (input) input.indeterminate = !allVisibleTeachersSelected && someVisibleTeachersSelected;
+                if (input) input.indeterminate = !selection.allVisibleSelected && selection.someVisibleSelected;
               }}
-              onChange={(e) => {
-                const nextSelected = e.target.checked
-                  ? Array.from(new Set([...selectedTeacherIds, ...filteredTeacherIds]))
-                  : selectedTeacherIds.filter((id) => !filteredTeacherIds.includes(id));
-                setSelectedTeacherIds(nextSelected);
-              }}
+              onChange={(e) => selection.toggleAllVisible(e.target.checked)}
             />
             Select all visible
           </label>
-          <span className="bulk-selection-count">{selectedTeacherIds.length} selected</span>
+          <span className="bulk-selection-count">{selection.selectedIds.length} selected</span>
           <button type="button" className="danger-btn" onClick={handleBulkDelete} disabled={bulkDeleting || Boolean(mutationMessage)}>
             Delete selected
           </button>
-          <button type="button" className="secondary-btn" onClick={() => setSelectedTeacherIds([])} disabled={bulkDeleting || Boolean(mutationMessage)}>
+          <button type="button" className="secondary-btn" onClick={selection.clear} disabled={bulkDeleting || Boolean(mutationMessage)}>
             Clear selection
           </button>
         </div>
@@ -346,11 +246,11 @@ const ManageTeacher = () => {
               <th className="selection-column">
                 <input
                   type="checkbox"
-                  checked={allVisibleTeachersSelected}
+                  checked={selection.allVisibleSelected}
                   ref={(input) => {
-                    if (input) input.indeterminate = !allVisibleTeachersSelected && someVisibleTeachersSelected;
+                    if (input) input.indeterminate = !selection.allVisibleSelected && selection.someVisibleSelected;
                   }}
-                  onChange={(e) => setSelectedTeacherIds(e.target.checked ? filteredTeacherIds : [])}
+                  onChange={(e) => selection.setAllVisible(e.target.checked)}
                 />
               </th>
               <th>Name</th>
@@ -365,18 +265,12 @@ const ManageTeacher = () => {
           <tbody>
             {Array.isArray(filteredTeachers) &&
               filteredTeachers.map((teacher) => (
-                <tr key={teacher._id} className={selectedTeacherIds.includes(teacher._id) ? "row-selected" : ""}>
+                <tr key={teacher._id} className={selection.isSelected(teacher._id) ? "row-selected" : ""}>
                   <td className="selection-cell">
                     <input
                       type="checkbox"
-                      checked={selectedTeacherIds.includes(teacher._id)}
-                      onChange={(e) => {
-                        setSelectedTeacherIds((prev) =>
-                          e.target.checked
-                            ? Array.from(new Set([...prev, teacher._id]))
-                            : prev.filter((id) => id !== teacher._id)
-                        );
-                      }}
+                      checked={selection.isSelected(teacher._id)}
+                      onChange={(e) => selection.toggle(teacher._id, e.target.checked)}
                     />
                   </td>
                   <td>

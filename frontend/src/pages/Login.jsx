@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import API from '../api/axios';
+import api from '../api/axios';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import '../styles/Login.css';
@@ -17,7 +17,7 @@ const Login = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const response = await API.post('/login', { email, password });
+            const response = await api.post('/login', { email, password });
             if (response.data.success) {
                 login(response.data.user);
                 queryClient.invalidateQueries();

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import API from "../../api/axios";
+import api from "../../api/axios";
 import {
   DEFAULT_CONSTRAINT_CONFIG,
   loadConstraintConfig,
@@ -45,7 +45,7 @@ const TeacherPreferences = () => {
 
     (async () => {
       try {
-        const res = await API.get("/timetable-settings");
+        const res = await api.get("/timetable-settings");
         const serverConfig = res?.data?.settings?.constraintConfig;
         if (cancelled) return;
         if (serverConfig && typeof serverConfig === "object") {
@@ -72,7 +72,7 @@ const TeacherPreferences = () => {
     const fetchTeachers = async () => {
       try {
         setLoading(true);
-        const response = await API.get("/faculties");
+        const response = await api.get("/faculties");
         const nextTeachers = Array.isArray(response.data) ? response.data : [];
         setTeachers(nextTeachers);
 
@@ -142,7 +142,7 @@ const TeacherPreferences = () => {
         },
       };
 
-      const response = await API.post(`/faculties/${selectedTeacherId}/preferences`, payload);
+      const response = await api.post(`/faculties/${selectedTeacherId}/preferences`, payload);
       const normalized = normalizePreferences(response.data?.preferences || payload.preferences);
       setPreferences(normalized);
       setSavedPreferences(normalized);

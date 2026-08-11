@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import api from "../api/axios";
-import axios from "../api/axios";
 import { DEFAULT_CONSTRAINT_CONFIG, loadConstraintConfig, normalizeConstraintConfig } from "./constraintConfig";
 import { normalizeCombo } from "../utils/comboNormalizer";
 
@@ -405,11 +404,11 @@ function Timetable() {
   const fetchAll = useCallback(async () => {
     try {
       const [classRes, facRes, subRes, comboRes, classSubjectRes, fixedComboRes] = await Promise.all([
-        axios.get("/classes"),
-        axios.get("/faculties"),
-        axios.get("/subjects"),
-        axios.get("/teacher-subject-combos"),
-        axios.get("/class-subjects"),
+        api.get("/classes"),
+        api.get("/faculties"),
+        api.get("/subjects"),
+        api.get("/teacher-subject-combos"),
+        api.get("/class-subjects"),
         api.get("/fixed-slot-combos"),
       ]);
       setClasses(prev => mergeById(prev, classRes.data));

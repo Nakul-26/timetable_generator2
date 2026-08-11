@@ -77,7 +77,7 @@ protectedRouter.put('/classes/:id', async (req, res) => {
     }
     res.json(updatedClass);
   } catch (e) {
-    res.status(400).json({ error: 'Bad Request' });
+    res.status(e.status || 400).json({ error: e.message || 'Bad Request' });
   }
 });
 
@@ -212,7 +212,7 @@ protectedRouter.delete('/classes/:classId/faculties/:facultyId', async (req, res
 
         res.json(updatedClass);
     } catch (e) {
-        res.status(400).json({ error: 'Bad Request' });
+        res.status(e.status || 400).json({ error: e.message || 'Bad Request' });
     }
 });
 

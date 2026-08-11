@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import API from "../../api/axios";
+import api from "../../api/axios";
 import { useAuth } from "../../context/AuthContext";
 
 const IssueDetail = () => {
@@ -24,7 +24,7 @@ const IssueDetail = () => {
   const fetchIssue = async () => {
     try {
       setLoading(true);
-      const res = await API.get(`/issues/${id}`);
+      const res = await api.get(`/issues/${id}`);
       setIssue(res.data);
       setLoading(false);
     } catch (err) {
@@ -39,7 +39,7 @@ const IssueDetail = () => {
 
     setSubmittingComment(true);
     try {
-      const res = await API.post(`/issues/${id}/comments`, { message: comment });
+      const res = await api.post(`/issues/${id}/comments`, { message: comment });
       setIssue(res.data);
       setComment("");
     } catch (err) {
@@ -52,7 +52,7 @@ const IssueDetail = () => {
   const handleUpdateStatus = async (newStatus) => {
     setUpdatingStatus(true);
     try {
-      const res = await API.patch(`/issues/${id}`, { status: newStatus });
+      const res = await api.patch(`/issues/${id}`, { status: newStatus });
       setIssue(res.data);
     } catch (err) {
       alert("Failed to update status.");

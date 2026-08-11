@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from '../../api/axios.jsx';
+import api from '../../api/axios.jsx';
+import useBulkSelection from '../../hooks/useBulkSelection';
 import './SuperadminDashboard.css';
 
 const SuperadminColleges = () => {
@@ -9,8 +10,9 @@ const SuperadminColleges = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionMessage, setActionMessage] = useState("");
-  const [selectedCollegeIds, setSelectedCollegeIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const collegeIds = useMemo(() => colleges.map((college) => college._id), [colleges]);
+  const selection = useBulkSelection(collegeIds);
 
   useEffect(() => {
     fetchColleges();
@@ -18,7 +20,7 @@ const SuperadminColleges = () => {
 
   const fetchColleges = async () => {
     try {
-      const res = await axios.get('/superadmin/colleges');
+      const res = await api.get('/superadmin/colleges');
       setColleges(res.data.colleges || []);
     } catch (err) {
       setError('Failed to load colleges');
@@ -32,8 +34,8 @@ const SuperadminColleges = () => {
     if (!window.confirm('Delete this college? This cannot be undone.')) return;
     try {
       setActionMessage("Deleting college. Please wait...");
-      await axios.delete(`/superadmin/colleges/${collegeId}`);
-      setSelectedCollegeIds((prev) => prev.filter((id) => id !== collegeId));
+      await api.delete(`/superadmin/colleges/${collegeId}`);
+      selection.remove(collegeId);
       fetchColleges();
     } catch (err) {
       alert(err?.response?.data?.error || 'Delete failed');
@@ -43,13 +45,13 @@ const SuperadminColleges = () => {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedCollegeIds.length === 0) return;
-    if (!window.confirm(`Delete ${selectedCollegeIds.length} selected college(s)? This cannot be undone.`)) return;
+    if (selection.selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selection.selectedIds.length} selected college(s)? This cannot be undone.`)) return;
     setBulkDeleting(true);
     try {
       setActionMessage("Deleting selected colleges. Please wait...");
-      await Promise.allSettled(selectedCollegeIds.map((collegeId) => axios.delete(`/superadmin/colleges/${collegeId}`)));
-      setSelectedCollegeIds([]);
+      await Promise.allSettled(selection.selectedIds.map((collegeId) => api.delete(`/superadmin/colleges/${collegeId}`)));
+      selection.clear();
       fetchColleges();
     } catch (err) {
       alert(err?.response?.data?.error || 'Delete failed');
@@ -58,11 +60,6 @@ const SuperadminColleges = () => {
       setActionMessage("");
     }
   };
-
-  const allVisibleCollegesSelected =
-    colleges.length > 0 && colleges.every((college) => selectedCollegeIds.includes(college._id));
-  const someVisibleCollegesSelected =
-    colleges.some((college) => selectedCollegeIds.includes(college._id));
 
   if (loading) return <div className="loading">Loading colleges...</div>;
   if (error) return <div className="error">{error}</div>;
@@ -78,24 +75,24 @@ const SuperadminColleges = () => {
           </button>
         </div>
       </div>
-      {selectedCollegeIds.length > 0 ? (
+      {selection.selectedIds.length > 0 ? (
         <div className="bulk-actions-bar">
           <label className="bulk-select-all">
             <input
               type="checkbox"
-              checked={allVisibleCollegesSelected}
+              checked={selection.allVisibleSelected}
               ref={(input) => {
-                if (input) input.indeterminate = !allVisibleCollegesSelected && someVisibleCollegesSelected;
+                if (input) input.indeterminate = !selection.allVisibleSelected && selection.someVisibleSelected;
               }}
-              onChange={(e) => setSelectedCollegeIds(e.target.checked ? colleges.map((college) => college._id) : [])}
+              onChange={(e) => selection.setAllVisible(e.target.checked)}
             />
             Select all visible
           </label>
-          <span className="bulk-selection-count">{selectedCollegeIds.length} selected</span>
+          <span className="bulk-selection-count">{selection.selectedIds.length} selected</span>
           <button className="btn btn-delete" onClick={handleBulkDelete} disabled={bulkDeleting || Boolean(actionMessage)}>
             Delete selected
           </button>
-          <button className="btn btn-edit" onClick={() => setSelectedCollegeIds([])} disabled={bulkDeleting || Boolean(actionMessage)}>
+          <button className="btn btn-edit" onClick={selection.clear} disabled={bulkDeleting || Boolean(actionMessage)}>
             Clear selection
           </button>
         </div>
@@ -108,18 +105,12 @@ const SuperadminColleges = () => {
         ) : (
           <div className="colleges-grid">
             {colleges.map(college => (
-              <div key={college._id} className={`college-card selectable-card ${selectedCollegeIds.includes(college._id) ? "row-selected" : ""}`}>
+              <div key={college._id} className={`college-card selectable-card ${selection.isSelected(college._id) ? "row-selected" : ""}`}>
                 <label className="card-select-checkbox">
                   <input
                     type="checkbox"
-                    checked={selectedCollegeIds.includes(college._id)}
-                    onChange={(e) => {
-                      setSelectedCollegeIds((prev) =>
-                        e.target.checked
-                          ? Array.from(new Set([...prev, college._id]))
-                          : prev.filter((id) => id !== college._id)
-                      );
-                    }}
+                    checked={selection.isSelected(college._id)}
+                    onChange={(e) => selection.toggle(college._id, e.target.checked)}
                   />
                   Select
                 </label>
@@ -134,7 +125,7 @@ const SuperadminColleges = () => {
                     const cid = window.prompt('New collegeId', college.collegeId) || college.collegeId;
                     try {
                       setActionMessage("Updating college. Please wait...");
-                      await axios.put(`/superadmin/colleges/${college._id}`, { name, code, collegeId: cid });
+                      await api.put(`/superadmin/colleges/${college._id}`, { name, code, collegeId: cid });
                       fetchColleges();
                     } catch (err) { alert(err?.response?.data?.error || 'Update failed'); }
                     finally { setActionMessage(""); }

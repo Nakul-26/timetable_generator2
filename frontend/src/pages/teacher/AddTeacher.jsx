@@ -1,5 +1,5 @@
 import React, { useState, useContext } from "react";
-import axios from "../../api/axios";
+import api from "../../api/axios";
 import DataContext from "../../context/DataContext";
 
 const AddTeacher = () => {
@@ -35,7 +35,7 @@ const AddTeacher = () => {
 
     setLoading(true);
     try {
-      await axios.post(`/faculties`, {
+      await api.post(`/faculties`, {
         name: name,
         id: facultyId,
       });

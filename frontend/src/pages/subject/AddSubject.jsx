@@ -1,5 +1,5 @@
 import React, { useState, useContext } from "react";
-import axios from "../../api/axios";
+import api from "../../api/axios";
 import DataContext from "../../context/DataContext";
 
 function AddSubject() {
@@ -48,7 +48,7 @@ function AddSubject() {
     }
     setLoading(true);
     try {
-      await axios.post("/subjects", {
+      await api.post("/subjects", {
         name,
         id: code,
         sem,

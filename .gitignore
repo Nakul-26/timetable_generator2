@@ -47,3 +47,9 @@ backend/solver/generation_payload.json
 backend/solver/last_job_payload_summary.json
 backend/solver/last_job_payload_summary_error.txt
 backend/solver/received_payload.json
+
+# Debug/diagnostic dumps and DB backups (may contain real college data or credentials)
+backend/data/*.json
+backend/data/*.txt
+backend/data/mongoose_backup/
+backend/scripts/db/mongoose_backup/

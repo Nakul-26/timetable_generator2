@@ -1,19 +1,16 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "../../api/axios";
+import api from "../../api/axios";
 import DataContext from "../../context/DataContext";
-import * as XLSX from "xlsx";
+import useBulkSelection from "../../hooks/useBulkSelection";
+import useExcelImport from "../../hooks/useExcelImport";
+import { downloadTemplate, exportRows, getCellValue } from "../../utils/excelIO";
 
 function ManageSubject() {
   const { subjects, assignments, combos, loading, error, refetchData } = useContext(DataContext);
   const [editId, setEditId] = useState(null);
-  const [excelMessage, setExcelMessage] = useState("");
-  const [excelError, setExcelError] = useState("");
-  const [uploadingExcel, setUploadingExcel] = useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
-  const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const fileInputRef = useRef(null);
 
   // Edit states
   const [editName, setEditName] = useState("");
@@ -31,21 +28,6 @@ function ManageSubject() {
 
   const navigate = useNavigate();
 
-  const clearExcelStatus = () => {
-    setExcelMessage("");
-    setExcelError("");
-  };
-
-  const getCellValue = (row, keys) => {
-    for (const key of keys) {
-      const raw = row[key];
-      if (raw !== undefined && raw !== null && String(raw).trim() !== "") {
-        return String(raw).trim();
-      }
-    }
-    return "";
-  };
-
   const parseOptionalPositiveNumber = (value) => {
     if (value === "") return undefined;
     if (value === undefined || value === null) return undefined;
@@ -54,20 +36,18 @@ function ManageSubject() {
   };
 
   const handleDownloadTemplate = () => {
-    clearExcelStatus();
-    const rows = [
+    excelImport.clearExcelStatus();
+    downloadTemplate(
       ["name", "id", "sem", "type", "classesPerWeek", "isElective"],
-      ["", "", "", "theory", "", "false"]
-    ];
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Subjects");
-    XLSX.writeFile(workbook, "subjects_template.xlsx");
-    setExcelMessage("Template downloaded.");
+      ["", "", "", "theory", "", "false"],
+      "Subjects",
+      "subjects_template.xlsx"
+    );
+    excelImport.setExcelMessage("Template downloaded.");
   };
 
   const handleExportSubjects = () => {
-    clearExcelStatus();
+    excelImport.clearExcelStatus();
     const rows = subjects.map((subject) => {
       const assignedClassNames = assignments
         .filter((a) => a.subject?._id === subject._id)
@@ -92,127 +72,55 @@ function ManageSubject() {
       };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Subjects");
-    XLSX.writeFile(workbook, "subjects_export.xlsx");
-    setExcelMessage("Subjects exported.");
+    exportRows(rows, "Subjects", "subjects_export.xlsx");
+    excelImport.setExcelMessage("Subjects exported.");
   };
 
-  const triggerExcelUpload = () => {
-    clearExcelStatus();
-    fileInputRef.current?.click();
-  };
+  const existingByCode = new Map(
+    subjects.filter((s) => s?.id).map((s) => [String(s.id).toLowerCase(), s])
+  );
 
-  const handleExcelUpload = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const excelImport = useExcelImport({
+    entityLabel: "subject",
+    requiredColumnsHint: "name, id, sem",
+    normalizeRow: (row) => {
+      const name = getCellValue(row, ["name", "Name", "subjectName", "Subject Name"]);
+      const id = getCellValue(row, ["id", "ID", "code", "Code", "subjectCode", "Subject Code"]);
+      const sem = getCellValue(row, ["sem", "Sem", "semester", "Semester", "class", "Class"]);
+      const typeRaw = getCellValue(row, ["type", "Type"]) || "theory";
+      const normalizedType = typeRaw.toLowerCase();
+      const type = ["lab", "no_teacher"].includes(normalizedType) ? normalizedType : "theory";
+      const classesPerWeekRaw = getCellValue(row, ["classesPerWeek", "classes_per_week", "Classes per Week", "hoursPerWeek", "weeklyClasses"]);
+      const parsedClassesPerWeek = parseOptionalPositiveNumber(classesPerWeekRaw);
 
-    clearExcelStatus();
-    setUploadingExcel(true);
+      const isElectiveRaw = getCellValue(row, ["isElective", "is_elective", "Is Elective", "elective"]);
+      const isElective = String(isElectiveRaw).toLowerCase() === "true" || isElectiveRaw === true;
 
-    try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.SheetNames?.[0];
-      if (!firstSheet) {
-        throw new Error("No sheet found in the uploaded file.");
+      if (parsedClassesPerWeek === null) {
+        throw new Error(`Invalid classesPerWeek value for subject "${name || id}".`);
       }
 
-      const sheet = workbook.Sheets[firstSheet];
-      const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-      if (!Array.isArray(rawRows) || rawRows.length === 0) {
-        throw new Error("The uploaded sheet is empty.");
+      return { name, id, sem, type, classesPerWeek: parsedClassesPerWeek, isElective };
+    },
+    isValidRow: (row) => Boolean(row.name && row.id && row.sem),
+    upsertRow: async (row) => {
+      const existing = existingByCode.get(row.id.toLowerCase());
+      const payload = {
+        name: row.name,
+        sem: row.sem,
+        type: row.type,
+        classesPerWeek: row.classesPerWeek,
+        isElective: row.isElective,
+      };
+      if (existing) {
+        await api.put(`/subjects/${existing._id}`, payload);
+        return true;
       }
-
-      const normalizedRows = rawRows.map((row) => {
-        const name = getCellValue(row, ["name", "Name", "subjectName", "Subject Name"]);
-        const id = getCellValue(row, ["id", "ID", "code", "Code", "subjectCode", "Subject Code"]);
-        const sem = getCellValue(row, ["sem", "Sem", "semester", "Semester", "class", "Class"]);
-        const typeRaw = getCellValue(row, ["type", "Type"]) || "theory";
-        const normalizedType = typeRaw.toLowerCase();
-        const type = ["lab", "no_teacher"].includes(normalizedType) ? normalizedType : "theory";
-        const classesPerWeekRaw = getCellValue(row, ["classesPerWeek", "classes_per_week", "Classes per Week", "hoursPerWeek", "weeklyClasses"]);
-        const parsedClassesPerWeek = parseOptionalPositiveNumber(classesPerWeekRaw);
-
-        const isElectiveRaw = getCellValue(row, ["isElective", "is_elective", "Is Elective", "elective"]);
-        const isElective = String(isElectiveRaw).toLowerCase() === "true" || isElectiveRaw === true;
-
-        if (parsedClassesPerWeek === null) {
-          throw new Error(`Invalid classesPerWeek value for subject "${name || id}".`);
-        }
-
-        return {
-          name,
-          id,
-          sem,
-          type,
-          classesPerWeek: parsedClassesPerWeek,
-          isElective,
-        };
-      });
-
-      const validRows = normalizedRows.filter((row) => row.name && row.id && row.sem);
-      if (validRows.length === 0) {
-        throw new Error("No valid rows found. Required columns: name, id, sem.");
-      }
-
-      const duplicateIds = new Set();
-      const seenIds = new Set();
-      validRows.forEach((row) => {
-        const key = row.id.toLowerCase();
-        if (seenIds.has(key)) duplicateIds.add(row.id);
-        seenIds.add(key);
-      });
-      if (duplicateIds.size > 0) {
-        throw new Error(`Duplicate subject IDs in file: ${Array.from(duplicateIds).join(", ")}`);
-      }
-
-      const existingByCode = new Map(
-        subjects
-          .filter((s) => s?.id)
-          .map((s) => [String(s.id).toLowerCase(), s])
-      );
-
-      let createdCount = 0;
-      let updatedCount = 0;
-      for (const row of validRows) {
-        const existing = existingByCode.get(row.id.toLowerCase());
-        if (existing) {
-          await axios.put(`/subjects/${existing._id}`, {
-            name: row.name,
-            sem: row.sem,
-            type: row.type,
-            classesPerWeek: row.classesPerWeek,
-            isElective: row.isElective,
-          });
-          updatedCount += 1;
-        } else {
-          await axios.post("/subjects", {
-            name: row.name,
-            id: row.id,
-            sem: row.sem,
-            type: row.type,
-            classesPerWeek: row.classesPerWeek,
-            isElective: row.isElective,
-          });
-          createdCount += 1;
-        }
-      }
-
-      refetchData(["subjects"]);
-      setExcelMessage(`Upload complete. Created: ${createdCount}, Updated: ${updatedCount}.`);
-    } catch (err) {
-      const message =
-        err?.response?.data?.error ||
-        err?.message ||
-        "Failed to upload subjects from Excel.";
-      setExcelError(message);
-    } finally {
-      setUploadingExcel(false);
-      if (event.target) event.target.value = "";
-    }
-  };
+      await api.post("/subjects", { ...payload, id: row.id });
+      return false;
+    },
+    onDone: () => refetchData(["subjects"])
+  });
 
   const handleAddSubject = () => {
     navigate("/subject/add");
@@ -222,8 +130,8 @@ function ManageSubject() {
     if (!window.confirm("Are you sure you want to delete this subject?")) return;
     setMutationMessage("Deleting subject. Please wait...");
     try {
-      await axios.delete(`/subjects/${id}`);
-      setSelectedSubjectIds((prev) => prev.filter((itemId) => itemId !== id));
+      await api.delete(`/subjects/${id}`);
+      selection.remove(id);
       refetchData(['subjects']);
     } catch (err) {
       console.log(`Error: ${err.message}`);
@@ -233,13 +141,13 @@ function ManageSubject() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedSubjectIds.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedSubjectIds.length} selected subject(s)?`)) return;
+    if (selection.selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selection.selectedIds.length} selected subject(s)?`)) return;
     setBulkDeleting(true);
     setMutationMessage("Deleting selected subjects. Please wait...");
     try {
-      await Promise.allSettled(selectedSubjectIds.map((id) => axios.delete(`/subjects/${id}`)));
-      setSelectedSubjectIds([]);
+      await Promise.allSettled(selection.selectedIds.map((id) => api.delete(`/subjects/${id}`)));
+      selection.clear();
       refetchData(['subjects']);
     } catch (err) {
       console.log(`Error: ${err.message}`);
@@ -267,8 +175,8 @@ function ManageSubject() {
         : parseOptionalPositiveNumber(editClassesPerWeek);
     if (classesPerWeekValue === null && editClassesPerWeek !== "") {
       setMutationMessage("");
-      setExcelError("");
-      setExcelMessage("");
+      excelImport.setExcelError("");
+      excelImport.setExcelMessage("");
       alert("Classes per week must be a positive number.");
       return;
     }
@@ -282,7 +190,7 @@ function ManageSubject() {
         classesPerWeek: classesPerWeekValue,
         isElective: editIsElective,
       };
-      await axios.put(`/subjects/${editId}`, updatedSubject);
+      await api.put(`/subjects/${editId}`, updatedSubject);
       setEditId(null);
       setEditName("");
       setEditCode("");
@@ -307,10 +215,7 @@ function ManageSubject() {
     );
   });
   const filteredSubjectIds = filteredSubjects.map((subject) => subject._id);
-  const allVisibleSubjectsSelected =
-    filteredSubjectIds.length > 0 && filteredSubjectIds.every((id) => selectedSubjectIds.includes(id));
-  const someVisibleSubjectsSelected =
-    filteredSubjectIds.some((id) => selectedSubjectIds.includes(id));
+  const selection = useBulkSelection(filteredSubjectIds);
 
   return (
     <div className="manage-container">
@@ -318,8 +223,8 @@ function ManageSubject() {
       <div className="actions-bar">
         <button onClick={handleAddSubject}>Add Subject</button>
         <button onClick={handleDownloadTemplate} className="secondary-btn">Download Excel Template</button>
-        <button onClick={triggerExcelUpload} className="secondary-btn" disabled={uploadingExcel}>
-          {uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
+        <button onClick={excelImport.triggerExcelUpload} className="secondary-btn" disabled={excelImport.uploadingExcel}>
+          {excelImport.uploadingExcel ? "Uploading..." : "Upload Filled Excel"}
         </button>
         <button onClick={handleExportSubjects} className="secondary-btn">Export Subjects Excel</button>
         <button onClick={() => setShowFilters(!showFilters)}>
@@ -327,17 +232,17 @@ function ManageSubject() {
         </button>
       </div>
       <input
-        ref={fileInputRef}
+        ref={excelImport.fileInputRef}
         type="file"
         accept=".xlsx,.xls"
         style={{ display: "none" }}
-        onChange={handleExcelUpload}
+        onChange={excelImport.handleExcelUpload}
       />
 
-      {uploadingExcel ? <div className="success-message">Uploading subjects from Excel. Please wait...</div> : null}
+      {excelImport.uploadingExcel ? <div className="success-message">Uploading subjects from Excel. Please wait...</div> : null}
       {mutationMessage ? <div className="loading-message">{mutationMessage}</div> : null}
-      {excelMessage ? <div className="success-message">{excelMessage}</div> : null}
-      {excelError ? <div className="error-message">{excelError}</div> : null}
+      {excelImport.excelMessage ? <div className="success-message">{excelImport.excelMessage}</div> : null}
+      {excelImport.excelError ? <div className="error-message">{excelImport.excelError}</div> : null}
 
       {/* 🔽 Filters */}
       {showFilters && (
@@ -368,29 +273,24 @@ function ManageSubject() {
         </div>
       )}
 
-      {selectedSubjectIds.length > 0 ? (
+      {selection.selectedIds.length > 0 ? (
         <div className="bulk-actions-bar">
           <label className="bulk-select-all">
             <input
               type="checkbox"
-              checked={allVisibleSubjectsSelected}
+              checked={selection.allVisibleSelected}
               ref={(input) => {
-                if (input) input.indeterminate = !allVisibleSubjectsSelected && someVisibleSubjectsSelected;
+                if (input) input.indeterminate = !selection.allVisibleSelected && selection.someVisibleSelected;
               }}
-              onChange={(e) => {
-                const nextSelected = e.target.checked
-                  ? Array.from(new Set([...selectedSubjectIds, ...filteredSubjectIds]))
-                  : selectedSubjectIds.filter((id) => !filteredSubjectIds.includes(id));
-                setSelectedSubjectIds(nextSelected);
-              }}
+              onChange={(e) => selection.toggleAllVisible(e.target.checked)}
             />
             Select all visible
           </label>
-          <span className="bulk-selection-count">{selectedSubjectIds.length} selected</span>
+          <span className="bulk-selection-count">{selection.selectedIds.length} selected</span>
           <button type="button" className="danger-btn" onClick={handleBulkDelete} disabled={bulkDeleting || Boolean(mutationMessage)}>
             Delete selected
           </button>
-          <button type="button" className="secondary-btn" onClick={() => setSelectedSubjectIds([])} disabled={bulkDeleting || Boolean(mutationMessage)}>
+          <button type="button" className="secondary-btn" onClick={selection.clear} disabled={bulkDeleting || Boolean(mutationMessage)}>
             Clear selection
           </button>
         </div>
@@ -408,11 +308,11 @@ function ManageSubject() {
               <th className="selection-column">
                 <input
                   type="checkbox"
-                  checked={allVisibleSubjectsSelected}
+                  checked={selection.allVisibleSelected}
                   ref={(input) => {
-                    if (input) input.indeterminate = !allVisibleSubjectsSelected && someVisibleSubjectsSelected;
+                    if (input) input.indeterminate = !selection.allVisibleSelected && selection.someVisibleSelected;
                   }}
-                  onChange={(e) => setSelectedSubjectIds(e.target.checked ? filteredSubjectIds : [])}
+                  onChange={(e) => selection.setAllVisible(e.target.checked)}
                 />
               </th>
               <th>Name</th>
@@ -429,18 +329,12 @@ function ManageSubject() {
           <tbody>
             {Array.isArray(filteredSubjects) &&
               filteredSubjects.map((subject) => (
-                <tr key={subject._id} className={selectedSubjectIds.includes(subject._id) ? "row-selected" : ""}>
+                <tr key={subject._id} className={selection.isSelected(subject._id) ? "row-selected" : ""}>
                   <td className="selection-cell">
                     <input
                       type="checkbox"
-                      checked={selectedSubjectIds.includes(subject._id)}
-                      onChange={(e) => {
-                        setSelectedSubjectIds((prev) =>
-                          e.target.checked
-                            ? Array.from(new Set([...prev, subject._id]))
-                            : prev.filter((id) => id !== subject._id)
-                        );
-                      }}
+                      checked={selection.isSelected(subject._id)}
+                      onChange={(e) => selection.toggle(subject._id, e.target.checked)}
                     />
                   </td>
                   <td style={{ width: '10%' }}>
