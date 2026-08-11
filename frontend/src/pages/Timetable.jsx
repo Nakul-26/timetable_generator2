@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import api from "../api/axios";
 import axios from "../api/axios";
 import { DEFAULT_CONSTRAINT_CONFIG, loadConstraintConfig, normalizeConstraintConfig } from "./constraintConfig";
+import { normalizeCombo } from "../utils/comboNormalizer";
 
 import HealthReport from "../components/timetable/HealthReport";
 import GenerationProgress from "../components/timetable/GenerationProgress";
@@ -76,6 +77,12 @@ function Timetable() {
   const [fixedSlots, setFixedSlots] = useState({});
   const [fixedClassId, setFixedClassId] = useState("");
   const [showFixedClasses, setShowFixedClasses] = useState(false);
+
+  // Class-centric review: select class(es) to see their configuration before generating
+  const [reviewClassIds, setReviewClassIds] = useState([]);
+  const [classWorkspaces, setClassWorkspaces] = useState({});
+  const [loadingWorkspaceIds, setLoadingWorkspaceIds] = useState({});
+  const fetchedWorkspaceIdsRef = useRef(new Set());
   const [constraintConfig, setConstraintConfig] = useState(() => normalizeConstraintConfig(DEFAULT_CONSTRAINT_CONFIG));
   const DAYS_PER_WEEK = Number(constraintConfig?.schedule?.daysPerWeek) || 6;
   const HOURS_PER_DAY = Number(constraintConfig?.schedule?.hoursPerDay) || 8;
@@ -89,10 +96,14 @@ function Timetable() {
     () => new Map(subjects.map((s) => [String(s._id || s.id), s])),
     [subjects]
   );
-  const comboById = useMemo(
-    () => new Map(combos.map((c) => [String(c._id || c.id), c])),
-    [combos]
-  );
+  const comboById = useMemo(() => {
+    const map = new Map();
+    for (const raw of combos) {
+      const normalized = normalizeCombo(raw);
+      if (normalized) map.set(normalized.id, normalized);
+    }
+    return map;
+  }, [combos]);
 
   // Hydrate settings from DB once when the page loads.
   useEffect(() => {
@@ -434,6 +445,54 @@ function Timetable() {
     fetchAll();
     fetchLatest();
   }, [fetchAll, fetchLatest]);
+
+  const loadClassWorkspace = useCallback(async (classId) => {
+    setLoadingWorkspaceIds((prev) => ({ ...prev, [classId]: true }));
+    try {
+      const res = await api.get(`/classes/${classId}/workspace`);
+      setClassWorkspaces((prev) => ({ ...prev, [classId]: res.data }));
+    } catch {
+      setClassWorkspaces((prev) => ({ ...prev, [classId]: { error: true } }));
+    } finally {
+      setLoadingWorkspaceIds((prev) => ({ ...prev, [classId]: false }));
+    }
+  }, []);
+
+  const toggleReviewClass = useCallback((classId) => {
+    setReviewClassIds((prev) =>
+      prev.includes(classId) ? prev.filter((id) => id !== classId) : [...prev, classId]
+    );
+  }, []);
+
+  useEffect(() => {
+    reviewClassIds.forEach((classId) => {
+      if (!fetchedWorkspaceIdsRef.current.has(classId)) {
+        fetchedWorkspaceIdsRef.current.add(classId);
+        loadClassWorkspace(classId);
+      }
+    });
+  }, [reviewClassIds, loadClassWorkspace]);
+
+  const computeClassReviewIssues = useCallback((workspace) => {
+    if (!workspace || workspace.error) return [];
+    const issues = [];
+    if (!workspace.classTeacher) {
+      issues.push({ severity: "info", message: "No class teacher set." });
+    }
+    const assignments = workspace.assignments || [];
+    if (assignments.length === 0) {
+      issues.push({ severity: "warning", message: "No subjects configured for this class yet." });
+    }
+    assignments.forEach((assignment) => {
+      if (assignment.mode !== "NO_TEACHER" && (!assignment.teacherIds || assignment.teacherIds.length === 0)) {
+        issues.push({ severity: "error", message: `"${assignment.subjectName}" has no teacher assigned.` });
+      }
+      if (!assignment.hoursPerWeek || Number(assignment.hoursPerWeek) <= 0) {
+        issues.push({ severity: "warning", message: `"${assignment.subjectName}" has no hours/week set.` });
+      }
+    });
+    return issues;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -810,13 +869,13 @@ function Timetable() {
     const payload = [];
     Object.entries(slots).forEach(([classId, days]) => {
       Object.entries(days).forEach(([day, hours]) => {
-        Object.entries(hours).forEach(([hour, combo]) => {
-          if (combo) {
+        Object.entries(hours).forEach(([hour, comboId]) => {
+          if (comboId) {
             payload.push({
-              class: classId,
+              classId,
               day: Number(day),
               hour: Number(hour),
-              combo,
+              comboId,
             });
           }
         });
@@ -1017,26 +1076,18 @@ function Timetable() {
       return { subjectName: "?", facultyNames: [], combinedWith: [] };
     }
 
-    const subject = subjectById.get(String(combo.subject_id));
-    const subjectName = getSubjectDisplayName(combo.subject_id);
+    const subject = subjectById.get(String(combo.subjectId));
+    const subjectName = getSubjectDisplayName(combo.subjectId);
 
-    let facultyNames = [];
-    if (combo.faculty_ids && Array.isArray(combo.faculty_ids)) {
-      facultyNames = combo.faculty_ids.map((fid) => {
-        const fac = facultyById.get(String(fid));
-        return fac ? fac.name : "N/A";
-      });
-    } else if (combo.faculty_id) {
-      const fac = facultyById.get(String(combo.faculty_id));
-      facultyNames = [fac ? fac.name : "N/A"];
-    }
+    let facultyNames = combo.teacherIds.map((fid) => {
+      const fac = facultyById.get(String(fid));
+      return fac ? fac.name : "N/A";
+    });
     if (facultyNames.length === 0 && String(subject?.type || "").toLowerCase() === "no_teacher") {
       facultyNames = ["No Teacher"];
     }
 
-    const combinedWith = Array.isArray(combo.class_ids)
-      ? combo.class_ids.map(String)
-      : [];
+    const combinedWith = combo.classIds;
 
     return { subjectName, facultyNames, combinedWith };
   };
@@ -1348,17 +1399,12 @@ function Timetable() {
 
     const facultyMatch = () => {
         if (!selectedFaculty) return true;
-        if (combo.faculty_ids) {
-            return combo.faculty_ids.some((fid) => String(fid) === String(selectedFaculty));
-        } else if (combo.faculty_id) {
-            return String(combo.faculty_id) === String(selectedFaculty);
-        }
-        return false;
+        return combo.teacherIds.some((fid) => String(fid) === String(selectedFaculty));
     }
 
     const subjectMatch = () => {
         if (!selectedSubject) return true;
-        return String(combo.subject_id) === selectedSubject;
+        return String(combo.subjectId) === selectedSubject;
     }
 
     return facultyMatch() && subjectMatch();
@@ -1374,8 +1420,8 @@ function Timetable() {
       return false;
     }
 
-    const subjectMatches = !selectedSubject || String(combo.subject_id) === String(selectedSubject);
-    const classIds = Array.isArray(combo.class_ids) ? combo.class_ids.map(String) : [];
+    const subjectMatches = !selectedSubject || String(combo.subjectId) === String(selectedSubject);
+    const classIds = combo.classIds;
     const classMatches = !selectedClass || classIds.length === 0 || classIds.includes(String(selectedClass));
 
     return subjectMatches && classMatches;
@@ -1391,10 +1437,8 @@ function Timetable() {
       return { subjectName: "?", classNames: [] };
     }
 
-    const subjectName = getSubjectDisplayName(combo.subject_id);
-    const classNames = Array.isArray(combo.class_ids)
-      ? combo.class_ids.map((id) => getClassName(id))
-      : [];
+    const subjectName = getSubjectDisplayName(combo.subjectId);
+    const classNames = combo.classIds.map((id) => getClassName(id));
 
     return { subjectName, classNames };
   };
@@ -1408,7 +1452,7 @@ function Timetable() {
         if (slot && slot !== -1 && slot !== "BREAK") {
           const combo = comboById.get(String(slot));
           if (combo) {
-            const subjectId = combo.subject_id;
+            const subjectId = combo.subjectId;
             if (!assignedHours[subjectId]) {
               assignedHours[subjectId] = 0;
             }
@@ -1520,6 +1564,103 @@ function Timetable() {
   return (
     <div className="manage-container">
       <h2>Timetable Generator</h2>
+
+      <div className="tt-section-card">
+        <h3>Classes to Review</h3>
+        <p className="tt-subtext">
+          Pick classes to review their subjects, teacher assignments, and class teacher before generating.
+          This is a review step only — Generate always solves for the whole college at once, since teacher
+          and room availability are shared across classes.
+        </p>
+        <div className="tt-class-review-picker">
+          {classes.map((cls) => (
+            <label key={cls._id} className="tt-inline-toggle">
+              <input
+                type="checkbox"
+                checked={reviewClassIds.includes(String(cls._id))}
+                onChange={() => toggleReviewClass(String(cls._id))}
+              />
+              <span>{getClassName(cls._id)}</span>
+            </label>
+          ))}
+          {classes.length === 0 ? <p>No classes found. Add classes first.</p> : null}
+        </div>
+
+        {reviewClassIds.length > 0 && (
+          <div className="tt-class-review-grid tt-top-gap">
+            {reviewClassIds.map((classId) => {
+              const workspace = classWorkspaces[classId];
+              const isWorkspaceLoading = Boolean(loadingWorkspaceIds[classId]);
+              const issues = computeClassReviewIssues(workspace);
+              return (
+                <div key={classId} className="tt-class-review-card">
+                  <div className="tt-class-review-card-head">
+                    <h4>{getClassName(classId)}</h4>
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      onClick={() => loadClassWorkspace(classId)}
+                      disabled={isWorkspaceLoading}
+                    >
+                      {isWorkspaceLoading ? "Loading..." : "Refresh"}
+                    </button>
+                  </div>
+                  {!workspace ? (
+                    <p>Loading...</p>
+                  ) : workspace.error ? (
+                    <p className="error-message tt-tight-message">Failed to load this class's setup.</p>
+                  ) : (
+                    <>
+                      <p className="tt-subtext">
+                        Class Teacher: {workspace.classTeacher?.name || "Not set"}
+                      </p>
+                      <div className="table-responsive">
+                        <table className="styled-table">
+                          <thead>
+                            <tr>
+                              <th>Subject</th>
+                              <th>Teacher(s)</th>
+                              <th>Hours/Week</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(workspace.assignments || []).map((assignment) => (
+                              <tr key={assignment.id}>
+                                <td>{assignment.subjectName}</td>
+                                <td>{assignment.teacherNames?.length ? assignment.teacherNames.join(" & ") : "No Teacher"}</td>
+                                <td>{assignment.hoursPerWeek}</td>
+                              </tr>
+                            ))}
+                            {(workspace.assignments || []).length === 0 ? (
+                              <tr>
+                                <td colSpan="3">No subjects assigned yet.</td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
+                      {issues.length > 0 ? (
+                        <div className="tt-health-list">
+                          {issues.map((issue, idx) => (
+                            <div key={idx} className={`tt-health-item tt-health-${issue.severity}`}>
+                              <b>{issue.severity.toUpperCase()}</b>: {issue.message}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="tt-subtext">No issues detected for this class.</p>
+                      )}
+                      <Link className="secondary-btn tt-soft-accent-btn" to={`/class-workspace/${classId}`}>
+                        Edit in Class Workspace
+                      </Link>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <GenerationProgress
         showGenerationCard={showGenerationCard}

@@ -4,6 +4,7 @@ import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSe
 import api from '../../api/axios';
 import { DEFAULT_CONSTRAINT_CONFIG, loadConstraintConfig, normalizeConstraintConfig } from '../constraintConfig';
 import { getComboSubjectDisplayName } from '../subjectDisplay';
+import { normalizeCombo } from '../../utils/comboNormalizer';
 
 const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const hours = ['1', '2', '3', '4', '5', '6', '7', '8'];
@@ -113,22 +114,24 @@ const ManualTimetable = () => {
     setLockedSlots(payload.lockedSlots || {});
   };
 
-  const resolveComboDisplay = (combo) => {
-    const subjectId = String(combo?.subject?._id || combo?.subject || combo?.subject_id || '');
-    const facultyIds = Array.isArray(combo?.faculty_ids)
-      ? combo.faculty_ids.map((id) => String(id))
-      : combo?.faculty_id
-        ? [String(combo.faculty_id)]
-        : combo?.faculty
-          ? [String(combo.faculty?._id || combo.faculty)]
-          : [];
+  const resolveComboDisplay = (rawCombo) => {
+    const combo = normalizeCombo(rawCombo);
+    if (!combo) {
+      return { subject: 'Unknown Subject', faculty: 'Unknown Teacher' };
+    }
+    const isNoTeacher = combo.mode === 'NO_TEACHER'
+      || String(subjectIdToDetails[combo.subjectId]?.type || '').toLowerCase() === 'no_teacher';
     return {
       subject: getComboSubjectDisplayName(
         combo,
         new Map(Object.entries(subjectIdToDetails)),
-        subjectId ? `Subject ${subjectId.slice(-4)}` : 'Unknown Subject'
+        combo.subjectId ? `Subject ${combo.subjectId.slice(-4)}` : 'Unknown Subject'
       ),
-      faculty: combo?.faculty?.name || combo?.faculty_name || facultyIds.map((facultyId) => facultyIdToName[facultyId] || `Faculty ${facultyId.slice(-4)}`).join(', ') || (String(combo?.subject?.type || combo?.subject_type || combo?.type || '').toLowerCase() === 'no_teacher' ? 'No Teacher' : 'Unknown Teacher'),
+      faculty: combo.teacherNames.length
+        ? combo.teacherNames.join(', ')
+        : combo.teacherIds.length
+          ? combo.teacherIds.map((facultyId) => facultyIdToName[facultyId] || `Faculty ${facultyId.slice(-4)}`).join(', ')
+          : (isNoTeacher ? 'No Teacher' : 'Unknown Teacher'),
     };
   };
 

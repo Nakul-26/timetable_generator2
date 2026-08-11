@@ -16,12 +16,14 @@ export function getSubjectDisplayName(subject, fallback = "Unknown Subject") {
   );
 }
 
+// `combo` is expected to already be normalized (see utils/comboNormalizer.js) —
+// i.e. carrying `subjectId`/`subjectName`, not raw generator/DB field aliases.
 export function getComboSubjectDisplayName(combo, subjectById, fallback = "Unknown Subject") {
   if (!combo) {
     return fallback;
   }
 
-  const subjectId = String(combo?.subject?._id || combo?.subject_id || combo?.subject || "");
+  const subjectId = String(combo.subjectId || "");
   return (
     getSubjectDisplayName(combo, "") ||
     getSubjectDisplayName(subjectById?.get?.(subjectId), "") ||

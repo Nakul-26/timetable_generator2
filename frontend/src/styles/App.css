@@ -1577,6 +1577,38 @@ h2 {
   margin-bottom: 30px;
 }
 
+.tt-class-review-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tt-class-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.tt-class-review-card {
+  padding: 14px;
+  border: 1px solid rgba(79, 70, 229, 0.12);
+  border-radius: 10px;
+  background: var(--surface-color);
+}
+
+.tt-class-review-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.tt-class-review-card-head h4 {
+  margin: 0;
+}
+
 .tt-cell-dim {
   opacity: 0.3;
 }

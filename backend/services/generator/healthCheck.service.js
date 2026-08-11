@@ -381,8 +381,8 @@ export function buildConstraintHealthReport({
   const teacherSlotOwner = new Map();
 
   for (const fs of fixedSlotsArray) {
-    const classId = String(fs?.class || "");
-    const comboId = String(fs?.combo || "");
+    const classId = String(fs?.classId || fs?.class || "");
+    const comboId = String(fs?.comboId || fs?.combo || "");
     const day = toInt(fs?.day, -1);
     const hour = toInt(fs?.hour, -1);
     if (!classId || !comboId) {

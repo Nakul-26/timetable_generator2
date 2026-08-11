@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { getComboSubjectDisplayName } from './subjectDisplay';
+import { normalizeCombo } from '../utils/comboNormalizer';
 
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const hours = ["1", "2", "3", "4", "5", "6", "7", "8"];
@@ -92,38 +93,26 @@ const ViewTimetable = () => {
     useEffect(() => {
         if (combos.length) {
             const subjectLookup = new Map(Object.entries(subjectMap));
-            const newComboMap = combos.reduce((acc, combo) => {
-                const subjectId = combo?.subject?._id || combo?.subject || combo?.subject_id;
+            const newComboMap = combos.reduce((acc, rawCombo) => {
+                const combo = normalizeCombo(rawCombo);
+                if (!combo) return acc;
                 const subjectName = getComboSubjectDisplayName(combo, subjectLookup, 'N/A');
 
-                let facultyName = 'N/A';
-                if (combo?.faculty?.name) {
-                    facultyName = combo.faculty.name;
-                } else if (combo?.faculty) {
-                    facultyName = facultyMap[String(combo.faculty)] || 'N/A';
-                } else if (Array.isArray(combo?.faculty_ids) && combo.faculty_ids.length > 0) {
-                    facultyName = combo.faculty_ids
-                        .map((fid) => facultyMap[String(fid)] || `Faculty ${String(fid).slice(-4)}`)
-                        .join(', ');
-                } else if (combo?.faculty_id) {
-                    facultyName = facultyMap[String(combo.faculty_id)] || `Faculty ${String(combo.faculty_id).slice(-4)}`;
-                }
-                const subjectType = String(subjects.find((s) => String(s._id) === String(subjectId))?.type || '').toLowerCase();
+                let facultyName = combo.teacherNames.length
+                    ? combo.teacherNames.join(', ')
+                    : combo.teacherIds.length
+                        ? combo.teacherIds.map((fid) => facultyMap[fid] || `Faculty ${fid.slice(-4)}`).join(', ')
+                        : 'N/A';
+                const subjectType = String(subjects.find((s) => String(s._id) === combo.subjectId)?.type || '').toLowerCase();
                 if (facultyName === 'N/A' && subjectType === 'no_teacher') {
                     facultyName = 'No Teacher';
                 }
 
-                acc[String(combo._id)] = {
+                acc[combo.id] = {
                     subject: subjectName,
                     faculty: facultyName,
-                    subjectId: subjectId ? String(subjectId) : '',
-                    facultyIds: Array.isArray(combo?.faculty_ids)
-                        ? combo.faculty_ids.map((fid) => String(fid))
-                        : combo?.faculty_id
-                            ? [String(combo.faculty_id)]
-                            : combo?.faculty
-                                ? [String(combo.faculty?._id || combo.faculty)]
-                                : []
+                    subjectId: combo.subjectId,
+                    facultyIds: combo.teacherIds,
                 };
                 return acc;
             }, {});
@@ -142,38 +131,25 @@ const ViewTimetable = () => {
             return comboMap[String(comboId)];
         }
 
-        const embeddedCombo = Array.isArray(timetable?.combos)
-            ? timetable.combos.find((c) => String(c._id) === String(comboId))
+        const rawEmbeddedCombo = Array.isArray(timetable?.combos)
+            ? timetable.combos.find((c) => String(c._id || c.id) === String(comboId))
             : null;
 
+        const embeddedCombo = normalizeCombo(rawEmbeddedCombo);
         if (!embeddedCombo) return null;
-
-        const subjectId = String(embeddedCombo?.subject_id || embeddedCombo?.subject || '');
 
         const subjectName = getComboSubjectDisplayName(
             embeddedCombo,
             new Map(Object.entries(subjectMap)),
-            embeddedCombo?.subject_id ? `Subject ${String(embeddedCombo.subject_id).slice(-4)}` : 'N/A'
+            embeddedCombo.subjectId ? `Subject ${embeddedCombo.subjectId.slice(-4)}` : 'N/A'
         );
 
-        let facultyName = 'N/A';
-        let facultyIds = [];
-        if (embeddedCombo?.faculty?.name) {
-            facultyName = embeddedCombo.faculty.name;
-            facultyIds = [String(embeddedCombo.faculty?._id || embeddedCombo.faculty)];
-        } else if (embeddedCombo?.faculty) {
-            facultyName = facultyMap[String(embeddedCombo.faculty)] || 'N/A';
-            facultyIds = [String(embeddedCombo.faculty)];
-        } else if (Array.isArray(embeddedCombo?.faculty_ids) && embeddedCombo.faculty_ids.length > 0) {
-            facultyName = embeddedCombo.faculty_ids
-                .map((fid) => facultyMap[String(fid)] || `Faculty ${String(fid).slice(-4)}`)
-                .join(', ');
-            facultyIds = embeddedCombo.faculty_ids.map((fid) => String(fid));
-        } else if (embeddedCombo?.faculty_id) {
-            facultyName = facultyMap[String(embeddedCombo.faculty_id)] || `Faculty ${String(embeddedCombo.faculty_id).slice(-4)}`;
-            facultyIds = [String(embeddedCombo.faculty_id)];
-        }
-        const subjectType = String(subjects.find((s) => String(s._id) === subjectId)?.type || '').toLowerCase();
+        let facultyName = embeddedCombo.teacherNames.length
+            ? embeddedCombo.teacherNames.join(', ')
+            : embeddedCombo.teacherIds.length
+                ? embeddedCombo.teacherIds.map((fid) => facultyMap[fid] || `Faculty ${fid.slice(-4)}`).join(', ')
+                : 'N/A';
+        const subjectType = String(subjects.find((s) => String(s._id) === embeddedCombo.subjectId)?.type || '').toLowerCase();
         if (facultyName === 'N/A' && subjectType === 'no_teacher') {
             facultyName = 'No Teacher';
         }
@@ -181,8 +157,8 @@ const ViewTimetable = () => {
         return {
             subject: subjectName,
             faculty: facultyName,
-            subjectId,
-            facultyIds
+            subjectId: embeddedCombo.subjectId,
+            facultyIds: embeddedCombo.teacherIds,
         };
     };
 

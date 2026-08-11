@@ -49,30 +49,18 @@ const ClassTimetable = ({
                     return <td key={h} className={cellClassName}>?</td>;
                   }
 
-                  const subject = subjectById.get(String(combo.subject_id));
-                  const subjectName = getSubjectDisplayName(combo.subject_id);
+                  const subject = subjectById.get(String(combo.subjectId));
+                  const subjectName = getSubjectDisplayName(combo.subjectId);
 
-                  let facultyNames = [];
-                  if (combo.faculty_ids) {
-                    facultyNames = (combo.faculty_ids || []).map(tid => {
-                      const faculty = facultyById.get(String(tid));
-                      return faculty ? faculty.name : "N/A";
-                    });
-                  } else if (combo.faculty_id) {
-                    const faculty = facultyById.get(String(combo.faculty_id));
-                    if (faculty) {
-                      facultyNames.push(faculty.name);
-                    } else {
-                      facultyNames.push("N/A");
-                    }
-                  }
+                  let facultyNames = combo.teacherIds.map(tid => {
+                    const faculty = facultyById.get(String(tid));
+                    return faculty ? faculty.name : "N/A";
+                  });
                   if (facultyNames.length === 0 && String(subject?.type || "").toLowerCase() === "no_teacher") {
                     facultyNames.push("No Teacher");
                   }
 
-                  const combinedClassIds = Array.isArray(combo.class_ids)
-                    ? combo.class_ids.map(String)
-                    : [];
+                  const combinedClassIds = combo.classIds;
                   const combinedLabel = combinedClassIds.length > 1
                     ? combinedClassIds.map((id) => getClassName(id)).join(" + ")
                     : "";
