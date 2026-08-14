@@ -3,8 +3,8 @@ import Subject from "../../models/Subject.js";
 import ClassModel from "../../models/Class.js";
 import ClassSubject from "../../models/ClassSubject.js";
 import TeacherSubjectCombination from "../../models/TeacherSubjectCombination.js";
-import ElectiveSubjectSetting from "../../models/ElectiveSubjectSetting.js";
 import TeachingAllocation from "../../models/TeachingAllocation.js";
+import { loadElectiveSettings } from "../legacy/legacyAdapter.js";
 import converter from "../../models/lib/convertNewCollegeInputToGeneratorData.js";
 import { normalizeAvailabilitySlots } from "../../utils/teacherAvailability.js";
 import { normalizeTeacherPreferences } from "../../utils/teacherPreferences.js";
@@ -31,7 +31,7 @@ export async function prepareGeneratorData(collegeId, inputMode = "EXPLICIT") {
     ClassModel.find({ collegeId }).lean(),
     ClassSubject.find({ collegeId }).lean(),
     TeacherSubjectCombination.find({ collegeId }).lean(),
-    ElectiveSubjectSetting.find({ collegeId }).lean(),
+    loadElectiveSettings(collegeId),
     TeachingAllocation.find({ collegeId }).lean(),
   ]);
 
@@ -47,13 +47,8 @@ export async function prepareGeneratorData(collegeId, inputMode = "EXPLICIT") {
     // But keep class-subject hours and teacher combos for electives since they don't have explicit allocations
     const electiveSubjectIds = new Set();
     (electiveSettings || []).forEach(setting => {
-      if (setting.subject) electiveSubjectIds.add(setting.subject.toString());
-      let reqs = setting.teacherCategoryRequirements || {};
-      if (reqs instanceof Map) {
-        reqs = Object.fromEntries(reqs.entries());
-      } else if (typeof reqs.toObject === "function") {
-        reqs = reqs.toObject();
-      }
+      if (setting.subjectId) electiveSubjectIds.add(setting.subjectId);
+      const reqs = setting.teacherCategoryRequirements || {};
       Object.keys(reqs).forEach(subId => electiveSubjectIds.add(subId.toString()));
     });
 
@@ -229,19 +224,11 @@ export async function prepareGeneratorData(collegeId, inputMode = "EXPLICIT") {
     });
   });
 
-  const classElectiveSubjects = electiveSettings.map(setting => {
-    let reqs = setting.teacherCategoryRequirements || {};
-    if (reqs instanceof Map) {
-      reqs = Object.fromEntries(reqs.entries());
-    } else if (typeof reqs.toObject === "function") {
-      reqs = reqs.toObject();
-    }
-    return {
-      classId: setting.class.toString(),
-      subjectId: setting.subject.toString(),
-      teacherCategoryRequirements: reqs
-    };
-  });
+  const classElectiveSubjects = electiveSettings.map(setting => ({
+    classId: setting.classId,
+    subjectId: setting.subjectId,
+    teacherCategoryRequirements: setting.teacherCategoryRequirements || {},
+  }));
 
   const generatorData = converter.convertNewCollegeInput({
     classes,
@@ -286,5 +273,9 @@ export async function prepareGeneratorData(collegeId, inputMode = "EXPLICIT") {
     });
   }
 
-  return generatorData;
+  // classSubjects here is the real, pre-virtualization per-(class,subject) hours
+  // breakdown (no VIRTUAL_ELECTIVE_*/VIRTUAL_COMBINED_* synthetic subject ids) —
+  // exposed alongside the solver-shaped generatorData for consumers that need
+  // real Subject references (e.g. the /assignment-class-subject-hours route).
+  return { ...generatorData, classSubjects };
 }

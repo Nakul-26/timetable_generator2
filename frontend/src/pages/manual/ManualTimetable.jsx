@@ -175,8 +175,8 @@ const ManualTimetable = () => {
           api.get('/classes'),
           api.get('/faculties'),
           api.get('/subjects'),
-          api.get('/teacher-subject-combos'),
-          api.get('/class-subjects'),
+          api.get('/assignment-combos'),
+          api.get('/assignment-class-subject-hours'),
           api.get('/elective-groups'),
           sourceTimetableId ? api.get(`/timetable/${sourceTimetableId}`) : Promise.resolve({ data: null }),
         ]);

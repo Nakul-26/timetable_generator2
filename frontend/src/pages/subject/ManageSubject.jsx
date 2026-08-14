@@ -7,7 +7,9 @@ import useExcelImport from "../../hooks/useExcelImport";
 import { downloadTemplate, exportRows, getCellValue } from "../../utils/excelIO";
 
 function ManageSubject() {
-  const { subjects, assignments, combos, loading, error, refetchData } = useContext(DataContext);
+  const { subjects, classes, faculties, assignments, combos, loading, error, refetchData } = useContext(DataContext);
+  const classById = new Map(classes.map((c) => [String(c._id), c]));
+  const facultyById = new Map(faculties.map((f) => [String(f._id), f]));
   const [editId, setEditId] = useState(null);
   const [mutationMessage, setMutationMessage] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -50,13 +52,13 @@ function ManageSubject() {
     excelImport.clearExcelStatus();
     const rows = subjects.map((subject) => {
       const assignedClassNames = assignments
-        .filter((a) => a.subject?._id === subject._id)
-        .map((a) => a.class?.name)
+        .filter((a) => String(a.subject) === String(subject._id))
+        .map((a) => classById.get(String(a.class))?.name)
         .filter(Boolean)
         .join(", ");
       const assignedFacultyNames = combos
-        .filter((c) => c.subject?._id === subject._id)
-        .map((c) => c.faculty?.name)
+        .filter((c) => String(c.subjectId) === String(subject._id))
+        .flatMap((c) => c.teacherNames?.length ? c.teacherNames : (c.teacherIds || []).map((tid) => facultyById.get(String(tid))?.name))
         .filter(Boolean)
         .join(", ");
 
@@ -412,16 +414,20 @@ function ManageSubject() {
                   </td>
                   <td>
                     {assignments
-                      .filter(a => a.subject?._id === subject._id)
+                      .filter(a => String(a.subject) === String(subject._id))
                       .map(a => (
-                        <div key={a._id}>{a.class?.name}</div>
+                        <div key={`${a.class}-${a.subject}`}>{classById.get(String(a.class))?.name}</div>
                       ))}
                   </td>
                   <td>
                     {combos
-                        .filter(c => c.subject?._id === subject._id)
+                        .filter(c => String(c.subjectId) === String(subject._id))
                         .map(c => (
-                            <div key={c._id}>{c.faculty?.name}</div>
+                            <div key={c.id || c._id}>
+                              {c.teacherNames?.length
+                                ? c.teacherNames.join(", ")
+                                : (c.teacherIds || []).map((tid) => facultyById.get(String(tid))?.name).filter(Boolean).join(", ")}
+                            </div>
                         ))}
                   </td>
                   <td className="actions-cell">

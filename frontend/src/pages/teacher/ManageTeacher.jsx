@@ -7,7 +7,8 @@ import useExcelImport from "../../hooks/useExcelImport";
 import { downloadTemplate, exportRows, getCellValue } from "../../utils/excelIO";
 
 const ManageTeacher = () => {
-  const { faculties, classes, combos, loading, error, refetchData } = useContext(DataContext);
+  const { faculties, classes, subjects, combos, loading, error, refetchData } = useContext(DataContext);
+  const subjectById = new Map(subjects.map((s) => [String(s._id), s]));
   const [editId, setEditId] = useState(null);
   const [mutationMessage, setMutationMessage] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -37,8 +38,8 @@ const ManageTeacher = () => {
         .map((cls) => cls.name)
         .join(", ");
       const assignedSubjectNames = combos
-        .filter((combo) => combo.faculty?._id === teacher._id)
-        .map((combo) => combo.subject?.name)
+        .filter((combo) => (combo.teacherIds || []).includes(String(teacher._id)))
+        .map((combo) => combo.subjectName || subjectById.get(String(combo.subjectId))?.name)
         .filter(Boolean)
         .join(", ");
 
@@ -304,9 +305,9 @@ const ManageTeacher = () => {
                   </td>
                   <td>
                     {combos
-                        .filter(c => c.faculty?._id === teacher._id)
+                        .filter(c => (c.teacherIds || []).includes(String(teacher._id)))
                         .map(c => (
-                            <div key={c._id}>{c.subject?.name}</div>
+                            <div key={c.id || c._id}>{c.subjectName || subjectById.get(String(c.subjectId))?.name}</div>
                         ))}
                   </td>
                   <td>{Array.isArray(teacher.unavailableSlots) ? teacher.unavailableSlots.length : 0}</td>

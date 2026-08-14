@@ -34,7 +34,7 @@ const ViewTimetable = () => {
                 const [ttRes, classesRes, combosRes, subjectsRes, facultiesRes] = await Promise.all([
                     api.get(`/timetable/${id}`),
                     api.get('/classes'),
-                    api.get('/teacher-subject-combos'),
+                    api.get('/assignment-combos'),
                     api.get('/subjects'),
                     api.get('/faculties')
                 ]);

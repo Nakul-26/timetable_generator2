@@ -53,3 +53,10 @@ backend/data/*.json
 backend/data/*.txt
 backend/data/mongoose_backup/
 backend/scripts/db/mongoose_backup/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/

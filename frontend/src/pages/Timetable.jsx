@@ -407,8 +407,8 @@ function Timetable() {
         api.get("/classes"),
         api.get("/faculties"),
         api.get("/subjects"),
-        api.get("/teacher-subject-combos"),
-        api.get("/class-subjects"),
+        api.get("/assignment-combos"),
+        api.get("/assignment-class-subject-hours"),
         api.get("/fixed-slot-combos"),
       ]);
       setClasses(prev => mergeById(prev, classRes.data));

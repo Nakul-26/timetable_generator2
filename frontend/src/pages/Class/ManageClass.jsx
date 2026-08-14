@@ -7,7 +7,8 @@ import useExcelImport from "../../hooks/useExcelImport";
 import { downloadTemplate, exportRows, getCellValue } from "../../utils/excelIO";
 
 function ManageClass() {
-  const { classes, assignments, loading, error, refetchData } = useContext(DataContext);
+  const { classes, subjects, assignments, loading, error, refetchData } = useContext(DataContext);
+  const subjectById = new Map(subjects.map((s) => [String(s._id), s]));
   const [editId, setEditId] = useState(null);
   const [mutationMessage, setMutationMessage] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -50,8 +51,8 @@ function ManageClass() {
     excelImport.clearExcelStatus();
     const rows = classes.map((classItem) => {
       const assignedSubjects = assignments
-        .filter((a) => a.class?._id === classItem._id)
-        .map((a) => a.subject?.name)
+        .filter((a) => String(a.class) === String(classItem._id))
+        .map((a) => subjectById.get(String(a.subject))?.name)
         .filter(Boolean)
         .join(", ");
       const assignedFaculties = (classItem.faculties || [])
@@ -375,9 +376,9 @@ function ManageClass() {
                   </td>
                   <td>
                     {assignments
-                      .filter(a => a.class?._id === classItem._id)
+                      .filter(a => String(a.class) === String(classItem._id))
                       .map(a => (
-                        <div key={a._id}>{a.subject?.name}</div>
+                        <div key={`${a.class}-${a.subject}`}>{subjectById.get(String(a.subject))?.name}</div>
                       ))}
                   </td>
                   <td>

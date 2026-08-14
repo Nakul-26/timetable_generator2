@@ -32,14 +32,14 @@ export const DataProvider = ({ children }) => {
     });
 
     const { data: combos = [], isError: isCombosError, isLoading: isCombosLoading } = useQuery({
-        queryKey: ['teacher-subject-combos'],
-        queryFn: () => api.get('/teacher-subject-combos').then(res => res.data?.combos || res.data || []),
+        queryKey: ['assignment-combos'],
+        queryFn: () => api.get('/assignment-combos').then(res => res.data?.combos || res.data || []),
         ...MASTER_DATA_QUERY_OPTIONS,
     });
 
     const { data: assignments = [], isError: isAssignmentsError, isLoading: isAssignmentsLoading } = useQuery({
-        queryKey: ['class-subjects'],
-        queryFn: () => api.get('/class-subjects').then(res => res.data?.assignments || res.data || res.data?.classSubjects || res.data || []),
+        queryKey: ['assignment-class-subject-hours'],
+        queryFn: () => api.get('/assignment-class-subject-hours').then(res => res.data || []),
         ...MASTER_DATA_QUERY_OPTIONS,
     });
 
